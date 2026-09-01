@@ -50,6 +50,11 @@ export function loadGis(): Promise<void> {
     script.src = GIS_SRC;
     script.async = true;
     script.defer = true;
+    // NOTE: do NOT set crossOrigin here. Google Identity Services
+    // does not send CORS headers, so crossOrigin="anonymous" would
+    // make Chrome block the load with ERR_FAILED. The COOP posture
+    // for the popup is instead controlled by the dev server response
+    // headers (see vite.config.ts).
     script.onload = () => resolve();
     script.onerror = () => reject(new Error("Failed to load GIS"));
     document.head.appendChild(script);
@@ -62,5 +67,8 @@ export const GOOGLE_SCOPES = [
   "openid",
   "email",
   "profile",
-  "https://www.googleapis.com/auth/drive.file",
+  // drive.appdata grants access to the per-user hidden appDataFolder.
+  // drive.file is NOT enough — it only covers files the app creates
+  // in the user's regular Drive, not the appDataFolder space.
+  "https://www.googleapis.com/auth/drive.appdata",
 ].join(" ");

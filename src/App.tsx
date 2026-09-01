@@ -12,14 +12,15 @@ export function App() {
   const board = useBoard();
   const [view, setView] = useState<"list" | "board">("list");
 
-  // Load board list after sign-in.
+  // Load board list after sign-in AND after silent re-auth completes.
+  // Without waiting for `auth.ready`, Drive calls fired on page reload
+  // race each other and never get a valid token.
   useEffect(() => {
-    if (auth.profile) {
-      void board.refreshList();
-      setView("list");
-    }
+    if (!auth.profile || !auth.ready) return;
+    void board.refreshList();
+    setView("list");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [auth.profile?.id]);
+  }, [auth.profile?.id, auth.ready]);
 
   // Switch view when active board changes.
   useEffect(() => {

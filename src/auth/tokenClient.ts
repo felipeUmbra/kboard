@@ -5,6 +5,11 @@ let currentToken: string | null = null;
 let tokenExpiresAt = 0;
 let refreshTimer: number | null = null;
 
+// Serialize concurrent token requests so they don't race each other.
+// Without this, the second call's popup invalidates the first call's
+// callback, and the first call's Promise never resolves.
+let inFlight: Promise<string> | null = null;
+
 const REFRESH_MARGIN_MS = 60_000; // refresh 1 min before expiry
 
 export function getClientId(): string {
@@ -38,43 +43,51 @@ export async function initTokenClient(): Promise<TokenClient> {
  * Request an access token, prompting the user only if needed.
  * `prompt = ''` performs a silent token grant if the user has already
  * granted the scope; `prompt = 'consent'` forces the consent screen.
+ *
+ * Concurrent callers share a single in-flight Promise so we don't open
+ * two OAuth popups at once.
  */
 export async function requestAccessToken(prompt: "" | "consent" = ""): Promise<string> {
-  const c = await initTokenClient();
-  return new Promise<string>((resolve, reject) => {
-    // Wrap client so we can capture this specific response.
-    const wrap: TokenClient = {
-      requestAccessToken: (overrides) =>
-        c.requestAccessToken({ ...overrides, prompt }),
-    };
-    const originalCallback = (response: TokenResponse) => {
-      if (response.error) {
-        reject(new Error(response.error_description || response.error));
-        return;
-      }
-      currentToken = response.access_token;
-      tokenExpiresAt = Date.now() + response.expires_in * 1000;
-      scheduleRefresh();
-      resolve(response.access_token);
-    };
-    // GIS does not let us pass a per-request callback easily, so we
-    // re-init the client with a fresh callback each time.
-    if (typeof window !== "undefined" && window.google?.accounts?.oauth2) {
-      client = window.google.accounts.oauth2.initTokenClient({
-        client_id: getClientId(),
-        scope: GOOGLE_SCOPES,
-        callback: originalCallback,
-        error_callback: (err) => reject(err),
+  if (inFlight) return inFlight;
+  inFlight = (async () => {
+    try {
+      // Reuse the cached token if it's still valid.
+      const cached = getCurrentToken();
+      if (cached && prompt === "") return cached;
+
+      await initTokenClient();
+      return await new Promise<string>((resolve, reject) => {
+        if (typeof window === "undefined" || !window.google?.accounts?.oauth2) {
+          reject(new Error("Google Identity Services unavailable"));
+          return;
+        }
+        // Use a per-request client so we can capture THIS request's
+        // response with its own callback/error_callback. (GIS doesn't
+        // support per-request callbacks on a shared client.)
+        const requestClient = window.google.accounts.oauth2.initTokenClient({
+          client_id: getClientId(),
+          scope: GOOGLE_SCOPES,
+          callback: (response: TokenResponse) => {
+            if (response.error) {
+              reject(new Error(response.error_description || response.error));
+              return;
+            }
+            currentToken = response.access_token;
+            tokenExpiresAt = Date.now() + response.expires_in * 1000;
+            scheduleRefresh();
+            resolve(response.access_token);
+          },
+          error_callback: (err) => reject(err),
+        });
+        requestClient.requestAccessToken({ prompt });
+        // Keep `client` pointing at the latest instance for the refresh path.
+        client = requestClient;
       });
+    } finally {
+      inFlight = null;
     }
-    if (!client) {
-      reject(new Error("Token client unavailable"));
-      return;
-    }
-    client.requestAccessToken({ prompt });
-    // suppress unused warning
-    void wrap;
-  });
+  })();
+  return inFlight;
 }
 
 function scheduleRefresh() {
@@ -106,4 +119,5 @@ export function clearToken() {
     window.clearTimeout(refreshTimer);
     refreshTimer = null;
   }
+  inFlight = null;
 }

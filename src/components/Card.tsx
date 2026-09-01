@@ -1,6 +1,18 @@
+import { useMemo } from "react";
 import type { Board, Card as CardModel } from "../models/types";
 import { LabelPill } from "./fields/LabelPill";
 import { FieldChip } from "./fields/FieldChip";
+import { sanitizeRichHtml } from "./fields/sanitize";
+
+/** Strip HTML to plain text for the card-front preview, with a max length. */
+function descriptionPreview(html: string, maxLen = 180): string {
+  if (!html) return "";
+  // Render through DOMParser to walk text nodes only (strips tags + scripts + styles).
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const text = (doc.body.textContent || "").replace(/\s+/g, " ").trim();
+  if (text.length <= maxLen) return text;
+  return text.slice(0, maxLen).trimEnd() + "…";
+}
 
 export function Card({
   card,
@@ -22,6 +34,10 @@ export function Card({
       return { field: f, value: v };
     })
     .filter((x): x is NonNullable<typeof x> => x !== null);
+
+  // Sanitize once and derive a plain-text preview for the card front.
+  const safeHtml = useMemo(() => sanitizeRichHtml(card.descriptionHtml), [card.descriptionHtml]);
+  const preview = useMemo(() => descriptionPreview(safeHtml), [safeHtml]);
 
   return (
     <button
@@ -46,6 +62,11 @@ export function Card({
         </div>
       )}
       <div className="kanban-card__title">{card.title}</div>
+      {preview && (
+        <div className="kanban-card__description" title={preview}>
+          {preview}
+        </div>
+      )}
       {fieldEntries.length > 0 && (
         <div className="kanban-card__fields">
           {fieldEntries.slice(0, 3).map(({ field, value }) => (

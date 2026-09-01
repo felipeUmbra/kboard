@@ -35,13 +35,13 @@ npm install
 4. **Configure the OAuth consent screen**:
    - APIs & Services → OAuth consent screen
    - User type: **External** (or Internal for Workspace)
-   - Add scopes: `openid`, `email`, `profile`, `https://www.googleapis.com/auth/drive.file`
+   - Add scopes: `openid`, `email`, `profile`, `https://www.googleapis.com/auth/drive.appdata`
    - Add your email as a test user (while in Testing mode)
 5. **Create an OAuth client ID**:
    - APIs & Services → Credentials → Create Credentials → OAuth client ID
    - Application type: **Web application**
    - Authorized JavaScript origins:
-     - `http://localhost:5173` (for development)
+     - `http://localhost:5172` (for development)
      - Your production origin (when deploying)
    - Copy the **Client ID**
 
@@ -63,13 +63,13 @@ VITE_GOOGLE_CLIENT_ID=123456789-abc...xyz.apps.googleusercontent.com
 npm run dev
 ```
 
-Open <http://localhost:5173/> and click **Sign in with Google**.
+Open <http://localhost:5172/> and click **Sign in with Google**.
 
 ## Scripts
 
 | Command | What it does |
 |---|---|
-| `npm run dev` | Vite dev server with HMR at <http://localhost:5173> |
+| `npm run dev` | Vite dev server with HMR at <http://localhost:5172> |
 | `npm run build` | Type-check + production build to `dist/` |
 | `npm run preview` | Preview the production build locally |
 | `npm run typecheck` | Run TypeScript without emitting files |

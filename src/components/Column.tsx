@@ -62,7 +62,7 @@ export function Column({ column, board, onOpenCard }: Props) {
             title="Click to rename"
           >
             {column.name}
-            <span className="kanban-column__count">{sortableItems.length}</span>
+            <span className="kanban-column__count">{" (" + sortableItems.length + ")"}</span>
           </h2>
         )}
         <button

@@ -7,6 +7,16 @@
     <meta name="theme-color" content="#0079bf" />
     <meta name="description" content="Kboard — a Trello-inspired Kanban board backed by your Google Drive." />
     <title>Kboard</title>
+    <script>
+      // Dev safety: unregister any stale service workers from a previous
+      // build/deploy so they don't intercept Vite's HMR requests in dev.
+      // Harmless in production (no SWs to unregister).
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function (regs) {
+          regs.forEach(function (r) { r.unregister(); });
+        });
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

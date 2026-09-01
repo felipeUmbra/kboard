@@ -1,4 +1,4 @@
-/* Component styles. Trello-inspired kanban, card editor, modals. */
+﻿/* Component styles. Trello-inspired kanban, card editor, modals. */
 
 /* ===== Board list cards ===== */
 .board-card {
@@ -112,7 +112,10 @@
 }
 
 .kanban-tab[data-active="true"] .kanban-tab__count {
-/* ===== Kanban column ===== */
+  background: var(--color-accent);
+  color: #fff;
+}
+
 .kanban-column {
   width: var(--column-w);
   max-width: 85vw;
@@ -158,10 +161,10 @@
 .kanban-column__count {
   font-size: var(--text-xs);
   font-weight: 600;
-  background: var(--color-surface);
   color: var(--color-text-muted);
-  padding: 2px var(--space-2);
-  border-radius: var(--radius-full);
+  background: transparent;
+  padding: 0;
+  font-variant-numeric: tabular-nums;
 }
 
 .kanban-column__cards {
@@ -227,6 +230,8 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-1);
+}
+
 /* ===== Rich text editor ===== */
 .rich-text-wrapper {
   border: 1px solid var(--color-border);
@@ -235,82 +240,107 @@
   overflow: hidden;
 }
 
-.rich-text-toolbar {
+/* ===== Rich-text editor (Tiptap) =====
+   Scoped under .kb-rte to avoid collisions with global button reset. */
+.kb-rte {
   display: flex;
-  flex-wrap: wrap;
-  gap: 2px;
-  padding: var(--space-1) var(--space-2);
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-bg-elevated);
-  position: sticky;
-  top: 0;
-  z-index: 2;
+  flex-direction: column;
+  gap: var(--space-2);
 }
 
-.rich-text-toolbar__btn {
-  min-width: 32px;
-  min-height: 32px;
+.kb-rte__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-elevated);
+}
+
+.kb-rte:focus-within .kb-rte__toolbar {
+  border-color: var(--color-accent);
+}
+
+.kb-rte__tool-btn {
+  /* Beating the global `button { background: none; border: none; }` reset. */
+  min-width: 36px;
+  min-height: 30px;
   padding: 0 var(--space-2);
   border-radius: var(--radius-sm);
   color: var(--color-text);
-  font-size: var(--text-sm);
-  background: transparent;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  font-family: inherit;
+  line-height: 1;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 
-.rich-text-toolbar__btn:hover {
+.kb-rte__tool-btn:hover {
   background: var(--color-border);
+  border-color: var(--color-text-muted);
 }
 
-.rich-text-toolbar__btn.is-active {
+.kb-rte__tool-btn.is-active {
   background: var(--color-accent-soft);
   color: var(--color-accent);
+  border-color: var(--color-accent);
 }
 
-.rich-text-toolbar__sep {
+.kb-rte__tool-btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.kb-rte__sep {
   width: 1px;
   background: var(--color-border);
-  margin: var(--space-1) 4px;
+  margin: 2px 4px;
   align-self: stretch;
 }
 
-.rich-text-editor {
+.kb-rte__content {
   padding: var(--space-3);
   min-height: 120px;
   outline: none;
   font-size: var(--text-sm);
   line-height: 1.6;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
 }
 
-.rich-text-editor p {
-  margin: 0 0 var(--space-2) 0;
+.kb-rte:focus-within .kb-rte__content {
+  border-color: var(--color-accent);
 }
 
-.rich-text-editor p:last-child {
-  margin-bottom: 0;
-}
+.kb-rte__content p { margin: 0 0 var(--space-2) 0; }
+.kb-rte__content p:last-child { margin-bottom: 0; }
 
-.rich-text-editor h1,
-.rich-text-editor h2,
-.rich-text-editor h3 {
+.kb-rte__content h1,
+.kb-rte__content h2,
+.kb-rte__content h3 {
   margin: var(--space-3) 0 var(--space-2);
   font-weight: 600;
 }
+.kb-rte__content h1 { font-size: var(--text-xl); }
+.kb-rte__content h2 { font-size: var(--text-lg); }
+.kb-rte__content h3 { font-size: var(--text-base); }
 
-.rich-text-editor h1 { font-size: var(--text-xl); }
-.rich-text-editor h2 { font-size: var(--text-lg); }
-.rich-text-editor h3 { font-size: var(--text-base); }
-
-.rich-text-editor ul,
-.rich-text-editor ol {
+.kb-rte__content ul,
+.kb-rte__content ol {
   padding-left: var(--space-5);
   margin: 0 0 var(--space-2) 0;
 }
 
-.rich-text-editor code {
+.kb-rte__content code {
   background: var(--color-bg-elevated);
   padding: 2px 4px;
   border-radius: var(--radius-sm);
@@ -318,7 +348,7 @@
   font-size: 0.9em;
 }
 
-.rich-text-editor pre {
+.kb-rte__content pre {
   background: var(--color-bg-elevated);
   padding: var(--space-3);
   border-radius: var(--radius-md);
@@ -327,19 +357,16 @@
   font-size: 0.85em;
 }
 
-.rich-text-editor pre code {
-  background: transparent;
-  padding: 0;
-}
+.kb-rte__content pre code { background: transparent; padding: 0; }
 
-.rich-text-editor blockquote {
+.kb-rte__content blockquote {
   border-left: 3px solid var(--color-border-strong);
   padding-left: var(--space-3);
   color: var(--color-text-muted);
   margin: 0 0 var(--space-2) 0;
 }
 
-.rich-text-editor p.is-editor-empty:first-child::before {
+.kb-rte__content p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
   color: var(--color-text-muted);
   float: left;
@@ -347,13 +374,30 @@
   height: 0;
 }
 
-  margin-bottom: var(--space-2);
+.kb-rte--empty {
+  padding: var(--space-3);
+  color: var(--color-text-muted);
+  font-style: italic;
 }
 
 .kanban-card__title {
   font-size: var(--text-sm);
   font-weight: 500;
   color: var(--color-text);
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.kanban-card__description {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  line-height: 1.5;
+  margin-top: var(--space-1);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  line-clamp: 3;
+  overflow: hidden;
   word-wrap: break-word;
   overflow-wrap: break-word;
 }
@@ -402,8 +446,4 @@
   font-size: var(--text-xl);
   font-weight: 600;
   padding: var(--space-3);
-}
-
-  background: var(--color-accent);
-  color: #fff;
 }

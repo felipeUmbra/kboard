@@ -234,7 +234,7 @@ function FormFooter({
   isEdit: boolean;
 }) {
   return (
-    <div style={{ display: "flex", justifyContent: "flex-end", gap: "var(--space-2)", marginTop: "var(--space-4)" }}>
+    <div className="modal__footer" style={{ marginTop: "var(--space-5)" }}>
       <button type="button" className="btn" onClick={onCancel}>
         Cancel
       </button>
