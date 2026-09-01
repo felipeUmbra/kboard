@@ -1,0 +1,99 @@
+/* Design tokens — single source of truth for colors, spacing, radii, motion. */
+
+:root {
+  /* Spacing scale (4px base) */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+
+  /* Radii */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  /* Typography */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --text-3xl: 1.875rem;
+
+  /* Colors — light theme (Trello-inspired) */
+  --color-bg: #f4f5f7;
+  --color-bg-elevated: #ebecf0;
+  --color-surface: #ffffff;
+  --color-surface-hover: #f4f5f7;
+  --color-text: #172b4d;
+  --color-text-muted: #5e6c84;
+  --color-text-subtle: #6b778c;
+  --color-border: #dfe1e6;
+  --color-border-strong: #c1c7d0;
+  --color-accent: #0079bf;
+  --color-accent-hover: #026aa7;
+  --color-accent-soft: #e9f2ff;
+  --color-danger: #eb5a46;
+  --color-danger-hover: #cf513d;
+  --color-success: #61bd4f;
+  --color-warning: #f2d600;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(9, 30, 66, 0.08);
+  --shadow-md: 0 2px 4px rgba(9, 30, 66, 0.12), 0 1px 2px rgba(9, 30, 66, 0.08);
+  --shadow-lg: 0 8px 16px rgba(9, 30, 66, 0.16), 0 2px 4px rgba(9, 30, 66, 0.08);
+  --shadow-xl: 0 12px 24px rgba(9, 30, 66, 0.2), 0 4px 8px rgba(9, 30, 66, 0.1);
+
+  /* Interaction */
+  --tap-target: 44px;
+  --focus-ring: 0 0 0 2px var(--color-accent-soft), 0 0 0 4px var(--color-accent);
+
+  /* Motion */
+  --motion-fast: 120ms cubic-bezier(0.2, 0, 0.2, 1);
+  --motion-base: 200ms cubic-bezier(0.2, 0, 0.2, 1);
+  --motion-slow: 320ms cubic-bezier(0.2, 0, 0.2, 1);
+
+  /* Layout */
+  --topbar-h: 56px;
+  --sidebar-w: 280px;
+  --sidebar-w-collapsed: 56px;
+  --column-w: 300px;
+  --content-max-w: 1400px;
+
+  /* Z-index */
+  --z-drawer: 40;
+  --z-modal: 50;
+  --z-toast: 60;
+  --z-drag: 100;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #1d2125;
+    --color-bg-elevated: #2c333a;
+    --color-surface: #22272b;
+    --color-surface-hover: #2c333a;
+    --color-text: #b6c2cf;
+    --color-text-muted: #8c9bab;
+    --color-text-subtle: #6b778c;
+    --color-border: #3d444b;
+    --color-border-strong: #4d555e;
+    --color-accent: #4c9aff;
+    --color-accent-hover: #7aaeff;
+    --color-accent-soft: rgba(76, 154, 255, 0.15);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.5), 0 2px 4px rgba(0, 0, 0, 0.3);
+    --shadow-xl: 0 12px 24px rgba(0, 0, 0, 0.6), 0 4px 8px rgba(0, 0, 0, 0.4);
+  }
+}
