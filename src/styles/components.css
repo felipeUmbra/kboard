@@ -217,13 +217,22 @@
   padding: var(--space-3);
   box-shadow: var(--shadow-sm);
   transition: box-shadow var(--motion-fast), border-color var(--motion-fast);
-  cursor: pointer;
+  cursor: grab;
   min-height: var(--tap-target);
+  /* Prevent text selection while dragging */
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  touch-action: pan-y;
 }
 
 .kanban-card:hover {
   box-shadow: var(--shadow-md);
   border-color: var(--color-border-strong);
+}
+
+.kanban-card:active {
+  cursor: grabbing;
 }
 
 .kanban-card__labels {
@@ -447,3 +456,36 @@
   font-weight: 600;
   padding: var(--space-3);
 }
+
+/* ===== Card type chip & accent stripe ===== */
+.kanban-card {
+  position: relative;
+  padding-left: 10px;
+}
+.kanban-card__top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-bottom: var(--space-1);
+  min-height: 14px;
+}
+
+/* ===== Done column indicator ===== */
+.kanban-column__done-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-success, #4bce97);
+  margin-right: 6px;
+  vertical-align: middle;
+}
+.kanban-column[data-done="true"] {
+  opacity: 0.85;
+}
+
+/* ===== Progress bar (cards) ===== */
+.progress-bar {
+  width: 100%;
+}
+

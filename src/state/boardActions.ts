@@ -1,12 +1,20 @@
 // Action builder for BoardContext. Pure wiring of state mutators to action creators.
 
 import { cryptoRandomId } from "../models/migrations";
-import type { Board, Card, CustomField, Label, PresetOption } from "../models/types";
+import type {
+  Board,
+  Card,
+  CardType,
+  CustomField,
+  Label,
+  PresetOption,
+} from "../models/types";
 import {
   addCard as addCardAction,
   addColumn,
   addCustomField as addCustomFieldAction,
   addLabel as addLabelAction,
+  addParent as addParentAction,
   addPresetOption as addPresetOptionAction,
   deleteCard,
   moveCard,
@@ -14,16 +22,29 @@ import {
   removeColumn,
   removeCustomField as removeCustomFieldAction,
   removeLabel,
+  removeParent as removeParentAction,
   removePresetOption as removePresetOptionAction,
   renameBoard,
   renameColumn,
   setCardFieldValue as setCardFieldValueAction,
+  setDoneColumn as setDoneColumnAction,
+  setCardTypeEnabled as setCardTypeEnabledAction,
+  setCardTypeLabel as setCardTypeLabelAction,
+  addCustomFieldForType,
+  updateCustomFieldForType,
+  removeCustomFieldForType,
+  setCardTypeFieldValue,
+  addPresetOptionForType,
+  updatePresetOptionForType,
+  removePresetOptionForType,
   toggleCardLabel,
   updateCard,
   updateCustomField as updateCustomFieldAction,
   updateLabel,
   updatePresetOption as updatePresetOptionAction,
+  type FieldScope,
 } from "./actionsIndex";
+import { ALL_CARD_TYPES, CARD_TYPE_META } from "../models/cardTypeMeta";
 import {
   createBoard as repoCreate,
   removeBoard as repoRemove,
@@ -44,10 +65,12 @@ export type BoardActions = {
   renameColumn: (columnId: string, name: string) => void;
   removeColumn: (columnId: string) => void;
   moveColumn: (columnId: string, toIndex: number) => void;
-  addCard: (columnId: string, title: string) => string | null;
+  addCard: (columnId: string, title: string, type?: CardType) => string | null;
   updateCard: (cardId: string, patch: Partial<Card>) => void;
   deleteCard: (cardId: string) => void;
   moveCard: (cardId: string, toColumnId: string, toIndex: number) => void;
+  addParent: (cardId: string, parentId: string) => void;
+  removeParent: (cardId: string, parentId: string) => void;
   addLabel: (name: string, color: string) => string | null;
   updateLabel: (labelId: string, patch: Partial<Label>) => void;
   removeLabel: (labelId: string) => void;
@@ -60,6 +83,22 @@ export type BoardActions = {
     fieldId: string,
     value: string | number | boolean,
   ) => void;
+  addCustomFieldForType: (
+    type: CardType,
+    field: Omit<CustomField, "id">,
+  ) => string | null;
+  updateCustomFieldForType: (
+    type: CardType,
+    fieldId: string,
+    patch: Partial<CustomField>,
+  ) => void;
+  removeCustomFieldForType: (type: CardType, fieldId: string) => void;
+  setCardTypeFieldValue: (
+    cardId: string,
+    type: CardType,
+    fieldId: string,
+    value: string | number | boolean,
+  ) => void;
   addPresetOption: (fieldId: string, name: string, color: string) => void;
   updatePresetOption: (
     fieldId: string,
@@ -67,6 +106,26 @@ export type BoardActions = {
     patch: Partial<PresetOption>,
   ) => void;
   removePresetOption: (fieldId: string, optionId: string) => void;
+  addPresetOptionForType: (
+    type: CardType,
+    fieldId: string,
+    name: string,
+    color: string,
+  ) => void;
+  updatePresetOptionForType: (
+    type: CardType,
+    fieldId: string,
+    optionId: string,
+    patch: Partial<PresetOption>,
+  ) => void;
+  removePresetOptionForType: (
+    type: CardType,
+    fieldId: string,
+    optionId: string,
+  ) => void;
+  setCardTypeEnabled: (type: CardType, enabled: boolean) => void;
+  setCardTypeLabel: (type: CardType, label: string) => void;
+  setDoneColumn: (columnId: string, isDone: boolean) => void;
 };
 
 export function buildActions({
@@ -80,15 +139,25 @@ export function buildActions({
       const trimmed = name.trim() || "Untitled board";
       const now = Date.now();
       const id = cryptoRandomId();
+      const todoId = cryptoRandomId();
+      const progressId = cryptoRandomId();
+      const doneId = cryptoRandomId();
       const draft: Board = {
         id,
         name: trimmed,
         labels: [],
         customFields: [],
+        cardTypes: ALL_CARD_TYPES.map((t) => ({
+          type: t,
+          enabled: true,
+          label: CARD_TYPE_META[t].defaultLabel,
+          customFields: [],
+        })),
+        doneColumnIds: [doneId],
         columns: [
-          { id: cryptoRandomId(), name: "To do", cardIds: [] },
-          { id: cryptoRandomId(), name: "In progress", cardIds: [] },
-          { id: cryptoRandomId(), name: "Done", cardIds: [] },
+          { id: todoId, name: "To do", cardIds: [] },
+          { id: progressId, name: "In progress", cardIds: [] },
+          { id: doneId, name: "Done", cardIds: [] },
         ],
         cards: {},
         createdAt: now,
@@ -114,10 +183,10 @@ export function buildActions({
     renameColumn: (columnId, name) => mutate((b) => renameColumn(b, columnId, name)),
     removeColumn: (columnId) => mutate((b) => removeColumn(b, columnId)),
     moveColumn: (columnId, toIndex) => mutate((b) => moveColumn(b, columnId, toIndex)),
-    addCard: (columnId, title) => {
+    addCard: (columnId, title, type) => {
       let newId: string | null = null;
       mutate((b) => {
-        const r = addCardAction(b, columnId, title);
+        const r = addCardAction(b, columnId, title, type);
         newId = r.cardId;
         return r.board;
       });
@@ -127,6 +196,10 @@ export function buildActions({
     deleteCard: (cardId) => mutate((b) => deleteCard(b, cardId)),
     moveCard: (cardId, toColumnId, toIndex) =>
       mutate((b) => moveCard(b, cardId, toColumnId, toIndex)),
+    addParent: (cardId, parentId) =>
+      mutate((b) => addParentAction(b, cardId, parentId)),
+    removeParent: (cardId, parentId) =>
+      mutate((b) => removeParentAction(b, cardId, parentId)),
     addLabel: (name, color) => {
       let id: string | null = null;
       mutate((b) => {
@@ -143,23 +216,51 @@ export function buildActions({
     addCustomField: (field) => {
       let id: string | null = null;
       mutate((b) => {
-        const r = addCustomFieldAction(b, field);
+        const r = addCustomFieldAction(b, "board", field);
         id = r.fieldId;
         return r.board;
       });
       return id;
     },
     updateCustomField: (fieldId, patch) =>
-      mutate((b) => updateCustomFieldAction(b, fieldId, patch)),
-    removeCustomField: (fieldId) => mutate((b) => removeCustomFieldAction(b, fieldId)),
+      mutate((b) => updateCustomFieldAction(b, "board", fieldId, patch)),
+    removeCustomField: (fieldId) =>
+      mutate((b) => removeCustomFieldAction(b, "board", fieldId)),
     setCardFieldValue: (cardId, fieldId, value) =>
-      mutate((b) => setCardFieldValueAction(b, cardId, fieldId, value)),
+      mutate((b) => setCardFieldValueAction(b, cardId, "board", fieldId, value)),
+    addCustomFieldForType: (type, field) => {
+      let id: string | null = null;
+      mutate((b) => {
+        const r = addCustomFieldForType(b, type, field);
+        id = r.fieldId;
+        return r.board;
+      });
+      return id;
+    },
+    updateCustomFieldForType: (type, fieldId, patch) =>
+      mutate((b) => updateCustomFieldForType(b, type, fieldId, patch)),
+    removeCustomFieldForType: (type, fieldId) =>
+      mutate((b) => removeCustomFieldForType(b, type, fieldId)),
+    setCardTypeFieldValue: (cardId, type, fieldId, value) =>
+      mutate((b) => setCardTypeFieldValue(b, cardId, type, fieldId, value)),
     addPresetOption: (fieldId, name, color) =>
-      mutate((b) => addPresetOptionAction(b, fieldId, name, color)),
+      mutate((b) => addPresetOptionAction(b, "board", fieldId, name, color)),
     updatePresetOption: (fieldId, optionId, patch) =>
-      mutate((b) => updatePresetOptionAction(b, fieldId, optionId, patch)),
+      mutate((b) => updatePresetOptionAction(b, "board", fieldId, optionId, patch)),
     removePresetOption: (fieldId, optionId) =>
-      mutate((b) => removePresetOptionAction(b, fieldId, optionId)),
+      mutate((b) => removePresetOptionAction(b, "board", fieldId, optionId)),
+    addPresetOptionForType: (type, fieldId, name, color) =>
+      mutate((b) => addPresetOptionForType(b, type, fieldId, name, color)),
+    updatePresetOptionForType: (type, fieldId, optionId, patch) =>
+      mutate((b) => updatePresetOptionForType(b, type, fieldId, optionId, patch)),
+    removePresetOptionForType: (type, fieldId, optionId) =>
+      mutate((b) => removePresetOptionForType(b, type, fieldId, optionId)),
+    setCardTypeEnabled: (type, enabled) =>
+      mutate((b) => setCardTypeEnabledAction(b, type, enabled)),
+    setCardTypeLabel: (type, label) =>
+      mutate((b) => setCardTypeLabelAction(b, type, label)),
+    setDoneColumn: (columnId, isDone) =>
+      mutate((b) => setDoneColumnAction(b, columnId, isDone)),
   };
 }
 

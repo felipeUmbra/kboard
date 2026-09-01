@@ -63,13 +63,32 @@ export interface CustomField {
  */
 export type CustomFieldValues = Record<string, string | number | boolean>;
 
+// ─── Card types (Epic / Story / Task) ────────────────────────────────
+
+/** Card kind. */
+export type CardType = "epic" | "story" | "task";
+
+/** Configuration of a card type on a given board. */
+export interface CardTypeConfig {
+  type: CardType;
+  enabled: boolean;
+  label: string;          // user-overridable display label
+  customFields: CustomField[]; // per-type fields (separate from board-level)
+}
+
 export interface Card {
   id: string;
+  type: CardType;          // defaults to "task" via migration
   title: string;
   /** Sanitized HTML produced by Tiptap. */
   descriptionHtml: string;
   labelIds: string[];
-  customFieldValues: CustomFieldValues;
+  /** Multi-parent. Empty array = top-level. Each id must satisfy type constraints. */
+  parentIds: string[];
+  /** Board-level field values (fields on the board's `customFields`). */
+  boardFieldValues: CustomFieldValues;
+  /** Per-type field values (fields on the type's `cardTypes[i].customFields`). */
+  typeFieldValues: CustomFieldValues;
   createdAt: number;
   updatedAt: number;
 }
@@ -84,7 +103,12 @@ export interface Board {
   id: string;
   name: string;
   labels: Label[];
+  /** Board-level fields shared by all card types. */
   customFields: CustomField[];
+  /** Per-type configurations (epic / story / task). */
+  cardTypes: CardTypeConfig[];
+  /** IDs of columns that count as "done" for progress calculation. */
+  doneColumnIds: string[];
   columns: Column[];
   cards: Record<string, Card>;
   createdAt: number;

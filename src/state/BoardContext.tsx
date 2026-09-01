@@ -17,8 +17,40 @@ import {
 } from "../drive/boardRepository";
 import type { Board } from "../models/types";
 import { buildActions, type BoardActions } from "./boardActions";
+import { useAuth, BOARDS_CACHE_STORAGE_KEY } from "../auth/useAuth";
 
 const DEBOUNCE_MS = 600;
+
+/** Read cached boards from localStorage. Returns null on any failure. */
+function loadBoardsCache(): Board[] | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(BOARDS_CACHE_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    return parsed as Board[];
+  } catch {
+    return null;
+  }
+}
+
+/** Persist the current board list to localStorage (best-effort). */
+function saveBoardsCache(boards: Board[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    // Drop driveVersion (ETag) — it changes on every save and would
+    // invalidate the cache for no useful purpose.
+    const sanitized = boards.map((b) => {
+      const { driveVersion, ...rest } = b;
+      void driveVersion;
+      return rest as Board;
+    });
+    localStorage.setItem(BOARDS_CACHE_STORAGE_KEY, JSON.stringify(sanitized));
+  } catch {
+    // Ignore quota / serialization errors
+  }
+}
 
 export interface BoardContextValue extends BoardActions {
   boards: Board[];
@@ -35,7 +67,10 @@ export interface BoardContextValue extends BoardActions {
 const BoardContext = createContext<BoardContextValue | null>(null);
 
 export function BoardProvider({ children }: { children: ReactNode }) {
-  const [boards, setBoards] = useState<Board[]>([]);
+  const auth = useAuth();
+  // Seed from cache so the user always sees their boards immediately on
+  // reload — even before Drive is reachable.
+  const [boards, setBoards] = useState<Board[]>(() => loadBoardsCache() ?? []);
   const [loadingList, setLoadingList] = useState(false);
   const [board, setBoard] = useState<Board | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -44,44 +79,88 @@ export function BoardProvider({ children }: { children: ReactNode }) {
   const boardRef = useRef<Board | null>(board);
   boardRef.current = board;
 
+  /**
+   * Acquire a valid access token before any Drive call. If the token
+   * grant fails (e.g. user has no Google session), `withToken` returns
+   * null and the caller is expected to bail out gracefully.
+   *
+   * Note: we intentionally do NOT call this automatically on page load.
+   * Modern browsers block OAuth popups that aren't tied to a user
+   * gesture. Reloading the page is not a recognized gesture, so any
+   * silent grant on mount will fail. Drive calls are only triggered
+   * from explicit user actions (clicks) — those work fine.
+   */
+  const withToken = useCallback(
+    async <T,>(op: () => Promise<T>): Promise<T | null> => {
+      const ok = await auth.ensureToken();
+      if (!ok) return null;
+      return op();
+    },
+    [auth],
+  );
+
   const refreshList = useCallback(async () => {
     setLoadingList(true);
+    setLastError(null);
     try {
-      const summaries = await repoList();
-      const fullBoards = await Promise.all(
-        summaries.map(async (s) => repoLoad(s.driveFileId)),
-      );
-      setBoards(fullBoards);
+      const result = await withToken(async () => {
+        const summaries = await repoList();
+        return Promise.all(
+          summaries.map(async (s) => repoLoad(s.driveFileId)),
+        );
+      });
+      if (result) {
+        setBoards(result);
+        saveBoardsCache(result);
+      } else {
+        // Token grant was blocked or failed. Tell the user to sign in.
+        setLastError(
+          "Please click \"Sign in with Google\" below to connect to Drive.",
+        );
+      }
     } catch (err) {
       setLastError(err instanceof Error ? err.message : "Failed to load boards");
     } finally {
       setLoadingList(false);
     }
-  }, []);
+  }, [withToken]);
 
   const openBoard = useCallback(
     async (boardId: string) => {
-      setBoard(null);
       setLastError(null);
       const found = boards.find((b) => b.id === boardId);
+      // We can open from cache without Drive if we have the full board
+      // locally. The Drive round-trip only matters if the cached
+      // version is stale.
       if (found) {
         setBoard(found);
         return;
       }
       try {
-        const summaries = await repoList();
-        const summary = summaries.find((s) => s.id === boardId);
-        if (!summary) {
-          setLastError("Board not found");
-          return;
+        const result = await withToken(async () => {
+          const summaries = await repoList();
+          const summary = summaries.find((s) => s.id === boardId);
+          if (!summary) {
+            throw new Error("Board not found in Drive");
+          }
+          return repoLoad(summary.driveFileId);
+        });
+        if (result) {
+          setBoard(result);
+          setBoards((prev) => {
+            const others = prev.filter((b) => b.id !== result.id);
+            return [result, ...others];
+          });
+        } else {
+          setLastError(
+            "Please click \"Sign in with Google\" below to connect to Drive.",
+          );
         }
-        const loaded = await repoLoad(summary.driveFileId);
-        setBoard(loaded);
       } catch (err) {
         setLastError(err instanceof Error ? err.message : "Failed to open board");
       }
     },
-    [boards],
+    [boards, withToken],
   );
 
   const closeBoard = useCallback(() => {
@@ -97,16 +176,22 @@ export function BoardProvider({ children }: { children: ReactNode }) {
       setSyncing(true);
       setLastError(null);
       try {
-        const saved = await repoSave(current);
-        setBoard(saved);
-        setBoards((prev) => prev.map((b) => (b.id === saved.id ? saved : b)));
+        const saved = await withToken(() => repoSave(current));
+        if (saved) {
+          setBoard(saved);
+          setBoards((prev) => {
+            const next = prev.map((b) => (b.id === saved.id ? saved : b));
+            saveBoardsCache(next);
+            return next;
+          });
+        }
       } catch (err) {
         setLastError(err instanceof Error ? err.message : "Save failed");
       } finally {
         setSyncing(false);
       }
     }, DEBOUNCE_MS);
-  }, []);
+  }, [withToken]);
 
   useEffect(() => {
     return () => {

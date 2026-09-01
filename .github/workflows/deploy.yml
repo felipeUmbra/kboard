@@ -1,0 +1,65 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Allow the workflow to write the Pages artifact and deploy it.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Avoid two deploys racing — cancel any in-flight run for the same branch.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Build
+        # Pass a placeholder Client ID so the build doesn't fail. The real
+        # value is provided at runtime via the GH Pages environment
+        # (see "Hardening the OAuth setup" in the README for instructions
+        # on how to inject it before deploying).
+        # BASE_PATH is set so the built app works under
+        # https://<owner>.github.io/<repo>/. If you're deploying to a
+        # custom domain or to a user/org root, override BASE_PATH to "/".
+        env:
+          VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID || 'placeholder.apps.googleusercontent.com' }}
+          BASE_PATH: "/${{ github.event.repository.name }}/"
+        run: npm run build
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

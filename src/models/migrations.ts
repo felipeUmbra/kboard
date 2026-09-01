@@ -1,4 +1,33 @@
-import type { Board, Card, CustomFieldValues, Label } from "./types";
+import type {
+  Board,
+  Card,
+  CardType,
+  CardTypeConfig,
+  CustomFieldValues,
+  Label,
+} from "./types";
+import { ALL_CARD_TYPES, CARD_TYPE_META } from "./cardTypeMeta";
+
+/** Build a fresh per-type config block. */
+function defaultCardTypes(): CardTypeConfig[] {
+  return ALL_CARD_TYPES.map((t) => ({
+    type: t,
+    enabled: true,
+    label: CARD_TYPE_META[t].defaultLabel,
+    customFields: [],
+  }));
+}
+
+function defaultDoneColumnIds(board: Partial<Board>): string[] {
+  if (!Array.isArray(board.columns)) return [];
+  const out: string[] = [];
+  for (const c of board.columns) {
+    if (c && typeof c.name === "string" && /^done$/i.test(c.name.trim())) {
+      out.push(c.id);
+    }
+  }
+  return out;
+}
 
 /** Migration: produce a normalized Board regardless of input shape. */
 export function normalizeBoard(raw: unknown): Board {
@@ -12,6 +41,36 @@ export function normalizeBoard(raw: unknown): Board {
   const customFields = Array.isArray(r.customFields)
     ? (r.customFields as Board["customFields"]).filter((f) => f && f.id && f.type)
     : [];
+
+  // cardTypes: preserve existing if present and valid, else default.
+  let cardTypes: CardTypeConfig[] = defaultCardTypes();
+  if (Array.isArray(r.cardTypes)) {
+    const provided = r.cardTypes as CardTypeConfig[];
+    for (const cfg of provided) {
+      if (!cfg || typeof cfg.type !== "string") continue;
+      if (!ALL_CARD_TYPES.includes(cfg.type as CardType)) continue;
+      const idx = cardTypes.findIndex((c) => c.type === cfg.type);
+      if (idx >= 0) {
+        cardTypes[idx] = {
+          type: cfg.type as CardType,
+          enabled: cfg.enabled !== false,
+          label:
+            typeof cfg.label === "string" && cfg.label.trim()
+              ? cfg.label
+              : CARD_TYPE_META[cfg.type as CardType].defaultLabel,
+          customFields: Array.isArray(cfg.customFields)
+            ? (cfg.customFields as Board["customFields"]).filter(
+                (f) => f && f.id && f.type,
+              )
+            : [],
+        };
+      }
+    }
+  }
+
+  const doneColumnIds = Array.isArray(r.doneColumnIds)
+    ? (r.doneColumnIds as unknown[]).filter((x): x is string => typeof x === "string")
+    : defaultDoneColumnIds(r);
 
   const columns = Array.isArray(r.columns)
     ? (r.columns as Board["columns"]).map((c) => ({
@@ -33,6 +92,8 @@ export function normalizeBoard(raw: unknown): Board {
     name: typeof r.name === "string" ? r.name : "Untitled board",
     labels,
     customFields,
+    cardTypes,
+    doneColumnIds,
     columns,
     cards,
     createdAt: typeof r.createdAt === "number" ? r.createdAt : now,
@@ -46,12 +107,31 @@ function normalizeCard(id: string, raw: unknown): Card {
   const r = (raw ?? {}) as Partial<Card> & Record<string, unknown>;
   const now = Date.now();
   const labelIds = Array.isArray(r.labelIds) ? (r.labelIds as string[]) : [];
-  const customFieldValues: CustomFieldValues =
-    r.customFieldValues && typeof r.customFieldValues === "object"
-      ? (r.customFieldValues as CustomFieldValues)
+
+  let boardFieldValues: CustomFieldValues = {};
+  if (r.boardFieldValues && typeof r.boardFieldValues === "object") {
+    boardFieldValues = r.boardFieldValues as CustomFieldValues;
+  } else if (r.customFieldValues && typeof r.customFieldValues === "object") {
+    boardFieldValues = r.customFieldValues as CustomFieldValues;
+  }
+  const typeFieldValues: CustomFieldValues =
+    r.typeFieldValues && typeof r.typeFieldValues === "object"
+      ? (r.typeFieldValues as CustomFieldValues)
       : {};
 
-  // Backwards-compat: if legacy `description` (string) exists, wrap in <p>.
+  const type: CardType =
+    r.type === "epic" || r.type === "story" || r.type === "task" ? r.type : "task";
+
+  let parentIds: string[] = [];
+  if (Array.isArray(r.parentIds)) {
+    parentIds = (r.parentIds as unknown[]).filter(
+      (x): x is string => typeof x === "string",
+    );
+  } else if (typeof (r as Record<string, unknown>).parentId === "string") {
+    const legacy = (r as Record<string, unknown>).parentId as string;
+    if (legacy) parentIds = [legacy];
+  }
+
   let descriptionHtml = typeof r.descriptionHtml === "string" ? r.descriptionHtml : "";
   if (!descriptionHtml && typeof (r as Record<string, unknown>).description === "string") {
     const legacy = (r as Record<string, unknown>).description as string;
@@ -60,10 +140,13 @@ function normalizeCard(id: string, raw: unknown): Card {
 
   return {
     id,
+    type,
     title: typeof r.title === "string" ? r.title : "Untitled",
     descriptionHtml,
     labelIds,
-    customFieldValues,
+    parentIds,
+    boardFieldValues,
+    typeFieldValues,
     createdAt: typeof r.createdAt === "number" ? r.createdAt : now,
     updatedAt: typeof r.updatedAt === "number" ? r.updatedAt : now,
   };

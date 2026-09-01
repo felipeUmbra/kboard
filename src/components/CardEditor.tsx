@@ -1,11 +1,14 @@
 import { useState } from "react";
-import type { Board, Card as CardModel } from "../models/types";
+import type { Board, Card as CardModel, CardType } from "../models/types";
 import { Modal } from "./Modal";
 import { RichTextEditor } from "./fields/RichTextEditor";
 import { LabelPill } from "./fields/LabelPill";
 import { sanitizeRichHtml } from "./fields/sanitize";
 import { useBoard } from "../state/BoardContext";
 import { FieldValueInput } from "./fields/FieldValueInput";
+import { ParentPicker } from "./ParentPicker";
+import { CARD_TYPE_META, getMeta } from "../models/cardTypeMeta";
+import { TypeChip } from "./TypeChip";
 
 export function CardEditor({
   card,
@@ -66,6 +69,48 @@ export function CardEditor({
       </div>
 
       <div style={{ marginBottom: "var(--space-5)" }}>
+        <label className="label">Type</label>
+        <div
+          style={{ display: "flex", gap: "var(--space-1)" }}
+          role="radiogroup"
+          aria-label="Card type"
+        >
+          {board.cardTypes
+            .filter((c) => c.enabled)
+            .map((cfg) => {
+              const meta = CARD_TYPE_META[cfg.type];
+              const active = card.type === cfg.type;
+              return (
+                <button
+                  key={cfg.type}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  onClick={() => ctx.updateCard(card.id, { type: cfg.type })}
+                  className="btn"
+                  style={{
+                    flex: 1,
+                    background: active ? meta.softColor : "transparent",
+                    color: active ? meta.color : "var(--color-text-muted)",
+                    borderColor: active ? meta.color : "var(--color-border)",
+                    fontWeight: active ? 600 : 500,
+                  }}
+                >
+                  <span aria-hidden="true">{meta.icon}</span> {cfg.label}
+                </button>
+              );
+            })}
+        </div>
+      </div>
+
+      <ParentPicker
+        board={board}
+        card={card}
+        onAdd={(parentId) => ctx.addParent(card.id, parentId)}
+        onRemove={(parentId) => ctx.removeParent(card.id, parentId)}
+      />
+
+      <div style={{ marginBottom: "var(--space-5)" }}>
         <label className="label">Description</label>
         <RichTextEditor
           value={descriptionHtml}
@@ -114,7 +159,7 @@ export function CardEditor({
 
       {board.customFields.length > 0 && (
         <div>
-          <label className="label">Custom fields</label>
+          <label className="label">Board fields</label>
           <div
             style={{
               display: "grid",
@@ -126,13 +171,45 @@ export function CardEditor({
               <FieldValueInput
                 key={f.id}
                 field={f}
-                value={card.customFieldValues[f.id]}
+                value={card.boardFieldValues[f.id]}
                 onChange={(v) => ctx.setCardFieldValue(card.id, f.id, v)}
               />
             ))}
           </div>
         </div>
       )}
+
+      {(() => {
+        const typeConfig = board.cardTypes.find((c) => c.type === card.type);
+        if (!typeConfig || typeConfig.customFields.length === 0) return null;
+        const meta = getMeta(card.type);
+        return (
+          <div style={{ marginTop: "var(--space-5)" }}>
+            <label className="label">
+              <TypeChip type={card.type} customLabel={typeConfig.label} size="xs" />{" "}
+              fields
+            </label>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                gap: "var(--space-3)",
+              }}
+            >
+              {typeConfig.customFields.map((f) => (
+                <FieldValueInput
+                  key={f.id}
+                  field={f}
+                  value={card.typeFieldValues[f.id]}
+                  onChange={(v) =>
+                    ctx.setCardTypeFieldValue(card.id, card.type, f.id, v)
+                  }
+                />
+              ))}
+            </div>
+          </div>
+        );
+      })()}
     </Modal>
   );
 }

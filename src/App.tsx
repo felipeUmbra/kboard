@@ -10,37 +10,59 @@ import { Banner } from "./components/Banner";
 export function App() {
   const auth = useAuth();
   const board = useBoard();
-  const [view, setView] = useState<"list" | "board">("list");
+  // `view` is purely a view-state concern. The board data lives in
+  // BoardContext (board.activeBoard). We keep them in sync by:
+  //   - When activeBoard is set, we're in "board" view.
+  //   - When the user clicks "back", we clear activeBoard AND view.
+  //   - When openBoard is called, it sets activeBoard and view flips.
+  const [view, setView] = useState<"list" | "board">(
+    board.activeBoard ? "board" : "list",
+  );
 
-  // Load board list after sign-in AND after silent re-auth completes.
-  // Without waiting for `auth.ready`, Drive calls fired on page reload
-  // race each other and never get a valid token.
+  // If activeBoard is cleared (back, delete, sign-out), make sure the
+  // view follows. This effect is the single source of truth.
   useEffect(() => {
-    if (!auth.profile || !auth.ready) return;
-    void board.refreshList();
-    setView("list");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [auth.profile?.id, auth.ready]);
-
-  // Switch view when active board changes.
-  useEffect(() => {
-    if (board.activeBoard) setView("board");
-    else setView("list");
+    if (board.activeBoard) {
+      setView("board");
+    } else {
+      setView("list");
+    }
   }, [board.activeBoard]);
+
+  // Reset to list view on sign-in / sign-out.
+  useEffect(() => {
+    setView(board.activeBoard ? "board" : "list");
+    // We intentionally depend on auth.profile.id only — we don't want
+    // to re-evaluate on every BoardContext change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auth.profile?.id]);
 
   if (!auth.profile) {
     return <LoginScreen {...auth} />;
   }
 
+  // Going back to the list: clear the active board AND switch view.
+  // We must call closeBoard() so the sidebar stops showing the
+  // previous board's labels, custom fields, etc.
+  const goToList = () => {
+    board.closeBoard();
+    setView("list");
+  };
+
   return (
-    <AppShell onNavigateList={() => setView("list")}>
+    <AppShell onNavigateList={goToList}>
       {board.lastError && (
-        <Banner kind="error" message={board.lastError} onDismiss={() => board.refreshList()} />
+        <Banner
+          kind="error"
+          message={board.lastError}
+          onDismiss={() => void 0}
+          action={{ label: "Sign in with Google", onClick: () => void auth.login() }}
+        />
       )}
       {view === "list" || !board.activeBoard ? (
         <BoardListView />
       ) : (
-        <BoardView onBackToList={() => board.closeBoard()} />
+        <BoardView onBackToList={goToList} />
       )}
     </AppShell>
   );

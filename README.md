@@ -115,10 +115,41 @@ src/
 `npm run build` produces a static `dist/` folder. Deploy it to any static host:
 
 - **Vercel / Netlify**: connect the repo, framework preset: Vite. Add `VITE_GOOGLE_CLIENT_ID` to env vars.
-- **GitHub Pages**: push `dist/` to `gh-pages` branch.
+- **GitHub Pages**: see [Deployment to GitHub Pages](#deployment-to-github-pages) below — a workflow file is already included.
 - **Cloudflare Pages**: build command `npm run build`, output `dist`.
 
 After deploying, add your production URL to the **Authorized JavaScript origins** in the Google Cloud Console.
+
+## Deployment to GitHub Pages
+
+A workflow is provided at `.github/workflows/deploy.yml`. It builds and deploys `dist/` to GitHub Pages on every push to `main` (and can also be triggered manually from the Actions tab).
+
+**One-time setup:**
+
+1. **Enable GitHub Pages** in your repo settings → *Pages* → *Source* → **GitHub Actions**.
+2. **(Recommended) Add your OAuth Client ID as a secret:** go to *Settings* → *Secrets and variables* → *Actions* → *New repository secret*:
+   - Name: `VITE_GOOGLE_CLIENT_ID`
+   - Value: the Client ID from Google Cloud Console (the one that ends in `.apps.googleusercontent.com`)
+3. **Add the production origin** to your Google OAuth client: in Google Cloud Console → *APIs & Services* → *Credentials* → click your Web client → *Authorized JavaScript origins* → add:
+   - `https://<your-github-username>.github.io` (if deploying to a user/org root)
+   - `https://<your-github-username>.github.io/<repo-name>` (if deploying to a project page, which is the default for this workflow)
+
+That's it. Push to `main` and the workflow will:
+
+1. Install Node 20 + dependencies
+2. Run `npm run typecheck` (fail the build on type errors)
+3. Build with `BASE_PATH=/<repo-name>/` so asset URLs resolve under the project-page subpath
+4. Upload the artifact and deploy via the official `actions/deploy-pages` action
+
+After the first successful run, your app is live at `https://<your-github-username>.github.io/<repo-name>/`.
+
+**Custom domain?** Add a `CNAME` file inside `public/` (Vite copies it into `dist/` automatically) and set `BASE_PATH: "/"` in the workflow.
+
+**Troubleshooting:**
+
+- *Blank page after deploy:* open DevTools → Console. If you see 404s for `assets/...`, your `BASE_PATH` is wrong. Update the workflow to match your repo name.
+- *"Missing required parameter: client_id"* on the login screen: the placeholder Client ID was used. Set the `VITE_GOOGLE_CLIENT_ID` secret and re-run the workflow.
+- *Google OAuth popup blocked:* add the production URL to **Authorized JavaScript origins** in Google Cloud Console.
 
 ## Browser support
 

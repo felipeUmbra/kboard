@@ -20,10 +20,14 @@ export function KanbanDndProvider({ children }: { children: ReactNode }) {
   const ctx = useBoard();
   const [activeId, setActiveId] = useState<string | null>(null);
 
-  // Sensors tuned for both mouse and touch (long-press to pick up on touch).
+  // Sensors tuned for both mouse and touch.
+  // - Mouse / pen: activate on 5px of movement (instant, no delay). Otherwise
+  //   users can't drag because the click handler on the card fires first.
+  // - Touch: require a 250ms long-press so taps still open the card.
+  // - Keyboard: full a11y support.
   const sensors = useSensors(
     useSensor(PointerSensor, {
-      activationConstraint: { delay: 200, tolerance: 5 },
+      activationConstraint: { distance: 5 },
     }),
     useSensor(TouchSensor, {
       activationConstraint: { delay: 250, tolerance: 8 },

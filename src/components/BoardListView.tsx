@@ -25,13 +25,24 @@ export function BoardListView() {
             Boards live in your Google Drive. Only you can access them.
           </p>
         </div>
-        <button
-          type="button"
-          className="btn btn--primary btn--lg"
-          onClick={() => setCreating(true)}
-        >
-          + New board
-        </button>
+        <div style={{ display: "flex", gap: "var(--space-2)" }}>
+          <button
+            type="button"
+            className="btn btn--ghost"
+            onClick={() => void board.refreshList()}
+            disabled={board.loadingList}
+            title="Re-fetch the list of boards from Google Drive"
+          >
+            {board.loadingList ? "Syncing…" : "↻ Sync"}
+          </button>
+          <button
+            type="button"
+            className="btn btn--primary btn--lg"
+            onClick={() => setCreating(true)}
+          >
+            + New board
+          </button>
+        </div>
       </div>
 
       {board.loadingList ? (

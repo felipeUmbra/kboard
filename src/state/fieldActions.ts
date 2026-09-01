@@ -1,52 +1,95 @@
 // Custom field / preset option action creators.
+// Supports both board-level fields and per-card-type fields.
 
 import { cryptoRandomId } from "../models/migrations";
 import type {
   Board,
   Card,
+  CardType,
   CustomField,
   CustomFieldValues,
   PresetOption,
 } from "../models/types";
 
+/** Where a field is stored. */
+export type FieldScope = "board" | CardType;
+
 export interface AddFieldResult { board: Board; fieldId: string | null }
 
-export function addCustomField(b: Board, field: Omit<CustomField, "id">): AddFieldResult {
+function getFields(b: Board, scope: FieldScope): CustomField[] {
+  if (scope === "board") return b.customFields;
+  const cfg = b.cardTypes.find((c) => c.type === scope);
+  return cfg?.customFields ?? [];
+}
+
+function setFields(
+  b: Board,
+  scope: FieldScope,
+  updater: (fields: CustomField[]) => CustomField[],
+): Board {
+  if (scope === "board") {
+    return { ...b, customFields: updater(b.customFields) };
+  }
+  return {
+    ...b,
+    cardTypes: b.cardTypes.map((c) =>
+      c.type === scope ? { ...c, customFields: updater(c.customFields) } : c,
+    ),
+  };
+}
+
+export function addCustomField(
+  b: Board,
+  scope: FieldScope,
+  field: Omit<CustomField, "id">,
+): AddFieldResult {
   const trimmed = field.name.trim();
   if (!trimmed) return { board: b, fieldId: null };
   const id = cryptoRandomId();
   return {
     fieldId: id,
-    board: {
-      ...b,
-      customFields: [...b.customFields, { ...field, id, name: trimmed }],
-    },
+    board: setFields(b, scope, (fields) => [
+      ...fields,
+      { ...field, id, name: trimmed },
+    ]),
   };
 }
 
 export function updateCustomField(
   b: Board,
+  scope: FieldScope,
   fieldId: string,
   patch: Partial<CustomField>,
 ): Board {
-  return {
-    ...b,
-    customFields: b.customFields.map((f) =>
-      f.id === fieldId ? { ...f, ...patch, id: f.id } : f,
-    ),
-  };
+  return setFields(b, scope, (fields) =>
+    fields.map((f) => (f.id === fieldId ? { ...f, ...patch, id: f.id } : f)),
+  );
 }
 
-export function removeCustomField(b: Board, fieldId: string): Board {
+export function removeCustomField(b: Board, scope: FieldScope, fieldId: string): Board {
+  const valueKey = scope === "board" ? "boardFieldValues" : "typeFieldValues";
   const cards: Record<string, Card> = {};
   for (const [id, c] of Object.entries(b.cards)) {
-    const { [fieldId]: _omit, ...rest } = c.customFieldValues;
-    void _omit;
-    cards[id] = { ...c, customFieldValues: rest as CustomFieldValues };
+    const values = c[valueKey] as CustomFieldValues | undefined;
+    if (values && fieldId in values) {
+      const { [fieldId]: _omit, ...rest } = values;
+      void _omit;
+      cards[id] = { ...c, [valueKey]: rest } as Card;
+    } else {
+      cards[id] = c;
+    }
   }
   return {
     ...b,
-    customFields: b.customFields.filter((f) => f.id !== fieldId),
+    customFields:
+      scope === "board"
+        ? b.customFields.filter((f) => f.id !== fieldId)
+        : b.customFields,
+    cardTypes: b.cardTypes.map((c) =>
+      c.type === scope
+        ? { ...c, customFields: c.customFields.filter((f) => f.id !== fieldId) }
+        : c,
+    ),
     cards,
   };
 }
@@ -54,46 +97,65 @@ export function removeCustomField(b: Board, fieldId: string): Board {
 export function setCardFieldValue(
   b: Board,
   cardId: string,
+  scope: FieldScope,
   fieldId: string,
   value: string | number | boolean,
 ): Board {
   const card = b.cards[cardId];
   if (!card) return b;
+  if (scope === "board") {
+    return {
+      ...b,
+      cards: {
+        ...b.cards,
+        [cardId]: {
+          ...card,
+          boardFieldValues: { ...card.boardFieldValues, [fieldId]: value },
+          updatedAt: Date.now(),
+        },
+      },
+    };
+  }
   return {
     ...b,
     cards: {
       ...b.cards,
       [cardId]: {
         ...card,
-        customFieldValues: { ...card.customFieldValues, [fieldId]: value },
+        typeFieldValues: { ...card.typeFieldValues, [fieldId]: value },
         updatedAt: Date.now(),
       },
     },
   };
 }
 
-export function addPresetOption(b: Board, fieldId: string, name: string, color: string): Board {
+export function addPresetOption(
+  b: Board,
+  scope: FieldScope,
+  fieldId: string,
+  name: string,
+  color: string,
+): Board {
   const trimmed = name.trim();
   if (!trimmed) return b;
-  return {
-    ...b,
-    customFields: b.customFields.map((f) =>
+  return setFields(b, scope, (fields) =>
+    fields.map((f) =>
       f.id === fieldId
         ? { ...f, options: [...(f.options ?? []), { id: cryptoRandomId(), name: trimmed, color }] }
         : f,
     ),
-  };
+  );
 }
 
 export function updatePresetOption(
   b: Board,
+  scope: FieldScope,
   fieldId: string,
   optionId: string,
   patch: Partial<PresetOption>,
 ): Board {
-  return {
-    ...b,
-    customFields: b.customFields.map((f) =>
+  return setFields(b, scope, (fields) =>
+    fields.map((f) =>
       f.id === fieldId
         ? {
             ...f,
@@ -103,16 +165,23 @@ export function updatePresetOption(
           }
         : f,
     ),
-  };
+  );
 }
 
-export function removePresetOption(b: Board, fieldId: string, optionId: string): Board {
+export function removePresetOption(
+  b: Board,
+  scope: FieldScope,
+  fieldId: string,
+  optionId: string,
+): Board {
+  const valueKey = scope === "board" ? "boardFieldValues" : "typeFieldValues";
   const cards: Record<string, Card> = {};
   for (const [id, c] of Object.entries(b.cards)) {
-    if (c.customFieldValues[fieldId] === optionId) {
-      const { [fieldId]: _omit, ...rest } = c.customFieldValues;
+    const values = c[valueKey] as CustomFieldValues | undefined;
+    if (values && values[fieldId] === optionId) {
+      const { [fieldId]: _omit, ...rest } = values;
       void _omit;
-      cards[id] = { ...c, customFieldValues: rest as CustomFieldValues };
+      cards[id] = { ...c, [valueKey]: rest } as Card;
     } else {
       cards[id] = c;
     }
@@ -120,10 +189,18 @@ export function removePresetOption(b: Board, fieldId: string, optionId: string):
   return {
     ...b,
     cards,
-    customFields: b.customFields.map((f) =>
-      f.id === fieldId
-        ? { ...f, options: (f.options ?? []).filter((o) => o.id !== optionId) }
-        : f,
+    customFields: b.customFields,
+    cardTypes: b.cardTypes.map((c) =>
+      c.type === scope
+        ? {
+            ...c,
+            customFields: c.customFields.map((f) =>
+              f.id === fieldId
+                ? { ...f, options: (f.options ?? []).filter((o) => o.id !== optionId) }
+                : f,
+            ),
+          }
+        : c,
     ),
   };
 }
