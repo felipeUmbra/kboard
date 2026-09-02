@@ -12,7 +12,98 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # ──────────────────────────────────────────────────────────────────
+  # Stage 1 — Static checks (fast feedback)
+  # ──────────────────────────────────────────────────────────────────
+  typecheck:
+    name: Type-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+
+  # ──────────────────────────────────────────────────────────────────
+  # Stage 2 — End-to-end tests against the dev server
+  #   Runs against `npm run dev` so HMR + Vite-optimized source is
+  #   exercised (closer to what local devs run). Output artifacts
+  #   (HTML report, screenshots, traces) are uploaded on every run,
+  #   even on failure, so failures are debuggable from the GH UI.
+  # ──────────────────────────────────────────────────────────────────
+  e2e:
+    name: E2E (Chromium, desktop + tablet + mobile)
+    needs: typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
+      - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Build the app
+        # The E2E suite uses the dev server (`npm run dev`) via
+        # `playwright.config.ts -> webServer.command`, so we don't need to
+        # build for tests to run. We still build once here so cache reuse
+        # works in subsequent jobs.
+        env:
+          VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
+        run: |
+          if [ -z "${VITE_GOOGLE_CLIENT_ID:-}" ]; then
+            echo "::warning::VITE_GOOGLE_CLIENT_ID secret is not set — using a placeholder so the build still succeeds."
+            export VITE_GOOGLE_CLIENT_ID="placeholder.apps.googleusercontent.com"
+          fi
+          npm run build
+
+      - name: Run Playwright tests
+        env:
+          CI: "true"
+        run: npm run test:e2e
+
+      - name: Upload Playwright HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14
+
+      - name: Upload test results (screenshots, traces, video)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: test-results/
+          retention-days: 7
+
+  # ──────────────────────────────────────────────────────────────────
+  # Stage 3 — Build production bundle (gated on typecheck + tests)
+  # ──────────────────────────────────────────────────────────────────
   build:
+    name: Build production bundle
+    needs: [typecheck, e2e]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -27,22 +118,7 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
-      - name: Type-check
-        run: npm run typecheck
-
       - name: Build
-        # Pass a placeholder Client ID so the build doesn't fail. The real
-        # value is provided at runtime via the GH Pages environment
-        # (see "Hardening the OAuth setup" in the README for instructions
-        # on how to inject it before deploying).
-        # BASE_PATH is set so the built app works under
-        # https://<owner>.github.io/<repo>/. If you're deploying to a
-        # custom domain or to a user/org root, override BASE_PATH to "/".
-        # NOTE: We deliberately use the env: block (not an inline shell
-        # expression) so the static schema linter can resolve
-        # `secrets.VITE_GOOGLE_CLIENT_ID` and stop flagging it as
-        # "Context access might be invalid". GitHub Actions evaluates
-        # this expression identically to the previous form.
         env:
           VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
           BASE_PATH: "/${{ github.event.repository.name }}/"
@@ -58,6 +134,9 @@ jobs:
         with:
           path: dist
 
+  # ──────────────────────────────────────────────────────────────────
+  # Stage 4 — Deploy to GitHub Pages (gated on build)
+  # ──────────────────────────────────────────────────────────────────
   deploy:
     needs: build
     runs-on: ubuntu-latest
