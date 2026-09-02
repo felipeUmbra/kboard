@@ -93,6 +93,33 @@ export class BoardPage {
       .first();
   }
 
+  /**
+   * True if the app is rendering in mobile mode (width < 768), where only
+   * one column is visible at a time and the others are accessed via tabs.
+   */
+  async isMobileView(): Promise<boolean> {
+    return this.page.evaluate(() => window.innerWidth < 768);
+  }
+
+  /**
+   * On mobile, switch to the column tab matching `name` (case-insensitive).
+   * No-op on desktop/tablet where all columns are visible.
+   *
+   * Each tab button's accessible name is "<name> <count>" (e.g. "To do 0").
+   * We use Playwright's accessible-name selector via `getByRole` so we
+   * don't need a fragile regex against Playwright's hasText semantics.
+   */
+  async selectColumnTab(name: string): Promise<void> {
+    if (!(await this.isMobileView())) return;
+    // Use a regex on the tab's accessible name. The name begins with the
+    // column title (case-insensitive) followed by the card count.
+    const tab = this.page
+      .getByRole("tab", { name: new RegExp(`^${name}\\b`, "i") })
+      .first();
+    await tab.click();
+    await expect(tab).toHaveAttribute("aria-selected", "true", { timeout: 3_000 });
+  }
+
   async toggleDoneColumn(name: string) {
     const col = await this.getColumn(name);
     await col.locator(sel.columnOptions).click();
@@ -101,6 +128,11 @@ export class BoardPage {
 
   // ── Cards ─────────────────────────────────────────────────────────
   async addCard(columnName: string, title: string, type: "task" | "story" | "epic" = "task") {
+    // On mobile, only the active tab's column is rendered. Switch tabs first
+    // so the column we're targeting exists in the DOM.
+    if (columnName && columnName.length > 0) {
+      await this.selectColumnTab(columnName);
+    }
     const col =
       columnName && columnName.length > 0
         ? await this.getColumn(columnName)
@@ -135,12 +167,39 @@ export class BoardPage {
   }
 
   async closeCardEditor() {
-    await this.page.locator(sel.cardSave).click();
+    const saveBtn = this.page.locator(sel.cardSave);
+    await saveBtn.click();
+    // Wait for the editor modal to be removed from the DOM.
     await this.page.waitForSelector(sel.cardTitleInput, { state: "detached", timeout: 5_000 });
+    // A small wait lets React flush the state update to the card before
+    // the next assertion looks at it.
+    await this.page.waitForTimeout(100);
   }
 
   async setCardTitle(newTitle: string) {
-    await this.page.fill(sel.cardTitleInput, newTitle);
+    // React-controlled inputs are notoriously tricky to drive from Playwright.
+    // We use the native input value setter + an InputEvent so React's
+    // synthetic onChange fires with the new value. This works regardless of
+    // whether the input previously held text.
+    const input = this.page.locator(sel.cardTitleInput);
+    await input.waitFor({ state: "visible", timeout: 5_000 });
+    await input.click();
+    await this.page.evaluate(
+      ({ selector, value }) => {
+        const el = document.querySelector(selector) as HTMLInputElement | null;
+        if (!el) throw new Error(`setCardTitle: input not found: ${selector}`);
+        const setter = Object.getOwnPropertyDescriptor(
+          window.HTMLInputElement.prototype,
+          "value",
+        )?.set;
+        setter?.call(el, value);
+        // React 16+ listens for the native "input" event.
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+      },
+      { selector: sel.cardTitleInput, value: newTitle },
+    );
+    // Verify the React state caught up — wait for the DOM value to match.
+    await expect(input).toHaveValue(newTitle, { timeout: 3_000 });
   }
 
   async setCardType(type: "task" | "story" | "epic") {
@@ -168,6 +227,9 @@ export class BoardPage {
   // ── Drag & drop ───────────────────────────────────────────────────
   async dragCardToColumn(cardTitle: string, toColumnName: string) {
     const card = this.page.locator(sel.card).filter({ hasText: cardTitle }).first();
+    // Wait for the card to be stable before dragging — after a previous
+    // drag, the React re-render can leave the DOM briefly detached.
+    await card.waitFor({ state: "visible", timeout: 10_000 });
     const target = await this.getColumn(toColumnName);
     const cardBox = await card.boundingBox();
     const targetBox = await target.boundingBox();
@@ -192,6 +254,8 @@ export class BoardPage {
       { steps: 5 },
     );
     await this.page.mouse.up();
+    // Wait for the move to settle before the next assertion / drag.
+    await this.page.waitForTimeout(100);
   }
 
   // ── Drive introspection ───────────────────────────────────────────

@@ -46,7 +46,11 @@ test.describe("Comments and Activity Log", () => {
     await submit.click();
     const list = page.locator(".comment-thread__list");
     await expect(list.getByText("Ephemeral")).toBeVisible({ timeout: 5_000 });
+    // The Delete button on each comment is re-rendered after the new comment
+    // is added — wait for it to be stable before clicking to avoid a race where
+    // the element is detached mid-click.
     const deleteBtn = page.getByRole("button", { name: /delete comment by/i }).first();
+    await expect(deleteBtn).toBeVisible({ timeout: 3_000 });
     await deleteBtn.click();
     await expect(list.getByText("Ephemeral")).toHaveCount(0, { timeout: 5_000 });
     await bp.closeCardEditor();
@@ -65,6 +69,9 @@ test.describe("Comments and Activity Log", () => {
     await bp.setCardTitle("New title for log");
     await bp.closeCardEditor();
     await bp.openCard("New title for log");
+    // The Activity section may be off-screen on small viewports; scroll it
+    // into view before asserting.
+    await page.getByText(/^Activity$/i).first().scrollIntoViewIfNeeded();
     await expect(page.getByText(/title changed/i).first()).toBeVisible({ timeout: 5_000 });
     await bp.closeCardEditor();
   });

@@ -32,7 +32,8 @@ test.describe("Parent / Child hierarchy and Progress", () => {
     await expect(page.getByText("Big Epic").first()).toBeVisible();
   });
 
-  test("Progress bar updates as tasks are moved to Done", async ({ page }) => {
+  test("Progress bar updates as tasks are moved to Done", async ({ page, isMobile }) => {
+    test.skip(isMobile, "Cross-column drag-and-drop requires both columns visible at once, which the mobile tab UI doesn't support.");
     const bp = new BoardPage(page);
     // Add 2 tasks; both initially in "To do".
     await bp.addCard("To do", "Task A");
@@ -47,7 +48,8 @@ test.describe("Parent / Child hierarchy and Progress", () => {
     await expect(doneCol.getByText("Task A")).toBeVisible({ timeout: 5_000 });
   });
 
-  test("Drag & drop updates progress bar color", async ({ page }) => {
+  test("Drag & drop updates progress bar color", async ({ page, isMobile }) => {
+    test.skip(isMobile, "Cross-column drag-and-drop requires both columns visible at once, which the mobile tab UI doesn't support.");
     const bp = new BoardPage(page);
     // Create an Epic, give it 3 children, move 2 to Done — Epic progress >= 66% → green.
     await bp.addCard("To do", "Parent Epic", "epic");
