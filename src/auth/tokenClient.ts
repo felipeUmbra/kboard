@@ -12,6 +12,70 @@ let inFlight: Promise<string> | null = null;
 
 const REFRESH_MARGIN_MS = 60_000; // refresh 1 min before expiry
 
+// Persist the access token across page reloads / new tabs so the user
+// isn't prompted again on every navigation. Google Identity Services
+// does NOT issue refresh tokens for SPAs, but it does allow reusing the
+// access token until its natural `expires_in` — and persisting it across
+// reloads is the officially supported pattern for SPAs.
+const TOKEN_STORAGE_KEY = "kboard:google-token";
+
+interface StoredToken {
+  accessToken: string;
+  /** Absolute epoch ms when this token expires (as reported by Google's expires_in). */
+  expiresAt: number;
+}
+
+function loadStoredToken(): StoredToken | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(TOKEN_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<StoredToken>;
+    if (
+      typeof parsed.accessToken === "string" &&
+      typeof parsed.expiresAt === "number" &&
+      parsed.accessToken.length > 0 &&
+      parsed.expiresAt > Date.now()
+    ) {
+      return { accessToken: parsed.accessToken, expiresAt: parsed.expiresAt };
+    }
+    // Expired or malformed — drop it so we don't keep re-reading garbage.
+    window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+    return null;
+  } catch {
+    // Private mode / quota / SecurityError — treat as no cached token.
+    return null;
+  }
+}
+
+function saveStoredToken(stored: StoredToken): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, JSON.stringify(stored));
+  } catch {
+    // Storage unavailable (private mode, quota) — non-fatal; in-memory cache still works.
+  }
+}
+
+function clearStoredToken(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+// Hydrate the in-memory cache from localStorage at module load so the
+// token survives page reloads / new tabs. `scheduleRefresh` is a
+// `function` declaration so it is hoisted and safe to call here.
+const hydrated = loadStoredToken();
+if (hydrated) {
+  currentToken = hydrated.accessToken;
+  tokenExpiresAt = hydrated.expiresAt;
+  scheduleRefresh();
+}
+
 export function getClientId(): string {
   const id = import.meta.env.VITE_GOOGLE_CLIENT_ID;
   if (!id || id === "your-client-id-here.apps.googleusercontent.com") {
@@ -74,6 +138,7 @@ export async function requestAccessToken(prompt: "" | "consent" = ""): Promise<s
             }
             currentToken = response.access_token;
             tokenExpiresAt = Date.now() + response.expires_in * 1000;
+            saveStoredToken({ accessToken: currentToken, expiresAt: tokenExpiresAt });
             scheduleRefresh();
             resolve(response.access_token);
           },
@@ -105,7 +170,12 @@ function scheduleRefresh() {
 
 export function getCurrentToken(): string | null {
   if (!currentToken) return null;
-  if (Date.now() >= tokenExpiresAt) return null;
+  if (Date.now() >= tokenExpiresAt) {
+    // Keep storage consistent with memory so we don't keep re-parsing
+    // a known-stale entry on every read.
+    clearStoredToken();
+    return null;
+  }
   return currentToken;
 }
 
@@ -115,6 +185,7 @@ export function clearToken() {
   }
   currentToken = null;
   tokenExpiresAt = 0;
+  clearStoredToken();
   if (refreshTimer !== null) {
     window.clearTimeout(refreshTimer);
     refreshTimer = null;
