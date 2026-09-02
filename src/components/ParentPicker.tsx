@@ -17,17 +17,20 @@ export function ParentPicker({
   onAdd: (parentId: string) => void;
   onRemove: (parentId: string) => void;
 }) {
-  const meta = getMeta(card.type);
+  // Hooks must be called in the same order on every render, so we
+  // declare ALL of them BEFORE the early return below. Previously the
+  // `useMemo` for `candidates` was inside the conditional branch,
+  // which caused the "Rendered more hooks than during the previous
+  // render" error when changing card types whose `canHaveParent`
+  // flag differed across renders.
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
 
-  if (!meta.canHaveParent || !meta.parentType) {
-    return null;
-  }
-
-  const parentType = meta.parentType as CardType;
+  const meta = getMeta(card.type);
+  const parentType = meta.parentType as CardType | undefined;
 
   const candidates = useMemo(() => {
+    if (!parentType) return [];
     return Object.values(board.cards)
       .filter((c) => c.type === parentType && c.id !== card.id)
       .filter((c) => !card.parentIds.includes(c.id))
@@ -35,6 +38,12 @@ export function ParentPicker({
         search.trim() ? c.title.toLowerCase().includes(search.toLowerCase()) : true,
       );
   }, [board.cards, parentType, card.id, card.parentIds, search]);
+
+  // Now that every hook has been called, it's safe to bail out for
+  // card types that don't support parents (e.g. epics).
+  if (!meta.canHaveParent || !parentType) {
+    return null;
+  }
 
   const currentParents = card.parentIds
     .map((id) => board.cards[id])

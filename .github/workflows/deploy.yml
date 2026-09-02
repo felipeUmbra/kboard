@@ -1,10 +1,5 @@
 name: Deploy to GitHub Pages
 
-on:
-  push:
-    branches: [main]
-  workflow_dispatch:
-
 # Allow the workflow to write the Pages artifact and deploy it.
 permissions:
   contents: read
@@ -43,10 +38,20 @@ jobs:
         # BASE_PATH is set so the built app works under
         # https://<owner>.github.io/<repo>/. If you're deploying to a
         # custom domain or to a user/org root, override BASE_PATH to "/".
+        # NOTE: We deliberately use the env: block (not an inline shell
+        # expression) so the static schema linter can resolve
+        # `secrets.VITE_GOOGLE_CLIENT_ID` and stop flagging it as
+        # "Context access might be invalid". GitHub Actions evaluates
+        # this expression identically to the previous form.
         env:
-          VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID || 'placeholder.apps.googleusercontent.com' }}
+          VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
           BASE_PATH: "/${{ github.event.repository.name }}/"
-        run: npm run build
+        run: |
+          if [ -z "${VITE_GOOGLE_CLIENT_ID:-}" ]; then
+            echo "::error::VITE_GOOGLE_CLIENT_ID secret is not set. Add it under Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+          npm run build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
@@ -63,3 +68,16 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+# Trigger configuration. GitHub Actions requires the top-level key
+# to be `on:` (or the quoted form `"on":`); we use the quoted form so
+# YAML 1.1 parsers (and editor preview / diff renderers such as Cline's
+# edit preview, which re-render the file before parsing) don't interpret
+# the bare `on` as a boolean `true` and flag line 2 with "Expected a
+# scalar value, a sequence, or a mapping". The trigger is placed at
+# the bottom of the document to keep it away from the "first key after
+# the top-level scalar" slot that triggers the false positive.
+"on":
+  push:
+    branches: [main]
+  workflow_dispatch:
