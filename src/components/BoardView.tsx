@@ -9,7 +9,7 @@ import type { Card } from "../models/types";
 export function BoardView({ onBackToList }: { onBackToList: () => void }) {
   const board = useBoard();
   const viewport = useViewport();
-  const [editingCard, setEditingCard] = useState<Card | null>(null);
+  const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const [mobileColumnIndex, setMobileColumnIndex] = useState(0);
   const [editingName, setEditingName] = useState(false);
   const [draftName, setDraftName] = useState("");
@@ -28,7 +28,7 @@ export function BoardView({ onBackToList }: { onBackToList: () => void }) {
   }
   const b = board.activeBoard;
 
-  const openCard = (card: Card) => setEditingCard(card);
+  const openCard = (card: Card) => setEditingCardId(card.id);
 
   const startRename = () => {
     setDraftName(b.name);
@@ -158,11 +158,12 @@ export function BoardView({ onBackToList }: { onBackToList: () => void }) {
         </KanbanDndProvider>
       </div>
 
-      {editingCard && (
+      {editingCardId && (
         <CardEditor
-          card={editingCard}
+          cardId={editingCardId}
           board={b}
-          onClose={() => setEditingCard(null)}
+          onClose={() => setEditingCardId(null)}
+          onOpenCard={(childId) => setEditingCardId(childId)}
         />
       )}
     </div>

@@ -34,6 +34,13 @@ export interface AuthContextValue extends AuthState {
    * false otherwise.
    */
   ensureToken: () => Promise<boolean>;
+  /**
+   * Force a fresh interactive OAuth consent flow. Used when the
+   * current token is missing required scopes (e.g. drive.appdata).
+   * This always opens a popup (user gesture) so the browser never
+   * blocks it.
+   */
+  reauthenticate: () => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -112,9 +119,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  /**
+   * Force a fresh consent grant. The popup is opened in response to
+   * a user-initiated call (e.g. clicking "Reconnect to Drive" or
+   * retrying after a 403), so the browser doesn't block it.
+   *
+   * Uses `prompt: "consent"` to force the consent screen even if
+   * Google has a previously granted scope set. This is what gives us
+   * a token with the full `drive.appdata` scope.
+   */
+  const reauthenticate = useCallback(async (): Promise<boolean> => {
+    if (inFlight.current) return false;
+    inFlight.current = true;
+    try {
+      await requestAccessToken("consent");
+      return getCurrentToken() !== null;
+    } catch {
+      return false;
+    } finally {
+      inFlight.current = false;
+    }
+  }, []);
+
   const value = useMemo<AuthContextValue>(
-    () => ({ ...state, login, logout, ensureToken }),
-    [state, login, logout, ensureToken],
+    () => ({ ...state, login, logout, ensureToken, reauthenticate }),
+    [state, login, logout, ensureToken, reauthenticate],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

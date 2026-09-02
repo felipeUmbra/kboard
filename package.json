@@ -17,8 +17,10 @@
     "@tiptap/pm": "^2.6.6",
     "@tiptap/react": "^2.6.6",
     "@tiptap/starter-kit": "^2.6.6",
+    "date-fns": "^3.6.0",
     "dompurify": "^3.1.6",
     "react": "^18.3.1",
+    "react-day-picker": "^9.14.0",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {

@@ -39,6 +39,10 @@ import {
   removePresetOptionForType,
   toggleCardLabel,
   updateCard,
+  setCardStartDate,
+  setCardDueDate,
+  addComment,
+  removeComment,
   updateCustomField as updateCustomFieldAction,
   updateLabel,
   updatePresetOption as updatePresetOptionAction,
@@ -55,6 +59,13 @@ export interface ActionDeps {
   setBoard: React.Dispatch<React.SetStateAction<Board | null>>;
   setBoards: React.Dispatch<React.SetStateAction<Board[]>>;
   setLastError: React.Dispatch<React.SetStateAction<string | null>>;
+  /**
+   * Returns a function that runs `op` with a valid Drive token,
+   * retrying once with a fresh consent grant on 401/403.
+   */
+  withToken: <T>(op: () => Promise<T>) => Promise<T | null>;
+  /** Force a fresh interactive consent grant. */
+  reauthenticate: () => Promise<boolean>;
 }
 
 export type BoardActions = {
@@ -75,6 +86,13 @@ export type BoardActions = {
   updateLabel: (labelId: string, patch: Partial<Label>) => void;
   removeLabel: (labelId: string) => void;
   toggleCardLabel: (cardId: string, labelId: string) => void;
+  setCardStartDate: (cardId: string, iso: string | null) => void;
+  setCardDueDate: (cardId: string, iso: string | null) => void;
+  addComment: (
+    cardId: string,
+    comment: { author: string; authorPicture?: string; body: string },
+  ) => void;
+  removeComment: (cardId: string, commentId: string) => void;
   addCustomField: (field: Omit<CustomField, "id">) => string | null;
   updateCustomField: (fieldId: string, patch: Partial<CustomField>) => void;
   removeCustomField: (fieldId: string) => void;
@@ -128,12 +146,20 @@ export type BoardActions = {
   setDoneColumn: (columnId: string, isDone: boolean) => void;
 };
 
-export function buildActions({
-  mutate,
-  setBoard,
-  setBoards,
-  setLastError,
-}: ActionDeps): BoardActions {
+export function buildActions(deps: {
+  mutate: (updater: (b: Board) => Board) => void;
+  setBoard: React.Dispatch<React.SetStateAction<Board | null>>;
+  setBoards: React.Dispatch<React.SetStateAction<Board[]>>;
+  setLastError: React.Dispatch<React.SetStateAction<string | null>>;
+  withToken: <T>(op: () => Promise<T>) => Promise<T | null>;
+  reauthenticate: () => Promise<boolean>;
+}): BoardActions {
+  const {
+    mutate,
+    setBoard,
+    setBoards,
+    setLastError,
+  } = deps;
   return {
     createNewBoard: async (name: string) => {
       const trimmed = name.trim() || "Untitled board";
@@ -163,10 +189,23 @@ export function buildActions({
         createdAt: now,
         updatedAt: now,
       };
-      const saved = await repoCreate(draft);
-      setBoards((prev) => [saved, ...prev]);
-      setBoard(saved);
-      return saved;
+      // Use withToken so a 401/403 triggers a fresh consent grant
+      // and one automatic retry. The error from inside withToken is
+      // already caught — it returns null on failure and surfaces the
+      // error via the lastError state.
+      const saved = await deps.withToken(() => repoCreate(draft));
+      if (saved) {
+        setBoards((prev) => [saved, ...prev]);
+        setBoard(saved);
+        return saved;
+      }
+      // The error is already in lastError; if the silent retry
+      // succeeded but the user just needs to manually re-grant, set
+      // a clearer message.
+      setLastError(
+        "Couldn't create the board. Click \"Reconnect to Drive\" below to grant the required permissions.",
+      );
+      return null as unknown as Board;
     },
     deleteBoard: async (b: Board) => {
       if (!b.driveFileId) return;
@@ -213,6 +252,14 @@ export function buildActions({
     removeLabel: (labelId) => mutate((b) => removeLabel(b, labelId)),
     toggleCardLabel: (cardId, labelId) =>
       mutate((b) => toggleCardLabel(b, cardId, labelId)),
+    setCardStartDate: (cardId, iso) =>
+      mutate((b) => setCardStartDate(b, cardId, iso)),
+    setCardDueDate: (cardId, iso) =>
+      mutate((b) => setCardDueDate(b, cardId, iso)),
+    addComment: (cardId, comment) =>
+      mutate((b) => addComment(b, cardId, comment)),
+    removeComment: (cardId, commentId) =>
+      mutate((b) => removeComment(b, cardId, commentId)),
     addCustomField: (field) => {
       let id: string | null = null;
       mutate((b) => {

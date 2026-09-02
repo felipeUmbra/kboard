@@ -1,9 +1,9 @@
 import { useMemo } from "react";
-import type { Board, Card as CardModel } from "../models/types";
+import type { Board, Card as CardModel, CardType } from "../models/types";
 import { LabelPill } from "./fields/LabelPill";
 import { FieldChip } from "./fields/FieldChip";
 import { sanitizeRichHtml } from "./fields/sanitize";
-import { CARD_TYPE_META, getMeta } from "../models/cardTypeMeta";
+import { CARD_TYPE_META, getMeta, displayLabel } from "../models/cardTypeMeta";
 import { useProgress } from "../models/progress";
 import { TypeChip } from "./TypeChip";
 import { ProgressBar } from "./ProgressBar";
@@ -56,6 +56,20 @@ export function Card({
   const parentNames = card.parentIds
     .map((id) => board.cards[id]?.title)
     .filter((t): t is string => !!t);
+
+  // Children summary (only for epics & stories).
+  // Counts by type so we can show "3 stories, 12 tasks" in one line.
+  const childCounts = useMemo(() => {
+    if (!meta.canHaveChildren) return null;
+    let stories = 0;
+    let tasks = 0;
+    for (const c of Object.values(board.cards)) {
+      if (!c.parentIds.includes(card.id)) continue;
+      if (c.type === "story") stories++;
+      else if (c.type === "task") tasks++;
+    }
+    return { stories, tasks };
+  }, [board, card.id, meta.canHaveChildren]);
 
   // Progress (only for epics & stories)
   const progress = useProgress(card, board);
@@ -129,6 +143,33 @@ export function Card({
         </div>
       )}
 
+      {childCounts &&
+        (childCounts.stories > 0 || childCounts.tasks > 0) && (
+          <div
+            className="kanban-card__children"
+            style={{
+              fontSize: "var(--text-xs)",
+              color: "var(--color-text-muted)",
+              marginTop: 2,
+              marginBottom: 2,
+              lineHeight: 1.3,
+            }}
+          >
+            contains:{" "}
+            {childCounts.stories > 0 && (
+              <span>
+                {childCounts.stories} {childCounts.stories === 1 ? "story" : "stories"}
+              </span>
+            )}
+            {childCounts.stories > 0 && childCounts.tasks > 0 && " • "}
+            {childCounts.tasks > 0 && (
+              <span>
+                {childCounts.tasks} {childCounts.tasks === 1 ? "task" : "tasks"}
+              </span>
+            )}
+          </div>
+        )}
+
       {preview && (
         <div className="kanban-card__description" title={preview}>
           {preview}
@@ -161,11 +202,94 @@ export function Card({
         </div>
       )}
 
+      {(card.startDate || card.dueDate) && (
+        <DateBadge
+          startDate={card.startDate}
+          dueDate={card.dueDate}
+        />
+      )}
+
       {meta.showProgress && (
         <div style={{ marginTop: "var(--space-2)" }}>
           <ProgressBar progress={progress} size="xs" showLabel />
         </div>
       )}
+    </div>
+  );
+}
+
+function DateBadge({
+  startDate,
+  dueDate,
+}: {
+  startDate: string | null;
+  dueDate: string | null;
+}) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = dueDate ? new Date(dueDate + "T00:00:00") : null;
+  const start = startDate ? new Date(startDate + "T00:00:00") : null;
+  const msPerDay = 86400000;
+  const daysUntilDue = due ? Math.round((due.getTime() - today.getTime()) / msPerDay) : null;
+
+  let color: string;
+  let icon: string;
+  if (daysUntilDue === null) {
+    color = "var(--color-text-muted)";
+    icon = "📅";
+  } else if (daysUntilDue < 0) {
+    color = "var(--color-danger, #eb5a46)";
+    icon = "⚠";
+  } else if (daysUntilDue <= 7) {
+    color = "var(--color-warning, #f2d600)";
+    icon = "⏰";
+  } else {
+    color = "var(--color-success, #4bce97)";
+    icon = "📅";
+  }
+
+  const fmt = (d: Date) =>
+    d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+
+  let text: string;
+  if (start && due) {
+    text = `${fmt(start)} → ${fmt(due)}`;
+  } else if (due) {
+    text = fmt(due);
+  } else if (start) {
+    text = `Start ${fmt(start)}`;
+  } else {
+    return null;
+  }
+
+  return (
+    <div
+      className="kanban-card__date"
+      title={
+        daysUntilDue !== null
+          ? daysUntilDue < 0
+            ? `Overdue by ${-daysUntilDue} day(s)`
+            : daysUntilDue === 0
+              ? "Due today"
+              : `Due in ${daysUntilDue} day(s)`
+          : "Start date"
+      }
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4,
+        padding: "2px 6px",
+        fontSize: "var(--text-xs)",
+        fontWeight: 600,
+        color,
+        background: "var(--color-bg-elevated)",
+        border: `1px solid ${color}`,
+        borderRadius: "var(--radius-sm)",
+        alignSelf: "flex-start",
+      }}
+    >
+      <span aria-hidden="true">{icon}</span>
+      <span>{text}</span>
     </div>
   );
 }

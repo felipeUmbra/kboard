@@ -84,6 +84,11 @@ export function BoardProvider({ children }: { children: ReactNode }) {
    * grant fails (e.g. user has no Google session), `withToken` returns
    * null and the caller is expected to bail out gracefully.
    *
+   * If the Drive call returns 403 (insufficient scopes), we trigger
+   * a fresh interactive consent grant and retry once. This handles
+   * the case where the user previously authorized with fewer scopes
+   * than the app currently requests.
+   *
    * Note: we intentionally do NOT call this automatically on page load.
    * Modern browsers block OAuth popups that aren't tied to a user
    * gesture. Reloading the page is not a recognized gesture, so any
@@ -94,7 +99,23 @@ export function BoardProvider({ children }: { children: ReactNode }) {
     async <T,>(op: () => Promise<T>): Promise<T | null> => {
       const ok = await auth.ensureToken();
       if (!ok) return null;
-      return op();
+      try {
+        return await op();
+      } catch (err) {
+        // Auto-retry once with a fresh consent grant if Drive rejects
+        // the token due to insufficient scopes.
+        if (err instanceof Error && /\b(401|403)\b/.test(err.message)) {
+          const reauthed = await auth.reauthenticate();
+          if (reauthed) {
+            try {
+              return await op();
+            } catch {
+              return null;
+            }
+          }
+        }
+        return null;
+      }
     },
     [auth],
   );
@@ -208,8 +229,16 @@ export function BoardProvider({ children }: { children: ReactNode }) {
   );
 
   const actions = useMemo(
-    () => buildActions({ mutate, setBoard, setBoards, setLastError }),
-    [mutate],
+    () =>
+      buildActions({
+        mutate,
+        setBoard,
+        setBoards,
+        setLastError,
+        withToken,
+        reauthenticate: auth.reauthenticate,
+      }),
+    [mutate, withToken, auth],
   );
 
   const value = useMemo<BoardContextValue>(

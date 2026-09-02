@@ -49,6 +49,19 @@ export function App() {
     setView("list");
   };
 
+  // Choose the right recovery action based on the error message.
+  // 401/403 = token missing scopes → force a fresh consent grant.
+  // Otherwise = generic "sign in" recovery.
+  const errorAction = board.lastError
+    ? /\b(401|403)\b/.test(board.lastError) ||
+      /insufficient|permission|scope/i.test(board.lastError)
+      ? {
+          label: "Reconnect to Drive",
+          onClick: () => void auth.reauthenticate(),
+        }
+      : { label: "Sign in with Google", onClick: () => void auth.login() }
+    : undefined;
+
   return (
     <AppShell onNavigateList={goToList}>
       {board.lastError && (
@@ -56,7 +69,7 @@ export function App() {
           kind="error"
           message={board.lastError}
           onDismiss={() => void 0}
-          action={{ label: "Sign in with Google", onClick: () => void auth.login() }}
+          action={errorAction}
         />
       )}
       {view === "list" || !board.activeBoard ? (

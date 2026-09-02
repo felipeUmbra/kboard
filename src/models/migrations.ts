@@ -1,8 +1,10 @@
 import type {
+  ActivityEntry,
   Board,
   Card,
   CardType,
   CardTypeConfig,
+  CommentEntry,
   CustomFieldValues,
   Label,
 } from "./types";
@@ -145,6 +147,34 @@ function normalizeCard(id: string, raw: unknown): Card {
     descriptionHtml,
     labelIds,
     parentIds,
+    startDate:
+      typeof r.startDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(r.startDate)
+        ? r.startDate
+        : null,
+    dueDate:
+      typeof r.dueDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(r.dueDate)
+        ? r.dueDate
+        : null,
+    activity: Array.isArray(r.activity)
+      ? (r.activity as unknown[]).filter(
+          (e): e is ActivityEntry =>
+            !!e &&
+            typeof (e as { id?: unknown }).id === "string" &&
+            typeof (e as { kind?: unknown }).kind === "string" &&
+            typeof (e as { text?: unknown }).text === "string" &&
+            typeof (e as { at?: unknown }).at === "number",
+        )
+      : [],
+    comments: Array.isArray(r.comments)
+      ? (r.comments as unknown[]).filter(
+          (c): c is CommentEntry =>
+            !!c &&
+            typeof (c as { id?: unknown }).id === "string" &&
+            typeof (c as { author?: unknown }).author === "string" &&
+            typeof (c as { body?: unknown }).body === "string" &&
+            typeof (c as { at?: unknown }).at === "number",
+        )
+      : [],
     boardFieldValues,
     typeFieldValues,
     createdAt: typeof r.createdAt === "number" ? r.createdAt : now,

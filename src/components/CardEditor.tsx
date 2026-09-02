@@ -1,31 +1,75 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Board, Card as CardModel, CardType } from "../models/types";
 import { Modal } from "./Modal";
 import { RichTextEditor } from "./fields/RichTextEditor";
 import { LabelPill } from "./fields/LabelPill";
 import { sanitizeRichHtml } from "./fields/sanitize";
 import { useBoard } from "../state/BoardContext";
+import { useAuth } from "../auth/useAuth";
 import { FieldValueInput } from "./fields/FieldValueInput";
 import { ParentPicker } from "./ParentPicker";
+import { ChildrenList } from "./ChildrenList";
 import { CARD_TYPE_META, getMeta } from "../models/cardTypeMeta";
 import { TypeChip } from "./TypeChip";
+import { DateField } from "./DateField";
+import { ActivityLog } from "./ActivityLog";
+import { CommentThread } from "./CommentThread";
 
 export function CardEditor({
-  card,
+  cardId,
   board,
   onClose,
+  onOpenCard,
 }: {
-  card: CardModel;
+  cardId: string;
   board: Board;
   onClose: () => void;
+  onOpenCard: (childId: string) => void;
 }) {
   const ctx = useBoard();
-  const [title, setTitle] = useState(card.title);
-  const [descriptionHtml, setDescriptionHtml] = useState(card.descriptionHtml);
+  const auth = useAuth();
+
+  // Resolve the card from the active board. If it was deleted while
+  // the editor was open, show a graceful empty state.
+  const card = board.cards[cardId];
+
+  const [title, setTitle] = useState(card?.title ?? "");
+  const [descriptionHtml, setDescriptionHtml] = useState(card?.descriptionHtml ?? "");
+  const [activityOpen, setActivityOpen] = useState(true);
+
+  // Reset local state whenever the user navigates to a different card.
+  useEffect(() => {
+    const c = board.cards[cardId];
+    if (!c) return;
+    setTitle(c.title);
+    setDescriptionHtml(c.descriptionHtml);
+    setActivityOpen(true);
+  }, [cardId, board]);
+
+  // Graceful empty state if the card no longer exists.
+  if (!card) {
+    return (
+      <Modal title="Card" onClose={onClose} size="md">
+        <p
+          style={{
+            color: "var(--color-text-muted)",
+            fontSize: "var(--text-sm)",
+          }}
+        >
+          This card no longer exists.
+        </p>
+      </Modal>
+    );
+  }
+
+  // Keep the original variable name `card` available to the rest of the
+  // body (we just narrowed above). For type safety, re-bind to a
+  // non-nullable local.
+  const safeCard: CardModel = card;
 
   const saveAndClose = () => {
     const t = title.trim() || "Untitled";
-    ctx.updateCard(card.id, {
+    ctx.updateCard(safeCard.id, {
       title: t,
       descriptionHtml: sanitizeRichHtml(descriptionHtml),
     });
@@ -33,8 +77,8 @@ export function CardEditor({
   };
 
   const remove = () => {
-    if (!confirm(`Delete card "${card.title}"?`)) return;
-    ctx.deleteCard(card.id);
+    if (!confirm(`Delete card "${safeCard.title}"?`)) return;
+    ctx.deleteCard(safeCard.id);
     onClose();
   };
 
@@ -79,14 +123,14 @@ export function CardEditor({
             .filter((c) => c.enabled)
             .map((cfg) => {
               const meta = CARD_TYPE_META[cfg.type];
-              const active = card.type === cfg.type;
+              const active = safeCard.type === cfg.type;
               return (
                 <button
                   key={cfg.type}
                   type="button"
                   role="radio"
                   aria-checked={active}
-                  onClick={() => ctx.updateCard(card.id, { type: cfg.type })}
+                  onClick={() => ctx.updateCard(safeCard.id, { type: cfg.type })}
                   className="btn"
                   style={{
                     flex: 1,
@@ -105,10 +149,43 @@ export function CardEditor({
 
       <ParentPicker
         board={board}
-        card={card}
-        onAdd={(parentId) => ctx.addParent(card.id, parentId)}
-        onRemove={(parentId) => ctx.removeParent(card.id, parentId)}
+        card={safeCard}
+        onAdd={(parentId) => ctx.addParent(safeCard.id, parentId)}
+        onRemove={(parentId) => ctx.removeParent(safeCard.id, parentId)}
       />
+
+      {getMeta(safeCard.type).canHaveChildren && (
+        <div style={{ marginBottom: "var(--space-5)" }}>
+          <label className="label">Children</label>
+          <ChildrenList
+            board={board}
+            parentId={safeCard.id}
+            onOpenCard={onOpenCard}
+          />
+        </div>
+      )}
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: "var(--space-3)",
+          marginBottom: "var(--space-5)",
+        }}
+      >
+        <DateField
+          label="Start date"
+          value={safeCard.startDate}
+          onChange={(iso) => ctx.setCardStartDate(safeCard.id, iso)}
+          partnerValue={safeCard.dueDate}
+        />
+        <DateField
+          label="Due date"
+          value={safeCard.dueDate}
+          onChange={(iso) => ctx.setCardDueDate(safeCard.id, iso)}
+          partnerValue={safeCard.startDate}
+        />
+      </div>
 
       <div style={{ marginBottom: "var(--space-5)" }}>
         <label className="label">Description</label>
@@ -124,12 +201,12 @@ export function CardEditor({
           <label className="label">Labels</label>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-2)" }}>
             {board.labels.map((l) => {
-              const active = card.labelIds.includes(l.id);
+              const active = safeCard.labelIds.includes(l.id);
               return (
                 <button
                   key={l.id}
                   type="button"
-                  onClick={() => ctx.toggleCardLabel(card.id, l.id)}
+                  onClick={() => ctx.toggleCardLabel(safeCard.id, l.id)}
                   aria-pressed={active}
                   className="label-toggle"
                   data-active={active ? "true" : "false"}
@@ -144,9 +221,9 @@ export function CardEditor({
               );
             })}
           </div>
-          {card.labelIds.length > 0 && (
+          {safeCard.labelIds.length > 0 && (
             <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-1)", marginTop: "var(--space-2)" }}>
-              {card.labelIds
+              {safeCard.labelIds
                 .map((id) => board.labels.find((l) => l.id === id))
                 .filter((l): l is NonNullable<typeof l> => !!l)
                 .map((l) => (
@@ -171,8 +248,8 @@ export function CardEditor({
               <FieldValueInput
                 key={f.id}
                 field={f}
-                value={card.boardFieldValues[f.id]}
-                onChange={(v) => ctx.setCardFieldValue(card.id, f.id, v)}
+                value={safeCard.boardFieldValues[f.id]}
+                onChange={(v) => ctx.setCardFieldValue(safeCard.id, f.id, v)}
               />
             ))}
           </div>
@@ -180,13 +257,13 @@ export function CardEditor({
       )}
 
       {(() => {
-        const typeConfig = board.cardTypes.find((c) => c.type === card.type);
+        const typeConfig = board.cardTypes.find((c) => c.type === safeCard.type);
         if (!typeConfig || typeConfig.customFields.length === 0) return null;
-        const meta = getMeta(card.type);
+        const meta = getMeta(safeCard.type);
         return (
           <div style={{ marginTop: "var(--space-5)" }}>
             <label className="label">
-              <TypeChip type={card.type} customLabel={typeConfig.label} size="xs" />{" "}
+              <TypeChip type={safeCard.type} customLabel={typeConfig.label} size="xs" />{" "}
               fields
             </label>
             <div
@@ -200,9 +277,9 @@ export function CardEditor({
                 <FieldValueInput
                   key={f.id}
                   field={f}
-                  value={card.typeFieldValues[f.id]}
+                  value={safeCard.typeFieldValues[f.id]}
                   onChange={(v) =>
-                    ctx.setCardTypeFieldValue(card.id, card.type, f.id, v)
+                    ctx.setCardTypeFieldValue(safeCard.id, safeCard.type, f.id, v)
                   }
                 />
               ))}
@@ -210,6 +287,64 @@ export function CardEditor({
           </div>
         );
       })()}
+
+      <div style={{ marginTop: "var(--space-6)" }}>
+        <button
+          type="button"
+          onClick={() => setActivityOpen((o) => !o)}
+          className="btn btn--ghost"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            fontWeight: 600,
+            color: "var(--color-text)",
+            padding: 0,
+          }}
+          aria-expanded={activityOpen}
+        >
+          <span>{activityOpen ? "▾" : "▸"}</span>
+          <span>Activity</span>
+          <span
+            style={{
+              color: "var(--color-text-muted)",
+              fontWeight: 400,
+              fontSize: "var(--text-xs)",
+            }}
+          >
+            ({safeCard.activity.length})
+          </span>
+        </button>
+        {activityOpen && (
+          <div style={{ marginTop: 8 }}>
+            <ActivityLog activity={safeCard.activity} />
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginTop: "var(--space-6)" }}>
+        <label className="label">
+          Comments
+          <span
+            style={{
+              marginLeft: 8,
+              color: "var(--color-text-muted)",
+              fontWeight: 400,
+              fontSize: "var(--text-xs)",
+            }}
+          >
+            ({safeCard.comments.length})
+          </span>
+        </label>
+        {auth.profile ? (
+          <CommentThread
+            comments={safeCard.comments}
+            currentUser={auth.profile}
+            onAdd={(c) => ctx.addComment(safeCard.id, c)}
+            onDelete={(commentId) => ctx.removeComment(safeCard.id, commentId)}
+          />
+        ) : null}
+      </div>
     </Modal>
   );
 }

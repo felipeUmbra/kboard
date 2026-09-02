@@ -3,13 +3,23 @@
 import { cryptoRandomId } from "../models/migrations";
 import { CARD_TYPE_META, getMeta } from "../models/cardTypeMeta";
 import type {
+  ActivityEntry,
+  ActivityKind,
   Board,
   Card,
   CardType,
   Column,
+  CommentEntry,
   CustomFieldValues,
   Label,
 } from "../models/types";
+
+// ─── Helpers ───────────────────────────────────────────────────────
+
+/** Build a new activity entry with a fresh id and current timestamp. */
+function makeActivity(kind: ActivityKind, text: string): ActivityEntry {
+  return { id: cryptoRandomId(), kind, text, at: Date.now() };
+}
 
 export interface AddCardResult { board: Board; cardId: string | null }
 
@@ -30,6 +40,10 @@ export function addCard(
     descriptionHtml: "",
     labelIds: [],
     parentIds: [],
+    startDate: null,
+    dueDate: null,
+    activity: [makeActivity("created", "Card created")],
+    comments: [],
     boardFieldValues: {},
     typeFieldValues: {},
     createdAt: now,
@@ -47,17 +61,66 @@ export function addCard(
   };
 }
 
-export function updateCard(b: Board, cardId: string, patch: Partial<Card>): Board {
+/**
+ * Apply a patch to a card and record the right activity entries.
+ * Granular diffing: only emits entries for fields that actually
+ * changed. No-op if the card doesn't exist.
+ */
+export function patchCard(b: Board, cardId: string, patch: Partial<Card>): Board {
   const existing = b.cards[cardId];
   if (!existing) return b;
+  const merged: Card = { ...existing, ...patch, id: existing.id };
+  const entries: ActivityEntry[] = [];
+
+  if (patch.title !== undefined && patch.title !== existing.title) {
+    entries.push(makeActivity("title_changed", `Title changed to "${merged.title}"`));
+  }
+  if (
+    patch.descriptionHtml !== undefined &&
+    patch.descriptionHtml !== existing.descriptionHtml
+  ) {
+    entries.push(makeActivity("description_changed", "Description edited"));
+  }
+  if (patch.type !== undefined && patch.type !== existing.type) {
+    entries.push(
+      makeActivity(
+        "type_changed",
+        `Type changed to ${CARD_TYPE_META[merged.type].defaultLabel}`,
+      ),
+    );
+  }
+  if (patch.startDate !== undefined && patch.startDate !== existing.startDate) {
+    entries.push(
+      makeActivity(
+        "start_date_changed",
+        merged.startDate ? `Start date set to ${merged.startDate}` : "Start date cleared",
+      ),
+    );
+  }
+  if (patch.dueDate !== undefined && patch.dueDate !== existing.dueDate) {
+    entries.push(
+      makeActivity(
+        "due_date_changed",
+        merged.dueDate ? `Due date set to ${merged.dueDate}` : "Due date cleared",
+      ),
+    );
+  }
+
   return {
     ...b,
     cards: {
       ...b.cards,
-      [cardId]: { ...existing, ...patch, id: existing.id, updatedAt: Date.now() },
+      [cardId]: {
+        ...merged,
+        activity: [...existing.activity, ...entries],
+        updatedAt: Date.now(),
+      },
     },
   };
 }
+
+/** Backwards-compat alias — old code still calls `updateCard`. */
+export const updateCard = patchCard;
 
 export function deleteCard(b: Board, cardId: string): Board {
   const cards = { ...b.cards };
@@ -79,6 +142,10 @@ export function deleteCard(b: Board, cardId: string): Board {
 }
 
 export function moveCard(b: Board, cardId: string, toColumnId: string, toIndex: number): Board {
+  const existing = b.cards[cardId];
+  if (!existing) return b;
+  const fromCol = b.columns.find((c) => c.cardIds.includes(cardId));
+  const toCol = b.columns.find((c) => c.id === toColumnId);
   const columns = b.columns.map((c) => ({
     ...c,
     cardIds: c.cardIds.filter((id) => id !== cardId),
@@ -87,6 +154,24 @@ export function moveCard(b: Board, cardId: string, toColumnId: string, toIndex: 
   if (!target) return b;
   const idx = Math.max(0, Math.min(toIndex, target.cardIds.length));
   target.cardIds.splice(idx, 0, cardId);
+
+  if (fromCol && toCol && fromCol.id !== toCol.id) {
+    return {
+      ...b,
+      columns,
+      cards: {
+        ...b.cards,
+        [cardId]: {
+          ...existing,
+          activity: [
+            ...existing.activity,
+            makeActivity("moved", `Moved to "${toCol.name}"`),
+          ],
+          updatedAt: Date.now(),
+        },
+      },
+    };
+  }
   return { ...b, columns };
 }
 
@@ -136,17 +221,45 @@ export function validateAddParent(
 
 export function addParent(b: Board, cardId: string, parentId: string): Board {
   if (validateAddParent(b, cardId, parentId) !== null) return b;
-  return updateCard(b, cardId, {
-    parentIds: [...b.cards[cardId].parentIds, parentId],
-  });
+  const existing = b.cards[cardId];
+  const parent = b.cards[parentId];
+  if (!existing || !parent) return b;
+  return {
+    ...b,
+    cards: {
+      ...b.cards,
+      [cardId]: {
+        ...existing,
+        parentIds: [...existing.parentIds, parentId],
+        activity: [
+          ...existing.activity,
+          makeActivity("parents_changed", `Linked to ${parent.type} "${parent.title}"`),
+        ],
+        updatedAt: Date.now(),
+      },
+    },
+  };
 }
 
 export function removeParent(b: Board, cardId: string, parentId: string): Board {
-  const card = b.cards[cardId];
-  if (!card) return b;
-  return updateCard(b, cardId, {
-    parentIds: card.parentIds.filter((p) => p !== parentId),
-  });
+  const existing = b.cards[cardId];
+  const parent = b.cards[parentId];
+  if (!existing || !parent) return b;
+  return {
+    ...b,
+    cards: {
+      ...b.cards,
+      [cardId]: {
+        ...existing,
+        parentIds: existing.parentIds.filter((p) => p !== parentId),
+        activity: [
+          ...existing.activity,
+          makeActivity("parents_changed", `Unlinked from ${parent.type} "${parent.title}"`),
+        ],
+        updatedAt: Date.now(),
+      },
+    },
+  };
 }
 
 /** All valid parent candidates for a card of the given type. */
@@ -158,6 +271,78 @@ export function getValidParents(b: Board, type: CardType): Card[] {
     if (c.type === meta.parentType) out.push(c);
   }
   return out;
+}
+
+// ─── Dates ─────────────────────────────────────────────────────────
+
+/** Set a card's start date. Pass `null` to clear. Records activity. */
+export function setCardStartDate(
+  b: Board,
+  cardId: string,
+  iso: string | null,
+): Board {
+  return patchCard(b, cardId, { startDate: iso });
+}
+
+/** Set a card's due date. Pass `null` to clear. Records activity. */
+export function setCardDueDate(
+  b: Board,
+  cardId: string,
+  iso: string | null,
+): Board {
+  return patchCard(b, cardId, { dueDate: iso });
+}
+
+// ─── Comments ──────────────────────────────────────────────────────
+
+/** Add a user-typed comment to a card. Also records a `comment_added` activity. */
+export function addComment(
+  b: Board,
+  cardId: string,
+  comment: { author: string; authorPicture?: string; body: string },
+): Board {
+  const existing = b.cards[cardId];
+  if (!existing) return b;
+  const trimmed = comment.body.trim();
+  if (!trimmed) return b;
+  const c: CommentEntry = {
+    id: cryptoRandomId(),
+    author: comment.author,
+    authorPicture: comment.authorPicture,
+    body: trimmed,
+    at: Date.now(),
+  };
+  return {
+    ...b,
+    cards: {
+      ...b.cards,
+      [cardId]: {
+        ...existing,
+        comments: [...existing.comments, c],
+        activity: [
+          ...existing.activity,
+          makeActivity("comment_added", `Comment by ${comment.author}`),
+        ],
+        updatedAt: Date.now(),
+      },
+    },
+  };
+}
+
+export function removeComment(b: Board, cardId: string, commentId: string): Board {
+  const existing = b.cards[cardId];
+  if (!existing) return b;
+  return {
+    ...b,
+    cards: {
+      ...b.cards,
+      [cardId]: {
+        ...existing,
+        comments: existing.comments.filter((c) => c.id !== commentId),
+        updatedAt: Date.now(),
+      },
+    },
+  };
 }
 
 // ─── Labels ────────────────────────────────────────────────────────
@@ -195,18 +380,27 @@ export function removeLabel(b: Board, labelId: string): Board {
 }
 
 export function toggleCardLabel(b: Board, cardId: string, labelId: string): Board {
-  const card = b.cards[cardId];
-  if (!card) return b;
-  const has = card.labelIds.includes(labelId);
+  const existing = b.cards[cardId];
+  if (!existing) return b;
+  const has = existing.labelIds.includes(labelId);
+  const label = b.labels.find((l) => l.id === labelId);
+  const labelName = label?.name ?? "label";
   return {
     ...b,
     cards: {
       ...b.cards,
       [cardId]: {
-        ...card,
+        ...existing,
         labelIds: has
-          ? card.labelIds.filter((id) => id !== labelId)
-          : [...card.labelIds, labelId],
+          ? existing.labelIds.filter((id) => id !== labelId)
+          : [...existing.labelIds, labelId],
+        activity: [
+          ...existing.activity,
+          makeActivity(
+            "labels_changed",
+            has ? `Removed "${labelName}" label` : `Added "${labelName}" label`,
+          ),
+        ],
         updatedAt: Date.now(),
       },
     },

@@ -11,6 +11,7 @@ export {
 export {
   addCard,
   updateCard,
+  patchCard,
   deleteCard,
   moveCard,
   addLabel,
@@ -21,6 +22,10 @@ export {
   removeParent,
   validateAddParent,
   getValidParents,
+  setCardStartDate,
+  setCardDueDate,
+  addComment,
+  removeComment,
 } from "./cardActions";
 
 export {
