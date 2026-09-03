@@ -37,14 +37,15 @@ export function CardEditor({
   const [descriptionHtml, setDescriptionHtml] = useState(card?.descriptionHtml ?? "");
   const [activityOpen, setActivityOpen] = useState(true);
 
-  // Reset local state whenever the user navigates to a different card.
+  // Reset local state when the user navigates to a different card. Board
+  // syncs can replace the board object while this editor has unsaved input.
   useEffect(() => {
     const c = board.cards[cardId];
     if (!c) return;
     setTitle(c.title);
     setDescriptionHtml(c.descriptionHtml);
     setActivityOpen(true);
-  }, [cardId, board]);
+  }, [cardId]);
 
   // Graceful empty state if the card no longer exists.
   if (!card) {

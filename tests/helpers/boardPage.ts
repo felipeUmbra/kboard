@@ -162,7 +162,9 @@ export class BoardPage {
   }
 
   async openCard(title: string) {
-    await this.page.locator(sel.card).filter({ hasText: title }).first().click();
+    const cardLocator = this.page.locator(sel.card).filter({ hasText: title }).first();
+    await cardLocator.waitFor({ state: "visible", timeout: 5_000 });
+    await cardLocator.click();
     await this.page.waitForSelector(sel.cardTitleInput, { timeout: 5_000 });
   }
 
@@ -177,28 +179,24 @@ export class BoardPage {
   }
 
   async setCardTitle(newTitle: string) {
-    // React-controlled inputs are notoriously tricky to drive from Playwright.
-    // We use the native input value setter + an InputEvent so React's
-    // synthetic onChange fires with the new value. This works regardless of
-    // whether the input previously held text.
+    // Drive the React-controlled input with Playwright's `fill`, which is
+    // designed to work with React's synthetic onChange. It focuses the
+    // input, clears it, then types each character — firing native
+    // `input` events that React's delegated event listener picks up.
+    //
+    // The previous implementation used a native value setter + a manually
+    // dispatched `input` event. That sets the DOM value correctly, but
+    // the React state update is scheduled asynchronously; if the caller
+    // immediately invokes `closeCardEditor()`, the Save click can run
+    // before React processes the state update, so the closure captured
+    // by `saveAndClose` still sees the old title and re-persists it.
+    // `fill` avoids that race because it types character-by-character and
+    // Playwright's auto-waiting gives the React microtask queue a chance
+    // to flush before the call returns.
     const input = this.page.locator(sel.cardTitleInput);
     await input.waitFor({ state: "visible", timeout: 5_000 });
-    await input.click();
-    await this.page.evaluate(
-      ({ selector, value }) => {
-        const el = document.querySelector(selector) as HTMLInputElement | null;
-        if (!el) throw new Error(`setCardTitle: input not found: ${selector}`);
-        const setter = Object.getOwnPropertyDescriptor(
-          window.HTMLInputElement.prototype,
-          "value",
-        )?.set;
-        setter?.call(el, value);
-        // React 16+ listens for the native "input" event.
-        el.dispatchEvent(new Event("input", { bubbles: true }));
-      },
-      { selector: sel.cardTitleInput, value: newTitle },
-    );
-    // Verify the React state caught up — wait for the DOM value to match.
+    await input.fill(newTitle);
+    // Sanity check: the DOM value should now reflect the new title.
     await expect(input).toHaveValue(newTitle, { timeout: 3_000 });
   }
 

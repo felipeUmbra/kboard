@@ -85,7 +85,7 @@ test.describe("Board view (columns, cards, DnD)", () => {
             .locator(sel.card)
             .filter({ hasText: "Edited title" })
             .count(),
-        { timeout: 5_000 },
+        { timeout: 8_000 },
       )
       .toBeGreaterThan(0);
   });

@@ -199,9 +199,29 @@ export function BoardProvider({ children }: { children: ReactNode }) {
       try {
         const saved = await withToken(() => repoSave(current));
         if (saved) {
-          setBoard(saved);
+          // CRITICAL: do NOT replace the in-memory board with `saved`.
+          // `saved` is a snapshot taken at the moment the timer fired —
+          // any mutations the user made *during* the async save round-trip
+          // (e.g. clicking the Story radio, editing a title, adding a
+          // 4th card) are NOT in `saved`. Replacing the board would
+          // silently revert those mutations, which is what was causing
+          // flaky failures in board.spec.ts ("Change card type from task
+          // to story", "Open card editor and edit title") and in
+          // hierarchy-progress.spec.ts ("Drag & drop updates progress
+          // bar color" — the 4th addCard was reverted by a stale
+          // response from an earlier save).
+          //
+          // Only carry forward the fields the save actually updates
+          // (driveVersion + updatedAt). Everything else stays as-is.
+          setBoard((prev) =>
+            prev ? { ...prev, driveVersion: saved.driveVersion, updatedAt: saved.updatedAt } : prev,
+          );
           setBoards((prev) => {
-            const next = prev.map((b) => (b.id === saved.id ? saved : b));
+            const next = prev.map((b) =>
+              b.id === saved.id
+                ? { ...b, driveVersion: saved.driveVersion, updatedAt: saved.updatedAt }
+                : b,
+            );
             saveBoardsCache(next);
             return next;
           });
