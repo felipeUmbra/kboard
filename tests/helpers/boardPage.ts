@@ -46,6 +46,10 @@ export class BoardPage {
     const btn = this.page.locator(sel.newBoardButton).or(this.page.locator(sel.emptyStateCreate));
     await btn.first().click();
     await this.page.waitForSelector(sel.createBoardModal);
+    // The bottom-sheet modal animates in (`sheet-up` keyframe, 200ms) on
+    // mobile. Wait for it to settle before interacting so the input and
+    // footer buttons are at their final positions.
+    await this.page.waitForTimeout(300);
     await this.page.fill(sel.createBoardNameInput, name);
     await this.page.getByRole("button", { name: /^Create$/ }).click();
     await this.page.waitForSelector(sel.boardTitle, { timeout: 5_000 });
