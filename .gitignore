@@ -1,12 +1,13 @@
-node_modules
-dist
+node_modules/
+dist/
 dist-ssr
 *.local
 .env
 .env.local
 .env.*.local
-test-results
-.tmp-yaml-deps
+test-results/
+.tmp-yaml-deps/
+playwright-report/
 trace*
 
 # Editor

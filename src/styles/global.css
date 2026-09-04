@@ -130,3 +130,47 @@ a:hover {
     scroll-behavior: auto !important;
   }
 }
+
+/* PWA update-available toast.
+   Sits at the bottom-center on desktop, full-width on mobile, above
+   the modal layer (z-toast) so it never gets covered by an open card
+   editor. Animation respects prefers-reduced-motion. */
+.update-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+  transform: translateX(-50%);
+  z-index: var(--z-toast);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  min-width: 280px;
+  max-width: calc(100vw - 32px);
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  font-size: var(--text-sm);
+  animation: update-toast-in var(--motion-base) cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+@keyframes update-toast-in {
+  from { opacity: 0; transform: translate(-50%, 12px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+@media (max-width: 480px) {
+  .update-toast {
+    left: 8px;
+    right: 8px;
+    transform: none;
+    width: auto;
+    min-width: 0;
+  }
+  @keyframes update-toast-in {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+}

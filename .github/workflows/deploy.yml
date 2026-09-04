@@ -129,6 +129,19 @@ jobs:
           fi
           npm run build
 
+      - name: Verify PWA artifacts
+        # Cheap insurance: the manifest and service worker must be in
+        # the build output, or the install prompt and offline shell
+        # are silently broken in production. This fails the build
+        # loudly instead of shipping a half-broken PWA.
+        run: |
+          test -f dist/manifest.webmanifest || { echo "::error::dist/manifest.webmanifest is missing"; exit 1; }
+          test -f dist/sw.js                || { echo "::error::dist/sw.js is missing"; exit 1; }
+          test -f dist/share-capture.html   || { echo "::error::dist/share-capture.html is missing (share_target needs it)"; exit 1; }
+          test -f dist/icons/icon-192.png   || { echo "::error::dist/icons/icon-192.png is missing"; exit 1; }
+          test -f dist/icons/icon-512.png   || { echo "::error::dist/icons/icon-512.png is missing"; exit 1; }
+          test -f dist/icons/apple-touch-icon.png || { echo "::error::dist/icons/apple-touch-icon.png is missing"; exit 1; }
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
