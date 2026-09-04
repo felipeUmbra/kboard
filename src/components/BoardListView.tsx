@@ -2,7 +2,12 @@ import { useState } from "react";
 import { useBoard } from "../state/BoardContext";
 import { Modal } from "./Modal";
 
-export function BoardListView() {
+export function BoardListView({
+  onNavigatePlanner,
+}: {
+  /** Optional callback to switch to the Planner view. Wired by App. */
+  onNavigatePlanner?: () => void;
+}) {
   const board = useBoard();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
@@ -35,6 +40,16 @@ export function BoardListView() {
           >
             {board.loadingList ? "Syncing…" : "↻ Sync"}
           </button>
+          {onNavigatePlanner && (
+            <button
+              type="button"
+              className="btn"
+              onClick={onNavigatePlanner}
+              data-testid="open-planner"
+            >
+              📅 Planner
+            </button>
+          )}
           <button
             type="button"
             className="btn btn--primary btn--lg"

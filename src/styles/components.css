@@ -569,3 +569,213 @@
   text-decoration: underline;
 }
 
+/* ===== Planner view ===== */
+
+.planner {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding: var(--space-4);
+  gap: var(--space-3);
+  background: var(--color-bg);
+}
+
+.planner__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.planner__nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.planner__month {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  text-transform: capitalize;
+  min-width: 6ch;
+  text-align: center;
+}
+
+.planner__week {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--space-2);
+  flex: 1;
+  min-height: 0;
+  overflow-x: auto;
+}
+
+.planner-day {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  min-height: 200px;
+  transition: background var(--motion-fast), border-color var(--motion-fast);
+}
+
+.planner-day--today {
+  background: var(--color-accent-soft);
+  border-color: var(--color-accent);
+}
+
+.planner-day--weekend {
+  opacity: 0.7;
+}
+
+.planner-day--over {
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
+}
+
+.planner-day__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.planner-day__count {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  font-weight: 500;
+}
+
+.planner-day__empty {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  font-style: italic;
+  margin: 0;
+  padding: var(--space-2);
+}
+
+.planner-day__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.planner-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: grab;
+  transition: box-shadow var(--motion-fast), transform var(--motion-fast);
+  font-size: var(--text-sm);
+}
+
+.planner-card:hover {
+  box-shadow: var(--shadow-sm);
+  border-color: var(--color-accent);
+}
+
+.planner-card:active,
+.planner-card:focus {
+  cursor: grabbing;
+}
+
+.planner-card__title {
+  font-weight: 500;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.planner-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  align-items: center;
+}
+
+.planner-card__due {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.planner-card__due--overdue {
+  color: var(--color-danger);
+  font-weight: 600;
+}
+
+.planner-card__starts {
+  color: var(--color-text-subtle);
+}
+
+.planner-card__labels {
+  display: inline-flex;
+  gap: 2px;
+  flex-wrap: wrap;
+}
+
+.planner-card__board {
+  color: var(--color-text-subtle);
+  font-style: italic;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.planner__dateless {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+}
+
+.planner__dateless summary {
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text);
+  user-select: none;
+}
+
+.planner__dateless summary span {
+  color: var(--color-text-muted);
+  font-weight: 500;
+}
+
+.planner__dateless[open] {
+  padding-bottom: var(--space-2);
+}
+
+@media (max-width: 768px) {
+  .planner__week {
+    grid-template-columns: repeat(2, minmax(140px, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .planner__week {
+    grid-template-columns: 1fr;
+  }
+  .planner-day {
+    min-height: auto;
+  }
+}
+

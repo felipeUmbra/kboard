@@ -6,9 +6,11 @@ import { useViewport } from "../hooks/useViewport";
 export function AppShell({
   children,
   onNavigateList,
+  onNavigatePlanner,
 }: {
   children: ReactNode;
   onNavigateList: () => void;
+  onNavigatePlanner?: () => void;
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [railCollapsed, setRailCollapsed] = useState(false);
@@ -27,6 +29,7 @@ export function AppShell({
           else setRailCollapsed((v) => !v);
         }}
         onNavigateList={onNavigateList}
+        onNavigatePlanner={onNavigatePlanner}
         menuLabel={viewport.isMobile ? "Open menu" : railCollapsed ? "Expand sidebar" : "Collapse sidebar"}
       />
       <div className="app-main">

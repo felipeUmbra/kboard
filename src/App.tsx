@@ -8,6 +8,7 @@ import { BoardView } from "./components/BoardView";
 import { Banner } from "./components/Banner";
 import { UpdateToast } from "./components/UpdateToast";
 import { ShareToBoardModal } from "./components/ShareToBoardModal";
+import { PlannerView } from "./views/PlannerView";
 import {
   getShareIdFromUrl,
   take as takeShare,
@@ -23,7 +24,7 @@ export function App() {
   //   - When activeBoard is set, we're in "board" view.
   //   - When the user clicks "back", we clear activeBoard AND view.
   //   - When openBoard is called, it sets activeBoard and view flips.
-  const [view, setView] = useState<"list" | "board">(
+  const [view, setView] = useState<"list" | "board" | "planner">(
     board.activeBoard ? "board" : "list",
   );
 
@@ -32,14 +33,18 @@ export function App() {
   // the user dismisses the share modal we clear it.
   const [sharePayload, setSharePayload] = useState<SharedPayload | null>(null);
 
-  // If activeBoard is cleared (back, delete, sign-out), make sure the
-  // view follows. This effect is the single source of truth.
+  // If activeBoard is set, the user is in "board" view. If the user
+  // explicitly navigated to the planner (which closes the active
+  // board) we keep them there. Otherwise we fall back to the list.
   useEffect(() => {
     if (board.activeBoard) {
       setView("board");
-    } else {
-      setView("list");
+      return;
     }
+    // activeBoard was cleared. Don't yank the user away from the
+    // planner — that's an explicit user choice that closeBoard()
+    // was just used to support.
+    setView((v) => (v === "planner" ? v : "list"));
   }, [board.activeBoard]);
 
   // Reset to list view on sign-in / sign-out.
@@ -92,6 +97,13 @@ export function App() {
   const goToList = () => {
     board.closeBoard();
     setView("list");
+  };
+
+  // Switching to the planner: clear any active board so the sidebar
+  // doesn't show stale labels/fields, and render the planner.
+  const goToPlanner = () => {
+    board.closeBoard();
+    setView("planner");
   };
 
   // Choose the right recovery action based on the error message.
@@ -148,7 +160,7 @@ export function App() {
   };
 
   return (
-    <AppShell onNavigateList={goToList}>
+    <AppShell onNavigateList={goToList} onNavigatePlanner={goToPlanner}>
       {board.lastError && (
         <Banner
           kind="error"
@@ -157,8 +169,10 @@ export function App() {
           action={errorAction}
         />
       )}
-      {view === "list" || !board.activeBoard ? (
-        <BoardListView />
+      {view === "planner" ? (
+        <PlannerView />
+      ) : view === "list" || !board.activeBoard ? (
+        <BoardListView onNavigatePlanner={goToPlanner} />
       ) : (
         <BoardView onBackToList={goToList} />
       )}

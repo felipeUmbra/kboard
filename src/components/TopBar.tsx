@@ -4,10 +4,12 @@ import { useBoard } from "../state/BoardContext";
 export function TopBar({
   onOpenMenu,
   onNavigateList,
+  onNavigatePlanner,
   menuLabel,
 }: {
   onOpenMenu: () => void;
   onNavigateList: () => void;
+  onNavigatePlanner?: () => void;
   menuLabel: string;
 }) {
   const { profile, logout } = useAuth();
@@ -40,6 +42,17 @@ export function TopBar({
         </span>
       )}
       <span className="topbar__spacer" />
+      {onNavigatePlanner && (
+        <button
+          type="button"
+          onClick={onNavigatePlanner}
+          className="btn btn--ghost"
+          style={{ color: "#fff" }}
+          data-testid="topbar-planner"
+        >
+          📅 Planner
+        </button>
+      )}
       {profile && (
         <div className="topbar__user">
           <span className="topbar__name">{profile.name}</span>

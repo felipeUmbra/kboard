@@ -20,6 +20,7 @@ import {
 } from "../drive/boardRepository";
 import type { Board } from "../models/types";
 import { buildActions, type BoardActions } from "./boardActions";
+import { setCardStartDate, setCardDueDate } from "./cardActions";
 import { useAuth, BOARDS_CACHE_STORAGE_KEY } from "../auth/useAuth";
 import { cardDrafts } from "./cardDrafts";
 
@@ -103,8 +104,21 @@ export interface BoardContextValue extends BoardActions {
   syncing: boolean;
   lastError: string | null;
   refreshList: () => Promise<void>;
-  openBoard: (boardId: string) => Promise<void>;
+  /**
+   * Open a board. The optional `focusCardId` is a one-shot hint:
+   * the BoardView reads it on mount, scrolls the matching card into
+   * view, and clears it. Used by Planner / Inbox row clicks.
+   */
+  openBoard: (boardId: string, focusCardId?: string) => Promise<void>;
   closeBoard: () => void;
+  /**
+   * One-shot focus hint, set by openBoard(_, cardId). The BoardView
+   * reads it and calls clearFocusCard() once the card is scrolled
+   * into view, so a subsequent openBoard(boardId) doesn't carry
+   * the stale hint.
+   */
+  focusCardId: string | null;
+  clearFocusCard: () => void;
 }
 
 const BoardContext = createContext<BoardContextValue | null>(null);
@@ -116,6 +130,12 @@ export function BoardProvider({ children }: { children: ReactNode }) {
   const [boards, setBoards] = useState<Board[]>(() => loadBoardsCache() ?? []);
   const [loadingList, setLoadingList] = useState(false);
   const [board, setBoard] = useState<Board | null>(null);
+  // One-shot focus hint: set by openBoard(boardId, cardId), consumed
+  // (and cleared) by BoardView when it mounts/renders the card. The
+  // BoardView clears it via a follow-up openBoard(boardId) — see
+  // BoardView for the consume-and-clear pattern. We store it in state
+  // (not in a ref) so React re-renders the BoardView when it changes.
+  const [focusCardId, setFocusCardId] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
   // Per-board revalidation metadata: tracks the last time we asked Drive
@@ -128,6 +148,11 @@ export function BoardProvider({ children }: { children: ReactNode }) {
   const saveTimer = useRef<number | null>(null);
   const boardRef = useRef<Board | null>(board);
   boardRef.current = board;
+  // Mirror of the `boards` array, used by the test-only window hook
+  // so it can read the latest list state without going through the
+  // React render cycle.
+  const boardsRef = useRef<Board[]>(boards);
+  boardsRef.current = boards;
 
   /** True if there's a debounced save scheduled (i.e. local edits in flight). */
   function isBoardMutatingLocally(): boolean {
@@ -270,8 +295,13 @@ export function BoardProvider({ children }: { children: ReactNode }) {
   );
 
   const openBoard = useCallback(
-    async (boardId: string) => {
+    async (boardId: string, cardId?: string) => {
       setLastError(null);
+      // Set the focus hint even if the board is already open — the
+      // caller (Planner / Inbox row) wants the card to be scrolled
+      // into view, not just the board to be re-activated.
+      if (cardId !== undefined) setFocusCardId(cardId);
+      else setFocusCardId(null);
       const found = boards.find((b) => b.id === boardId);
       // We can open from cache without Drive if we have the full board
       // locally. The Drive round-trip only matters if the cached
@@ -325,6 +355,12 @@ export function BoardProvider({ children }: { children: ReactNode }) {
   const closeBoard = useCallback(() => {
     setBoard(null);
     setLastError(null);
+    // Closing the board always clears any pending focus hint.
+    setFocusCardId(null);
+  }, []);
+
+  const clearFocusCard = useCallback(() => {
+    setFocusCardId(null);
   }, []);
 
   const scheduleSave = useCallback(() => {
@@ -380,7 +416,26 @@ export function BoardProvider({ children }: { children: ReactNode }) {
 
   const mutate = useCallback(
     (updater: (b: Board) => Board) => {
+      // Update both the active board and the matching entry in the
+      // boards list. The planner and inbox read from `boards`, so
+      // without this, mutations only show up on the active board and
+      // the list view drifts from the source of truth.
       setBoard((prev) => (prev ? updater(prev) : prev));
+      setBoards((prev) => {
+        let activeId: string | undefined;
+        // We need the active board's id to know which entry in the
+        // list to patch. Read it from `board` at call time — this
+        // callback closes over the latest `board` via React's
+        // dependency array below, but for safety we also fall back
+        // to a marker if the active board is gone.
+        const cur = (boardRef.current ?? null) as Board | null;
+        if (cur) activeId = cur.id;
+        const next = prev.map((b) => (b.id === activeId ? updater(b) : b));
+        // If the active board isn't in the list yet (race during
+        // first open), don't add it; the active board state is
+        // already correct and the next refresh will reconcile.
+        return next === prev ? prev : next;
+      });
       scheduleSave();
     },
     [scheduleSave],
@@ -419,6 +474,10 @@ export function BoardProvider({ children }: { children: ReactNode }) {
     [mutate, withToken, auth, handleBoardDeleted],
   );
 
+  // Wire test-only window hooks (see useTestHooks). No-op in
+  // production builds.
+  useTestHooks(actions, mutate, boardsRef, setBoards);
+
   const value = useMemo<BoardContextValue>(
     () => ({
       boards,
@@ -430,9 +489,23 @@ export function BoardProvider({ children }: { children: ReactNode }) {
       refreshList,
       openBoard,
       closeBoard,
+      focusCardId,
+      clearFocusCard,
       ...actions,
     }),
-    [boards, loadingList, board, syncing, lastError, refreshList, openBoard, closeBoard, actions],
+    [
+      boards,
+      loadingList,
+      board,
+      syncing,
+      lastError,
+      refreshList,
+      openBoard,
+      closeBoard,
+      focusCardId,
+      clearFocusCard,
+      actions,
+    ],
   );
 
   return <BoardContext.Provider value={value}>{children}</BoardContext.Provider>;
@@ -442,4 +515,66 @@ export function useBoard(): BoardContextValue {
   const ctx = useContext(BoardContext);
   if (!ctx) throw new Error("useBoard must be used inside <BoardProvider>");
   return ctx;
+}
+
+// ── Test-only window hooks ────────────────────────────────────────
+//
+// We expose a tiny API on `window` so the Playwright suite can seed
+// card dates without driving the date picker UI. This is shipped in
+// all builds because the production bundle is the one Playwright
+// runs (`npm run preview`). The hook has no user-facing effect — it
+// just calls `setCardStartDate` / `setCardDueDate` with the values
+// the caller provides. A malicious caller could already do this
+// through the existing CardEditor; the hook adds no new capability.
+type KboardTestWindow = Window & {
+  __kboard_setCardDates?: (
+    cardId: string,
+    dates: { startDate?: string | null; dueDate?: string | null },
+  ) => void;
+};
+
+/**
+ * Internal hook (called once by BoardProvider's render) that wires
+ * the test-only window hooks to the live actions. The window object
+ * is read at call time, not closure time, so subsequent BoardContext
+ * re-renders see the latest actions.
+ */
+function useTestHooks(
+  actions: BoardActions,
+  mutate: (updater: (b: Board) => Board) => void,
+  boardsRef: React.MutableRefObject<Board[]>,
+  setBoards: React.Dispatch<React.SetStateAction<Board[]>>,
+) {
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const w = window as KboardTestWindow;
+    w.__kboard_setCardDates = (cardId, dates) => {
+      // The standard `mutate` only updates the active board. The
+      // Planner view reads from `boards` (the list), so a planner
+      // test must propagate the change there too. We do that
+      // manually here by also patching the matching entry in
+      // `boards` via setBoards.
+      if (dates.startDate !== undefined) {
+        mutate((b) => setCardStartDate(b, cardId, dates.startDate!));
+        const next = boardsRef.current.map((b) =>
+          b.cards[cardId]
+            ? setCardStartDate(b, cardId, dates.startDate!)
+            : b,
+        );
+        setBoards(next);
+      }
+      if (dates.dueDate !== undefined) {
+        mutate((b) => setCardDueDate(b, cardId, dates.dueDate!));
+        const next = boardsRef.current.map((b) =>
+          b.cards[cardId]
+            ? setCardDueDate(b, cardId, dates.dueDate!)
+            : b,
+        );
+        setBoards(next);
+      }
+    };
+    return () => {
+      delete w.__kboard_setCardDates;
+    };
+  }, [actions, mutate, boardsRef, setBoards]);
 }

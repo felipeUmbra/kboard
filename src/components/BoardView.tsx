@@ -27,6 +27,31 @@ export function BoardView({ onBackToList }: { onBackToList: () => void }) {
     setDraftName(board.activeBoard.name);
   }, [board.activeBoard?.id]);
 
+  // Focus-card routing: when Planner / Inbox opens a board with a
+  // focusCardId, scroll that card into view and clear the hint so a
+  // subsequent openBoard(boardId) (no card id) doesn't re-trigger.
+  // We watch focusCardId + activeBoard.id so a card that arrives via
+  // a Drive reconcile (no second openBoard call) still gets focused.
+  useEffect(() => {
+    const id = board.focusCardId;
+    if (!id || !board.activeBoard) return;
+    // The Column component renders a `<li data-card-id="…">` wrapper
+    // for each card. We use that to find the DOM node and scroll.
+    // Defer to a microtask so the column has rendered the card.
+    const handle = window.setTimeout(() => {
+      const el = document.querySelector(
+        `[data-card-id="${CSS.escape(id)}"]`,
+      ) as HTMLElement | null;
+      if (el) {
+        el.scrollIntoView({ block: "center", behavior: "smooth" });
+      }
+      // Clear the hint regardless of whether the card was found,
+      // so we don't keep retrying on every render.
+      board.clearFocusCard();
+    }, 50);
+    return () => window.clearTimeout(handle);
+  }, [board.focusCardId, board.activeBoard?.id, board.clearFocusCard]);
+
   if (!board.activeBoard) {
     return (
       <div className="empty-state">

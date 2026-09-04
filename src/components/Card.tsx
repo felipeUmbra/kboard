@@ -85,6 +85,7 @@ export function Card({
       role="button"
       tabIndex={0}
       className="kanban-card"
+      data-card-id={card.id}
       data-card-type={card.type}
       onClick={(e) => {
         // dnd-kit's PointerSensor sets defaultPrevented on the originating
