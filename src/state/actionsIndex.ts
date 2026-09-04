@@ -10,6 +10,8 @@ export {
 
 export {
   addCard,
+  addCardWithParent,
+  type AddCardDirection,
   updateCard,
   patchCard,
   deleteCard,

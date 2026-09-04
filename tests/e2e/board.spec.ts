@@ -199,4 +199,94 @@ test.describe("Board view (columns, cards, DnD)", () => {
       }, { timeout: 5_000 })
       .not.toBe(versionBefore);
   });
+
+  test("Reopening a board pulls a newer version from Drive (reconcile)", async ({ page }) => {
+    const bp = new BoardPage(page);
+
+    // 1) Seed the board + a card, and wait for the debounced save to flush
+    //    so the in-Drive file has the same content as the in-memory board.
+    await bp.addCard("To do", "Original card");
+    await expect(page.locator(sel.card).filter({ hasText: "Original card" })).toBeVisible();
+    const v1 = (await bp.listDriveFiles())[0].version;
+    await expect
+      .poll(async () => (await bp.listDriveFiles())[0]?.version, { timeout: 5_000 })
+      .not.toBe(v1);
+
+    // 2) Navigate to the boards list and Sync so the local cache reflects
+    //    Drive, then reload so we start from cache (no in-memory state) —
+    //    the same shape as a new session.
+    await bp.gotoBoards();
+    await page.locator(sel.syncButton).click();
+    await expect(page.locator(sel.boardCard).filter({ hasText: "Work Board" })).toBeVisible();
+    // Reset the revalidation TTL BEFORE the reload so the new
+    // BoardProvider mounts with lastCheckedAt=0. If we reset after, the
+    // in-memory state still holds the recent timestamp.
+    await page.evaluate(() => {
+      const raw = localStorage.getItem("kboard:boards-cache-meta");
+      if (!raw) return;
+      const meta = JSON.parse(raw);
+      for (const id of Object.keys(meta)) meta[id].lastCheckedAt = 0;
+      localStorage.setItem("kboard:boards-cache-meta", JSON.stringify(meta));
+    });
+    await page.reload();
+    await expect(page.locator(sel.boardCard).filter({ hasText: "Work Board" })).toBeVisible();
+
+    // 3) Simulate "another client" editing the board on Drive after the
+    //    reload. The fake Drive's modifiedTime is bumped so the reconcile
+    //    gate (modifiedTime > cached updatedAt) will pass. The in-memory
+    //    cache still holds the OLD board without the remote card.
+    const driveFileId = (await bp.listDriveFiles())[0].id;
+    expect(driveFileId).toBeTruthy();
+
+    await page.evaluate((fileId) => {
+      const w = window;
+      const file = w.__kboardDrive!.get(fileId);
+      if (!file) throw new Error("file not found");
+      const parsed = JSON.parse(file.content);
+      const cardId = "remote-card-" + Date.now();
+      parsed.cards[cardId] = {
+        id: cardId,
+        type: "task",
+        title: "Remote-only card",
+        descriptionHtml: "",
+        labelIds: [],
+        parentIds: [],
+        startDate: null,
+        dueDate: null,
+        activity: [],
+        comments: [],
+        boardFieldValues: {},
+        typeFieldValues: {},
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      parsed.columns[0].cardIds.push(cardId);
+      file.content = JSON.stringify(parsed, null, 2);
+      // Bump modifiedTime strictly into the future so the > comparison passes.
+      file.modifiedTime = new Date(Date.now() + 60_000).toISOString();
+      file.version = (parseInt(file.version, 10) + 1).toString();
+    }, driveFileId);
+
+    // 4) (TTL reset already happened in step 2 before the reload — the
+    //    BoardProvider mounted with lastCheckedAt=0, so reconcileBoard
+    //    will run on open.)
+
+    // 5) Open the board. openBoard serves the cache immediately, then
+    //    kicks off reconcileBoard in the background. The remote-only
+    //    card should appear once reconcile completes.
+    await page.locator(sel.boardCard).filter({ hasText: "Work Board" }).click();
+    await expect(page.locator(sel.boardTitle)).toBeVisible();
+    // Sanity: confirm the fake Drive really has the new card before we
+    // wait on the UI — that isolates the failure to the reconcile path.
+    const driveCardTitles = await page.evaluate((fileId) => {
+      const f = window.__kboardDrive!.get(fileId);
+      if (!f) return [];
+      const parsed = JSON.parse(f.content);
+      return Object.values(parsed.cards).map((c: any) => c.title);
+    }, driveFileId);
+    expect(driveCardTitles).toContain("Remote-only card");
+    await expect(
+      page.locator(sel.card).filter({ hasText: "Remote-only card" }),
+    ).toBeVisible({ timeout: 5_000 });
+  });
 });

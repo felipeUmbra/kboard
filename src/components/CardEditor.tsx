@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Board, Card as CardModel, CardType } from "../models/types";
 import { Modal } from "./Modal";
 import { RichTextEditor } from "./fields/RichTextEditor";
@@ -14,17 +14,41 @@ import { TypeChip } from "./TypeChip";
 import { DateField } from "./DateField";
 import { ActivityLog } from "./ActivityLog";
 import { CommentThread } from "./CommentThread";
+import { cardDrafts, draftDiffersFromCard } from "../state/cardDrafts";
+
+/** How often (ms) we mirror the local title/description drafts into
+ *  localStorage. Short enough to survive an accidental reload; long
+ *  enough to avoid hammering storage on every keystroke. */
+const DRAFT_PERSIST_DEBOUNCE_MS = 500;
 
 export function CardEditor({
   cardId,
   board,
   onClose,
   onOpenCard,
+  isNewCard = false,
+  newCardOrigin,
+  onSaved,
+  onAddChild,
+  onAddParent,
 }: {
   cardId: string;
   board: Board;
   onClose: () => void;
   onOpenCard: (childId: string) => void;
+  /** True when this card was just created by "+ Add child/parent" and the
+   *  user hasn't yet named it. Gates Save and forces a confirm-on-discard. */
+  isNewCard?: boolean;
+  /** Required when isNewCard, so the rollback on cancel can undo the
+   *  parent-side link created by addParentCard. */
+  newCardOrigin?: { originCardId: string; direction: "as_parent" | "as_child" };
+  /** Called after a successful Save so the host can clear its
+   *  newlyCreatedCardId flag. */
+  onSaved?: () => void;
+  /** Host provides the create+link actions so the editor doesn't reach
+   *  back into the board context for navigation. */
+  onAddChild?: (originCardId: string) => void;
+  onAddParent?: (originCardId: string) => void;
 }) {
   const ctx = useBoard();
   const auth = useAuth();
@@ -33,19 +57,79 @@ export function CardEditor({
   // the editor was open, show a graceful empty state.
   const card = board.cards[cardId];
 
-  const [title, setTitle] = useState(card?.title ?? "");
-  const [descriptionHtml, setDescriptionHtml] = useState(card?.descriptionHtml ?? "");
+  // Initial state pulls from the persisted draft if any, falling back to
+  // the board's current value. Restoring the draft means reloading the
+  // page (or coming back via the back-to-boards → re-open flow) keeps
+  // the user's in-progress edits.
+  const [title, setTitle] = useState(() => {
+    const draft = card ? cardDrafts.get(card.id) : null;
+    if (draft) return draft.title;
+    return card?.title ?? "";
+  });
+  const [descriptionHtml, setDescriptionHtml] = useState(() => {
+    const draft = card ? cardDrafts.get(card.id) : null;
+    if (draft) return draft.descriptionHtml;
+    return card?.descriptionHtml ?? "";
+  });
   const [activityOpen, setActivityOpen] = useState(true);
 
-  // Reset local state when the user navigates to a different card. Board
-  // syncs can replace the board object while this editor has unsaved input.
+  // Refs that mirror the latest local edits so the cardId-change effect
+  // can read the most recent values without re-firing on every keystroke.
+  const titleRef = useRef(title);
+  titleRef.current = title;
+  const descriptionHtmlRef = useRef(descriptionHtml);
+  descriptionHtmlRef.current = descriptionHtml;
+  const lastPersistedRef = useRef<{ title: string; descriptionHtml: string } | null>(null);
+
+  // Persist drafts to localStorage on a debounce. We do this on every
+  // edit (not just navigation) so a reload restores the latest text.
   useEffect(() => {
+    if (!card) return;
+    const timer = window.setTimeout(() => {
+      const t = titleRef.current;
+      const d = descriptionHtmlRef.current;
+      const last = lastPersistedRef.current;
+      if (last && last.title === t && last.descriptionHtml === d) return;
+      cardDrafts.set(card.id, { title: t, descriptionHtml: d, updatedAt: Date.now() });
+      lastPersistedRef.current = { title: t, descriptionHtml: d };
+    }, DRAFT_PERSIST_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [title, descriptionHtml, card]);
+
+  // Track the previous cardId so the navigation effect can flush the
+  // outgoing card's drafts before swapping state.
+  const previousCardIdRef = useRef(cardId);
+
+  // Reset local state when the user navigates to a different card. Also
+  // auto-saves the outgoing card's local drafts (the navigation is the
+  // implicit "done for now" signal). patchCard's diffing ensures no
+  // spurious activity entries when the title/description are unchanged.
+  useEffect(() => {
+    if (previousCardIdRef.current === cardId) return;
+    const prevId = previousCardIdRef.current;
+    if (prevId && board.cards[prevId]) {
+      const t = titleRef.current.trim();
+      const d = descriptionHtmlRef.current;
+      if (t || d) {
+        ctx.updateCard(prevId, {
+          title: t || "Untitled",
+          descriptionHtml: sanitizeRichHtml(d),
+        });
+      }
+      // The board now holds the latest text, so the persisted draft
+      // (which mirrors the same text) is no longer needed.
+      cardDrafts.delete(prevId);
+    }
     const c = board.cards[cardId];
-    if (!c) return;
-    setTitle(c.title);
-    setDescriptionHtml(c.descriptionHtml);
+    if (c) {
+      const draft = cardDrafts.get(cardId);
+      setTitle(draft?.title ?? c.title);
+      setDescriptionHtml(draft?.descriptionHtml ?? c.descriptionHtml);
+    }
     setActivityOpen(true);
-  }, [cardId]);
+    previousCardIdRef.current = cardId;
+    lastPersistedRef.current = null; // allow re-persist on the new card
+  }, [cardId, board, ctx]);
 
   // Graceful empty state if the card no longer exists.
   if (!card) {
@@ -67,26 +151,90 @@ export function CardEditor({
   // body (we just narrowed above). For type safety, re-bind to a
   // non-nullable local.
   const safeCard: CardModel = card;
+  const trimmedTitle = title.trim();
+  // A new card is considered "untitled" if the user hasn't replaced the
+  // seeded "Untitled" placeholder. This catches both the truly empty
+  // input and the case where the user opens the editor and walks away
+  // without ever touching the title field.
+  const isTitleEmpty =
+    trimmedTitle.length === 0 ||
+    (isNewCard && trimmedTitle === "Untitled" && safeCard.title === "Untitled");
+  // "Save" is only gated for new cards: an existing card can fall back
+  // to "Untitled" so a clear-back edit still saves. A new card with an
+  // empty title would otherwise leak as an orphan.
+  const saveDisabled = isNewCard && isTitleEmpty;
 
-  const saveAndClose = () => {
-    const t = title.trim() || "Untitled";
+  const commitEdits = (): boolean => {
+    if (isNewCard && isTitleEmpty) return false;
+    const t = trimmedTitle || "Untitled";
     ctx.updateCard(safeCard.id, {
       title: t,
       descriptionHtml: sanitizeRichHtml(descriptionHtml),
     });
+    cardDrafts.delete(safeCard.id);
+    return true;
+  };
+
+  const saveAndClose = () => {
+    if (!commitEdits()) return;
+    onSaved?.();
     onClose();
   };
 
   const remove = () => {
     if (!confirm(`Delete card "${safeCard.title}"?`)) return;
+    cardDrafts.delete(safeCard.id);
     ctx.deleteCard(safeCard.id);
+    onClose();
+  };
+
+  // Centralised close path used by the modal's X / ESC / backdrop and by
+  // the explicit "Close" button. For new cards we always confirm because
+  // the card exists only in the user's local board and would otherwise
+  // leak as an "Untitled" orphan. For existing cards we only confirm
+  // when there's a real draft (otherwise the user did nothing and we'd
+  // be nagging).
+  //
+  // Note: we intentionally do NOT delete the draft on cancel — the draft
+  // is the user's last-resort copy. If they reload the page or come
+  // back to the editor later, the draft is still there. Drafts are
+  // only deleted on successful commit, card deletion, or board
+  // deletion (see commitEdits, remove, and BoardContext.handleBoardDeleted).
+  const handleCancel = () => {
+    if (isNewCard) {
+      const ok = confirm("Descartar este card sem nome?");
+      if (!ok) return;
+      // If this was a "+ Add parent" creation, we linked the origin to
+      // this card via addParent. Undo that so the activity log on the
+      // origin doesn't carry a stale parents_changed entry.
+      if (
+        newCardOrigin?.direction === "as_parent" &&
+        board.cards[newCardOrigin.originCardId]
+      ) {
+        ctx.removeParent(newCardOrigin.originCardId, safeCard.id);
+      }
+      cardDrafts.delete(safeCard.id);
+      ctx.deleteCard(safeCard.id);
+      onSaved?.();
+      onClose();
+      return;
+    }
+    const draft = cardDrafts.get(safeCard.id);
+    if (draftDiffersFromCard(draft, safeCard)) {
+      if (!confirm("Descartar edições não salvas?")) return;
+      // User explicitly chose to discard. Mark the draft as discarded
+      // so it stops being offered, but keep the tombstone in localStorage
+      // so a fresh session can rehydrate "intentionally empty" state
+      // without resurrecting an old draft.
+      cardDrafts.discard(safeCard.id);
+    }
     onClose();
   };
 
   return (
     <Modal
       title="Card"
-      onClose={saveAndClose}
+      onClose={handleCancel}
       size="lg"
       footer={
         <>
@@ -94,10 +242,15 @@ export function CardEditor({
             Delete
           </button>
           <span style={{ flex: 1 }} />
-          <button type="button" className="btn" onClick={onClose}>
+          <button type="button" className="btn" onClick={handleCancel}>
             Close
           </button>
-          <button type="button" className="btn btn--primary" onClick={saveAndClose}>
+          <button
+            type="button"
+            className="btn btn--primary"
+            onClick={saveAndClose}
+            disabled={saveDisabled}
+          >
             Save
           </button>
         </>
@@ -108,8 +261,9 @@ export function CardEditor({
           className="input card-title-input"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder="Card title"
+          placeholder={isNewCard ? "Card title (required)" : "Card title"}
           aria-label="Card title"
+          autoFocus={isNewCard}
         />
       </div>
 
@@ -153,11 +307,39 @@ export function CardEditor({
         card={safeCard}
         onAdd={(parentId) => ctx.addParent(safeCard.id, parentId)}
         onRemove={(parentId) => ctx.removeParent(safeCard.id, parentId)}
+        onOpenCard={onOpenCard}
+        onCreateParent={onAddParent}
+        isNewCard={isNewCard}
       />
 
       {getMeta(safeCard.type).canHaveChildren && (
         <div style={{ marginBottom: "var(--space-5)" }}>
-          <label className="label">Children</label>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "var(--space-2)",
+              marginBottom: "var(--space-2)",
+            }}
+          >
+            <label className="label" style={{ margin: 0 }}>Children</label>
+            {onAddChild && (
+              <button
+                type="button"
+                className="btn btn--ghost btn--sm"
+                onClick={() => onAddChild(safeCard.id)}
+                disabled={isNewCard}
+                title={
+                  isNewCard
+                    ? "Name this card first"
+                    : "Add a child card pre-linked to this one"
+                }
+              >
+                + Add child
+              </button>
+            )}
+          </div>
           <ChildrenList
             board={board}
             parentId={safeCard.id}

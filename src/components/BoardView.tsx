@@ -4,12 +4,20 @@ import { Column } from "./Column";
 import { CardEditor } from "./CardEditor";
 import { KanbanDndProvider } from "./KanbanDndContext";
 import { useViewport } from "../hooks/useViewport";
+import type { AddCardDirection } from "../state/cardActions";
 import type { Card } from "../models/types";
 
 export function BoardView({ onBackToList }: { onBackToList: () => void }) {
   const board = useBoard();
   const viewport = useViewport();
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
+  // Track cards created via "+ Add child/parent" so the editor can gate
+  // Save and require a name before letting the user close.
+  const [newlyCreatedCardId, setNewlyCreatedCardId] = useState<string | null>(null);
+  // Origin info for rollback when the user discards a freshly created card.
+  const [newCardOrigin, setNewCardOrigin] = useState<
+    { originCardId: string; direction: AddCardDirection } | null
+  >(null);
   const [mobileColumnIndex, setMobileColumnIndex] = useState(0);
   const [editingName, setEditingName] = useState(false);
   const [draftName, setDraftName] = useState("");
@@ -39,6 +47,27 @@ export function BoardView({ onBackToList }: { onBackToList: () => void }) {
     const trimmed = draftName.trim();
     if (trimmed) board.renameBoard(trimmed);
     setEditingName(false);
+  };
+
+  const handleAddChild = (originCardId: string) => {
+    const newId = board.addChildCard(originCardId);
+    if (!newId) return;
+    setNewlyCreatedCardId(newId);
+    setNewCardOrigin({ originCardId, direction: "as_child" });
+    setEditingCardId(newId);
+  };
+
+  const handleAddParent = (originCardId: string) => {
+    const newId = board.addParentCard(originCardId);
+    if (!newId) return;
+    setNewlyCreatedCardId(newId);
+    setNewCardOrigin({ originCardId, direction: "as_parent" });
+    setEditingCardId(newId);
+  };
+
+  const handleCardSaved = () => {
+    setNewlyCreatedCardId(null);
+    setNewCardOrigin(null);
   };
 
   const columnsToShow =
@@ -162,8 +191,20 @@ export function BoardView({ onBackToList }: { onBackToList: () => void }) {
         <CardEditor
           cardId={editingCardId}
           board={b}
-          onClose={() => setEditingCardId(null)}
+          onClose={() => {
+            setEditingCardId(null);
+            // Clear the "new" flag so the editor doesn't reopen as a draft
+            // next time the user opens this same card. (The card itself
+            // is still in the board unless the editor deleted it.)
+            setNewlyCreatedCardId(null);
+            setNewCardOrigin(null);
+          }}
           onOpenCard={(childId) => setEditingCardId(childId)}
+          isNewCard={editingCardId === newlyCreatedCardId}
+          newCardOrigin={newCardOrigin ?? undefined}
+          onSaved={handleCardSaved}
+          onAddChild={handleAddChild}
+          onAddParent={handleAddParent}
         />
       )}
     </div>

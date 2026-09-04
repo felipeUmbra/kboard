@@ -11,11 +11,25 @@ export function ParentPicker({
   card,
   onAdd,
   onRemove,
+  onOpenCard,
+  onCreateParent,
+  isNewCard = false,
 }: {
   board: Board;
   card: Card;
   onAdd: (parentId: string) => void;
   onRemove: (parentId: string) => void;
+  /** Optional: clicking the parent name navigates to that card. When
+   *  omitted, the chip is rendered as plain text (back-compat for any
+   *  host that doesn't support navigation). */
+  onOpenCard?: (parentId: string) => void;
+  /** Optional: when provided, renders a "+ Add parent" button next to
+   *  the section label. The host decides what "add a parent" means
+   *  (create+link a new card, or open a picker). */
+  onCreateParent?: (cardId: string) => void;
+  /** Disables the "+ Add parent" button when this card is still in
+   *  draft state. */
+  isNewCard?: boolean;
 }) {
   // Hooks must be called in the same order on every render, so we
   // declare ALL of them BEFORE the early return below. Previously the
@@ -51,7 +65,34 @@ export function ParentPicker({
 
   return (
     <div style={{ marginBottom: "var(--space-5)" }}>
-      <label className="label">Parents ({currentParents.length})</label>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "var(--space-2)",
+          marginBottom: "var(--space-2)",
+        }}
+      >
+        <label className="label" style={{ margin: 0 }}>
+          Parents ({currentParents.length})
+        </label>
+        {onCreateParent && (
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            onClick={() => onCreateParent(card.id)}
+            disabled={isNewCard}
+            title={
+              isNewCard
+                ? "Name this card first"
+                : "Create a new parent card pre-linked to this one"
+            }
+          >
+            + Add parent
+          </button>
+        )}
+      </div>
 
       {currentParents.length > 0 && (
         <div
@@ -79,9 +120,42 @@ export function ParentPicker({
               }}
             >
               <TypeChip type={p.type} size="xs" />
-              <span style={{ maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {p.title}
-              </span>
+              {onOpenCard ? (
+                <button
+                  type="button"
+                  onClick={() => onOpenCard(p.id)}
+                  aria-label={`Open parent ${p.title}`}
+                  className="parent-chip__name"
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    padding: 0,
+                    margin: 0,
+                    cursor: "pointer",
+                    color: "var(--color-text)",
+                    font: "inherit",
+                    maxWidth: 180,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    textAlign: "left",
+                  }}
+                  title={`Open ${p.title}`}
+                >
+                  {p.title}
+                </button>
+              ) : (
+                <span
+                  style={{
+                    maxWidth: 180,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {p.title}
+                </span>
+              )}
               <button
                 type="button"
                 onClick={() => onRemove(p.id)}

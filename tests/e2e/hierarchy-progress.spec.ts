@@ -99,4 +99,168 @@ test.describe("Parent / Child hierarchy and Progress", () => {
     await bp.addCard("To do", "Threshold", "epic");
     await expect(page.locator(".progress-bar").first()).toBeVisible({ timeout: 5_000 });
   });
+
+  // ── New card-editor behaviour: navigation drafts and "+ Add" flows ──
+
+  test("Clicking a parent chip in the editor navigates into that parent", async ({ page }) => {
+    const bp = new BoardPage(page);
+    await bp.addCard("To do", "Big Epic", "epic");
+    await bp.addCard("To do", "Sub Story", "story");
+    // Link the story as a child of the epic.
+    await bp.openCard("Sub Story");
+    // The existing ParentPicker dropdown button text is "+ Add epic parent".
+    await page.getByRole("button", { name: /\+ add epic parent/i }).click();
+    // The candidate picker lists each candidate as a button whose visible
+    // text contains the title. Use .last() to skip the existing card on
+    // the board behind the modal (the picker renders the candidate
+    // buttons after the modal opens).
+    const dialog = page.getByRole("dialog");
+    await dialog.getByText("Big Epic", { exact: true }).click();
+    await bp.closeCardEditor();
+    // Open the story again and click the parent chip name.
+    await bp.openCard("Sub Story");
+    await page.getByRole("button", { name: /open parent big epic/i }).click();
+    await expect(page.getByLabel("Card title")).toHaveValue("Big Epic");
+    await bp.closeCardEditor();
+  });
+
+  test("Auto-save on parent navigation preserves unsaved title", async ({ page }) => {
+    const bp = new BoardPage(page);
+    await bp.addCard("To do", "Big Epic", "epic");
+    await bp.addCard("To do", "Sub Story", "story");
+    await bp.openCard("Sub Story");
+    await page.getByRole("button", { name: /\+ add epic parent/i }).click();
+    await page.getByRole("dialog").getByText("Big Epic", { exact: true }).click();
+    await bp.closeCardEditor();
+    await bp.openCard("Sub Story");
+    const titleInput = page.getByLabel("Card title");
+    await titleInput.fill("Sub Story renamed");
+    await page.getByRole("button", { name: /open parent big epic/i }).click();
+    await expect(page.getByLabel("Card title")).toHaveValue("Big Epic");
+    await bp.closeCardEditor();
+    // Give the auto-save + debounced save roundtrip a moment to flush
+    // before we look for the renamed card on the column. The useEffect
+    // updates the in-memory board synchronously, but the column
+    // re-render is a separate React commit.
+    await page.waitForTimeout(200);
+    await bp.openCard("Sub Story renamed");
+    await expect(page.getByLabel("Card title")).toHaveValue("Sub Story renamed");
+    await bp.closeCardEditor();
+  });
+
+  test("Adding a child from an Epic creates a Story card pre-linked", async ({ page }) => {
+    const bp = new BoardPage(page);
+    await bp.addCard("To do", "Big Epic", "epic");
+    await bp.openCard("Big Epic");
+    // The "+ Add child" button lives in the Children section header.
+    await page.getByRole("button", { name: /^\+ add child$/i }).click();
+    // The editor swaps to the new card. The input has to re-render
+    // with the new card's "Untitled" placeholder. Use a longer settle
+    // because the swap is a React state batch that may complete after
+    // the click event resolves.
+    const titleInput = page.getByLabel("Card title");
+    await expect(titleInput).not.toHaveValue("Big Epic", { timeout: 5_000 });
+    await expect(titleInput).toHaveValue("Untitled", { timeout: 5_000 });
+    // Save is disabled until the user provides a real title.
+    await expect(page.getByRole("button", { name: /^save$/i })).toBeDisabled();
+    await titleInput.fill("First Story");
+    await expect(page.getByRole("button", { name: /^save$/i })).toBeEnabled();
+    await expect(page.getByRole("button", { name: /open parent big epic/i })).toBeVisible();
+    await page.getByRole("button", { name: /^save$/i }).click();
+    await expect(page.getByLabel("Card title")).not.toBeVisible();
+    await bp.openCard("First Story");
+    await expect(page.getByRole("button", { name: /open parent big epic/i })).toBeVisible();
+    await bp.closeCardEditor();
+  });
+
+  test("Adding a parent from a Task creates a Story card pre-linked (bidirectional)", async ({ page }) => {
+    const bp = new BoardPage(page);
+    await bp.addCard("To do", "Lonely Task", "task");
+    await bp.openCard("Lonely Task");
+    // The "+ Add parent" button lives in the Parents section header.
+    await page.getByRole("button", { name: /^\+ add parent$/i }).click();
+    // Wait for the editor to swap cards (the new one is created in the
+    // same React batch, but the input has to re-mount with the new
+    // card's title).
+    const titleInput = page.getByLabel("Card title");
+    await expect(titleInput).toHaveValue("Untitled");
+    await titleInput.fill("My Story");
+    await page.getByRole("button", { name: /^save$/i }).click();
+    await expect(page.getByLabel("Card title")).not.toBeVisible();
+    await bp.openCard("Lonely Task");
+    await expect(page.getByRole("button", { name: /open parent my story/i })).toBeVisible();
+    await bp.closeCardEditor();
+  });
+
+  test("Closing new card via X with empty title confirms discard", async ({ page }) => {
+    const bp = new BoardPage(page);
+    await bp.addCard("To do", "Big Epic", "epic");
+    await bp.openCard("Big Epic");
+    page.once("dialog", (d) => d.accept());
+    await page.getByRole("button", { name: /^\+ add child$/i }).click();
+    await expect(page.getByLabel("Card title")).toHaveValue("Untitled");
+    // Click the explicit Close button (same handler as X / ESC). The
+    // dialog has both an X (aria-label "Close") and a "Close" button;
+    // both share the same handler. Use getByText to target the visible
+    // text of the footer button.
+    await page.getByRole("dialog").getByText("Close", { exact: true }).click();
+    await expect(page.getByLabel("Card title")).not.toBeVisible();
+    await expect(page.getByText("Untitled")).toHaveCount(0);
+  });
+
+  test("Drafts survive a page reload", async ({ page }) => {
+    const bp = new BoardPage(page);
+    await bp.addCard("To do", "Persistent", "task");
+    // Wait for the initial create-save to flush so the board cache
+    // includes the card. (addCard alone doesn't persist the board cache
+    // — only the debounced save does.)
+    await expect
+      .poll(async () => (await bp.listDriveFiles()).length, { timeout: 5_000 })
+      .toBe(1);
+    await bp.openCard("Persistent");
+    const titleInput = page.getByLabel("Card title");
+    await titleInput.fill("Persistent renamed");
+    // Wait for the localStorage debounce (500ms) plus a margin so the
+    // draft is persisted before reload.
+    await page.waitForTimeout(700);
+    // Reload with the editor still open. The board cache rehydrates
+    // the boards list; the boards list reopens the active board via
+    // the cache. The draft persists in localStorage and rehydrates
+    // when the editor re-mounts.
+    await page.reload();
+    // After reload we land on the boards list. Open the board.
+    await expect(page.getByText("Hierarchy Board").first()).toBeVisible();
+    await page.getByText("Hierarchy Board").first().click();
+    // The card should be visible in the column.
+    await expect(page.getByText("Persistent").first()).toBeVisible();
+    // Open the card. The draft should take precedence over the board
+    // value (the rename was only a local draft, never committed).
+    await bp.openCard("Persistent");
+    await expect(page.getByLabel("Card title")).toHaveValue("Persistent renamed");
+    await bp.closeCardEditor();
+  });
+
+  test("Closing the editor with unsaved drafts prompts confirmation", async ({ page }) => {
+    const bp = new BoardPage(page);
+    await bp.addCard("To do", "Editable", "task");
+    await expect
+      .poll(async () => (await bp.listDriveFiles()).length, { timeout: 5_000 })
+      .toBe(1);
+    await bp.openCard("Editable");
+    const titleInput = page.getByLabel("Card title");
+    await titleInput.fill("Editable renamed");
+    await page.waitForTimeout(600);
+    // Cancel the confirm: the modal stays open with the draft.
+    page.once("dialog", (d) => d.dismiss());
+    await page.getByRole("dialog").getByText("Close", { exact: true }).click();
+    await expect(page.getByLabel("Card title")).toBeVisible();
+    await expect(page.getByLabel("Card title")).toHaveValue("Editable renamed");
+    // Accept the confirm: the modal closes and the draft is discarded.
+    page.once("dialog", (d) => d.accept());
+    await page.getByRole("dialog").getByText("Close", { exact: true }).click();
+    await expect(page.getByLabel("Card title")).not.toBeVisible();
+    await bp.openCard("Editable");
+    await expect(page.getByLabel("Card title")).toHaveValue("Editable");
+    await bp.closeCardEditor();
+  });
 });

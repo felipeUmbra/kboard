@@ -62,6 +62,94 @@ export function addCard(
 }
 
 /**
+ * Direction for addCardWithParent:
+ *   - "as_child": the new card becomes a child of `originCardId`. The new
+ *     card's type is `getMeta(originCardId.type).childType` (e.g. opening
+ *     "+ Add child" on an Epic creates a Story). The origin is unchanged
+ *     (we just set the new card's parentIds).
+ *   - "as_parent": the new card becomes a parent of `originCardId`. The
+ *     new card's type is `getMeta(originCardId.type).parentType` (e.g.
+ *     opening "+ Add parent" on a Task creates a Story). We then link
+ *     the origin to the new card via addParent so the relationship is
+ *     set on both sides in a single mutation.
+ */
+export type AddCardDirection = "as_parent" | "as_child";
+
+export function addCardWithParent(
+  b: Board,
+  columnId: string,
+  originCardId: string,
+  direction: AddCardDirection,
+): AddCardResult {
+  const origin = b.cards[originCardId];
+  if (!origin) return { board: b, cardId: null };
+
+  const meta = getMeta(origin.type);
+  let newType: CardType;
+  let newParentIds: string[] = [];
+  let linkToOrigin = false;
+
+  if (direction === "as_child") {
+    if (!meta.childType) return { board: b, cardId: null };
+    newType = meta.childType;
+    newParentIds = [originCardId];
+  } else {
+    if (!meta.parentType) return { board: b, cardId: null };
+    newType = meta.parentType;
+    linkToOrigin = true;
+  }
+
+  const targetColumn =
+    columnId && b.columns.some((c) => c.id === columnId)
+      ? columnId
+      : b.columns[0]?.id;
+  if (!targetColumn) return { board: b, cardId: null };
+
+  const newId = cryptoRandomId();
+  const now = Date.now();
+  const card: Card = {
+    id: newId,
+    type: newType,
+    // "Untitled" satisfies addCard's trim gate so the card is materialised
+    // on the board immediately. The UI gates Save until the user types a
+    // real name and the rollback path deletes the card on cancel.
+    title: "Untitled",
+    descriptionHtml: "",
+    labelIds: [],
+    parentIds: newParentIds,
+    startDate: null,
+    dueDate: null,
+    activity: [
+      makeActivity(
+        "created",
+        direction === "as_child"
+          ? `Card created (linked as child of ${origin.type} "${origin.title}")`
+          : `Card created (linked as parent of ${origin.type} "${origin.title}")`,
+      ),
+    ],
+    comments: [],
+    boardFieldValues: {},
+    typeFieldValues: {},
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  let next: Board = {
+    ...b,
+    cards: { ...b.cards, [newId]: card },
+    columns: b.columns.map((c) =>
+      c.id === targetColumn ? { ...c, cardIds: [...c.cardIds, newId] } : c,
+    ),
+  };
+
+  if (linkToOrigin) {
+    next = addParent(next, originCardId, newId);
+  }
+
+  return { cardId: newId, board: next };
+}
+
+/**
  * Apply a patch to a card and record the right activity entries.
  * Granular diffing: only emits entries for fields that actually
  * changed. No-op if the card doesn't exist.

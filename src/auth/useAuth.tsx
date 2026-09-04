@@ -10,6 +10,7 @@ import {
 } from "react";
 import type { UserProfile } from "../models/types";
 import { requestAccessToken, clearToken, getCurrentToken } from "./tokenClient";
+import { cardDrafts } from "../state/cardDrafts";
 
 const PROFILE_ENDPOINT = "https://www.googleapis.com/oauth2/v3/userinfo";
 const PROFILE_STORAGE_KEY = "kboard:profile";
@@ -104,8 +105,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(PROFILE_STORAGE_KEY);
     // Also clear the boards cache so a different Google account
     // signing in on the same device doesn't see the previous user's
-    // boards flash by.
+    // boards flash by. Drafts are wiped for the same reason — they
+    // carry card titles that belong to the previous user.
     localStorage.removeItem(BOARDS_CACHE_KEY);
+    cardDrafts.clear();
     setState({ profile: null, loading: false, ready: false, error: null });
   }, []);
 

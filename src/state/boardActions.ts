@@ -11,6 +11,7 @@ import type {
 } from "../models/types";
 import {
   addCard as addCardAction,
+  addCardWithParent,
   addColumn,
   addCustomField as addCustomFieldAction,
   addLabel as addLabelAction,
@@ -66,6 +67,9 @@ export interface ActionDeps {
   withToken: <T>(op: () => Promise<T>) => Promise<T | null>;
   /** Force a fresh interactive consent grant. */
   reauthenticate: () => Promise<boolean>;
+  /** Called after a board is removed locally. Receives the deleted board
+   *  so the host can clean up per-card side state (cache meta, drafts). */
+  onBoardDeleted?: (board: Board) => void;
 }
 
 export type BoardActions = {
@@ -77,6 +81,13 @@ export type BoardActions = {
   removeColumn: (columnId: string) => void;
   moveColumn: (columnId: string, toIndex: number) => void;
   addCard: (columnId: string, title: string, type?: CardType) => string | null;
+  /** Create a child card pre-linked to the given origin. Returns the new
+   *  card's id, or null if the origin can't have children. */
+  addChildCard: (originCardId: string) => string | null;
+  /** Create a parent card pre-linked to the given origin (and link the
+   *  origin to the new parent in the same mutation). Returns the new
+   *  card's id, or null if the origin can't have parents. */
+  addParentCard: (originCardId: string) => string | null;
   updateCard: (cardId: string, patch: Partial<Card>) => void;
   deleteCard: (cardId: string) => void;
   moveCard: (cardId: string, toColumnId: string, toIndex: number) => void;
@@ -146,14 +157,7 @@ export type BoardActions = {
   setDoneColumn: (columnId: string, isDone: boolean) => void;
 };
 
-export function buildActions(deps: {
-  mutate: (updater: (b: Board) => Board) => void;
-  setBoard: React.Dispatch<React.SetStateAction<Board | null>>;
-  setBoards: React.Dispatch<React.SetStateAction<Board[]>>;
-  setLastError: React.Dispatch<React.SetStateAction<string | null>>;
-  withToken: <T>(op: () => Promise<T>) => Promise<T | null>;
-  reauthenticate: () => Promise<boolean>;
-}): BoardActions {
+export function buildActions(deps: ActionDeps): BoardActions {
   const {
     mutate,
     setBoard,
@@ -213,6 +217,7 @@ export function buildActions(deps: {
         await repoRemove(b.driveFileId);
         setBoards((prev) => prev.filter((x) => x.id !== b.id));
         setBoard((cur) => (cur?.id === b.id ? null : cur));
+        deps.onBoardDeleted?.(b);
       } catch (err) {
         setLastError(err instanceof Error ? err.message : "Delete failed");
       }
@@ -226,6 +231,24 @@ export function buildActions(deps: {
       let newId: string | null = null;
       mutate((b) => {
         const r = addCardAction(b, columnId, title, type);
+        newId = r.cardId;
+        return r.board;
+      });
+      return newId;
+    },
+    addChildCard: (originCardId) => {
+      let newId: string | null = null;
+      mutate((b) => {
+        const r = addCardWithParent(b, b.columns[0]?.id ?? "", originCardId, "as_child");
+        newId = r.cardId;
+        return r.board;
+      });
+      return newId;
+    },
+    addParentCard: (originCardId) => {
+      let newId: string | null = null;
+      mutate((b) => {
+        const r = addCardWithParent(b, b.columns[0]?.id ?? "", originCardId, "as_parent");
         newId = r.cardId;
         return r.board;
       });
