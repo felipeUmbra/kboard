@@ -25,6 +25,13 @@ const ACTIVITY_META: Record<ActivityKind, { label: string; icon: string }> = {
   due_date_changed: { label: "Due date", icon: "⏰" },
   moved: { label: "Move", icon: "↔" },
   comment_added: { label: "Comment", icon: "💬" },
+  checklist_added: { label: "Checklist added", icon: "☑" },
+  checklist_renamed: { label: "Checklist renamed", icon: "✏️" },
+  checklist_deleted: { label: "Checklist deleted", icon: "🗑" },
+  checklist_item_added: { label: "Item added", icon: "➕" },
+  checklist_item_renamed: { label: "Item renamed", icon: "✏️" },
+  checklist_item_toggled: { label: "Item toggled", icon: "✓" },
+  checklist_item_deleted: { label: "Item deleted", icon: "🗑" },
 };
 
 const ALL_KINDS = Object.keys(ACTIVITY_META) as ActivityKind[];

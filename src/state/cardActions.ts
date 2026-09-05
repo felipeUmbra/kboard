@@ -8,6 +8,8 @@ import type {
   Board,
   Card,
   CardType,
+  Checklist,
+  ChecklistItem,
   Column,
   CommentEntry,
   CustomFieldValues,
@@ -44,6 +46,7 @@ export function addCard(
     dueDate: null,
     activity: [makeActivity("created", "Card created")],
     comments: [],
+    checklists: [],
     boardFieldValues: {},
     typeFieldValues: {},
     createdAt: now,
@@ -128,6 +131,7 @@ export function addCardWithParent(
       ),
     ],
     comments: [],
+    checklists: [],
     boardFieldValues: {},
     typeFieldValues: {},
     createdAt: now,
@@ -379,6 +383,220 @@ export function setCardDueDate(
   iso: string | null,
 ): Board {
   return patchCard(b, cardId, { dueDate: iso });
+}
+
+// ─── Checklists ──────────────────────────────────────────────────
+
+/**
+ * Add a new empty checklist to a card. Returns the board unchanged
+ * if the card doesn't exist.
+ */
+export function addChecklist(
+  b: Board,
+  cardId: string,
+  title: string,
+): Board {
+  const card = b.cards[cardId];
+  if (!card) return b;
+  const trimmed = title.trim() || "Checklist";
+  const now = Date.now();
+  const newChecklist: Checklist = {
+    id: cryptoRandomId(),
+    title: trimmed,
+    items: [],
+  };
+  return patchCard(b, cardId, {
+    checklists: [...card.checklists, newChecklist],
+    activity: [
+      ...card.activity,
+      makeActivity("checklist_added", `Added checklist "${trimmed}"`),
+    ],
+    updatedAt: now,
+  });
+}
+
+/** Rename an existing checklist. Empty titles fall back to the previous title. */
+export function renameChecklist(
+  b: Board,
+  cardId: string,
+  checklistId: string,
+  title: string,
+): Board {
+  const card = b.cards[cardId];
+  if (!card) return b;
+  const cl = card.checklists.find((c) => c.id === checklistId);
+  if (!cl) return b;
+  const trimmed = title.trim() || cl.title;
+  if (trimmed === cl.title) return b;
+  const updated = card.checklists.map((c) =>
+    c.id === checklistId ? { ...c, title: trimmed } : c,
+  );
+  return patchCard(b, cardId, {
+    checklists: updated,
+    activity: [
+      ...card.activity,
+      makeActivity(
+        "checklist_renamed",
+        `Renamed checklist to "${trimmed}"`,
+      ),
+    ],
+    updatedAt: Date.now(),
+  });
+}
+
+/** Remove a checklist and all its items. */
+export function deleteChecklist(
+  b: Board,
+  cardId: string,
+  checklistId: string,
+): Board {
+  const card = b.cards[cardId];
+  if (!card) return b;
+  const cl = card.checklists.find((c) => c.id === checklistId);
+  if (!cl) return b;
+  return patchCard(b, cardId, {
+    checklists: card.checklists.filter((c) => c.id !== checklistId),
+    activity: [
+      ...card.activity,
+      makeActivity("checklist_deleted", `Deleted checklist "${cl.title}"`),
+    ],
+    updatedAt: Date.now(),
+  });
+}
+
+/** Add a new item to a checklist. Empty text is ignored. */
+export function addChecklistItem(
+  b: Board,
+  cardId: string,
+  checklistId: string,
+  text: string,
+): Board {
+  const card = b.cards[cardId];
+  if (!card) return b;
+  const trimmed = text.trim();
+  if (!trimmed) return b;
+  const now = Date.now();
+  const newItem: ChecklistItem = {
+    id: cryptoRandomId(),
+    text: trimmed,
+    done: false,
+  };
+  const updated = card.checklists.map((c) =>
+    c.id === checklistId ? { ...c, items: [...c.items, newItem] } : c,
+  );
+  return patchCard(b, cardId, {
+    checklists: updated,
+    activity: [
+      ...card.activity,
+      makeActivity("checklist_item_added", `Added item "${trimmed}"`),
+    ],
+    updatedAt: now,
+  });
+}
+
+/** Toggle an item's done state. */
+export function toggleChecklistItem(
+  b: Board,
+  cardId: string,
+  checklistId: string,
+  itemId: string,
+): Board {
+  const card = b.cards[cardId];
+  if (!card) return b;
+  const cl = card.checklists.find((c) => c.id === checklistId);
+  if (!cl) return b;
+  const item = cl.items.find((i) => i.id === itemId);
+  if (!item) return b;
+  const updated = card.checklists.map((c) =>
+    c.id !== checklistId
+      ? c
+      : {
+          ...c,
+          items: c.items.map((i) =>
+            i.id === itemId ? { ...i, done: !i.done } : i,
+          ),
+        },
+  );
+  return patchCard(b, cardId, {
+    checklists: updated,
+    activity: [
+      ...card.activity,
+      makeActivity(
+        "checklist_item_toggled",
+        item.done
+          ? `Unchecked "${item.text}"`
+          : `Checked "${item.text}"`,
+      ),
+    ],
+    updatedAt: Date.now(),
+  });
+}
+
+/** Rename an item. Empty text falls back to the previous text. */
+export function renameChecklistItem(
+  b: Board,
+  cardId: string,
+  checklistId: string,
+  itemId: string,
+  text: string,
+): Board {
+  const card = b.cards[cardId];
+  if (!card) return b;
+  const cl = card.checklists.find((c) => c.id === checklistId);
+  if (!cl) return b;
+  const item = cl.items.find((i) => i.id === itemId);
+  if (!item) return b;
+  const trimmed = text.trim() || item.text;
+  if (trimmed === item.text) return b;
+  const updated = card.checklists.map((c) =>
+    c.id !== checklistId
+      ? c
+      : {
+          ...c,
+          items: c.items.map((i) =>
+            i.id === itemId ? { ...i, text: trimmed } : i,
+          ),
+        },
+  );
+  return patchCard(b, cardId, {
+    checklists: updated,
+    activity: [
+      ...card.activity,
+      makeActivity(
+        "checklist_item_renamed",
+        `Renamed item to "${trimmed}"`,
+      ),
+    ],
+    updatedAt: Date.now(),
+  });
+}
+
+/** Remove an item from a checklist. */
+export function deleteChecklistItem(
+  b: Board,
+  cardId: string,
+  checklistId: string,
+  itemId: string,
+): Board {
+  const card = b.cards[cardId];
+  if (!card) return b;
+  const cl = card.checklists.find((c) => c.id === checklistId);
+  if (!cl) return b;
+  const item = cl.items.find((i) => i.id === itemId);
+  if (!item) return b;
+  const updated = card.checklists.map((c) =>
+    c.id !== checklistId
+      ? c
+      : { ...c, items: c.items.filter((i) => i.id !== itemId) },
+  );
+  return patchCard(b, cardId, {
+    checklists: updated,
+    activity: [
+      ...card.activity,
+      makeActivity("checklist_item_deleted", `Deleted item "${item.text}"`),
+    ],
+    updatedAt: Date.now(),
+  });
 }
 
 // ─── Comments ──────────────────────────────────────────────────────

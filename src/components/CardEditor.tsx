@@ -14,6 +14,7 @@ import { TypeChip } from "./TypeChip";
 import { DateField } from "./DateField";
 import { ActivityLog } from "./ActivityLog";
 import { CommentThread } from "./CommentThread";
+import { ChecklistEditor } from "./fields/ChecklistEditor";
 import { cardDrafts, draftDiffersFromCard } from "../state/cardDrafts";
 
 /** How often (ms) we mirror the local title/description drafts into
@@ -503,6 +504,23 @@ export function CardEditor({
             <ActivityLog activity={safeCard.activity} />
           </div>
         )}
+      </div>
+
+      <div style={{ marginTop: "var(--space-6)" }}>
+        <label className="label">
+          Checklists
+          <span
+            style={{
+              marginLeft: 8,
+              color: "var(--color-text-muted)",
+              fontWeight: 400,
+              fontSize: "var(--text-xs)",
+            }}
+          >
+            ({safeCard.checklists.length})
+          </span>
+        </label>
+        <ChecklistEditor card={safeCard} board={board} />
       </div>
 
       <div style={{ marginTop: "var(--space-6)" }}>

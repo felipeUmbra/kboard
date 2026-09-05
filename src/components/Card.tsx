@@ -183,8 +183,48 @@ export function Card({
         typeFieldEntries={typeFieldEntries}
         showProgress={meta.showProgress}
         progress={progress}
+        renderExtra={() => <ChecklistChip card={card} />}
       />
     </div>
+  );
+}
+
+/**
+ * Card-face chip showing checklist progress, e.g. "1/4 ✓".
+ * Only renders when the card has at least one checklist with at
+ * least one item. Multiple checklists: we surface the first one
+ * (Trello has a similar affordance).
+ */
+function ChecklistChip({ card }: { card: CardModel }) {
+  const first = card.checklists.find(
+    (cl) => cl.items.length > 0,
+  );
+  if (!first) return null;
+  const done = first.items.filter((i) => i.done).length;
+  const total = first.items.length;
+  return (
+    <span
+      className="kanban-card__checklist"
+      data-testid="checklist-chip"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4,
+        padding: "2px 6px",
+        fontSize: "var(--text-xs)",
+        fontWeight: 600,
+        color: "var(--color-text-muted)",
+        background: "var(--color-bg-elevated)",
+        border: "1px solid var(--color-border)",
+        borderRadius: "var(--radius-sm)",
+        alignSelf: "flex-start",
+      }}
+    >
+      <span aria-hidden="true">☑</span>
+      <span>
+        {done}/{total}
+      </span>
+    </span>
   );
 }
 

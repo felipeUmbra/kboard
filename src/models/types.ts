@@ -89,7 +89,14 @@ export type ActivityKind =
   | "start_date_changed"
   | "due_date_changed"
   | "moved"
-  | "comment_added";
+  | "comment_added"
+  | "checklist_added"
+  | "checklist_renamed"
+  | "checklist_deleted"
+  | "checklist_item_added"
+  | "checklist_item_renamed"
+  | "checklist_item_toggled"
+  | "checklist_item_deleted";
 
 /** A single entry in a card's activity log. Append-only, system-generated. */
 export interface ActivityEntry {
@@ -111,6 +118,28 @@ export interface CommentEntry {
   at: number;
 }
 
+// ─── Checklists ───────────────────────────────────────────────────
+
+/** A single line item inside a checklist. */
+export interface ChecklistItem {
+  id: string;
+  text: string;
+  done: boolean;
+}
+
+/**
+ * A named list of items attached to a card. v1 supports exactly one
+ * level of nesting: a checklist contains items, items don't have
+ * sub-items. Multiple checklists per card are allowed (e.g. "Frontend
+ * tasks" + "Backend tasks") but the chip on the card face surfaces
+ * the first one.
+ */
+export interface Checklist {
+  id: string;
+  title: string;
+  items: ChecklistItem[];
+}
+
 export interface Card {
   id: string;
   type: CardType;          // defaults to "task" via migration
@@ -128,6 +157,8 @@ export interface Card {
   activity: ActivityEntry[];
   /** User-typed comments. Ordered oldest-first. */
   comments: CommentEntry[];
+  /** Checklists attached to this card. v1: flat (no nested items). */
+  checklists: Checklist[];
   /** Board-level field values (fields on the board's `customFields`). */
   boardFieldValues: CustomFieldValues;
   /** Per-type field values (fields on the type's `cardTypes[i].customFields`). */

@@ -44,6 +44,13 @@ import {
   setCardDueDate,
   addComment,
   removeComment,
+  addChecklist,
+  renameChecklist,
+  deleteChecklist,
+  addChecklistItem,
+  toggleChecklistItem,
+  renameChecklistItem,
+  deleteChecklistItem,
   updateCustomField as updateCustomFieldAction,
   updateLabel,
   updatePresetOption as updatePresetOptionAction,
@@ -104,6 +111,27 @@ export type BoardActions = {
     comment: { author: string; authorPicture?: string; body: string },
   ) => void;
   removeComment: (cardId: string, commentId: string) => void;
+  // ── Checklists ────────────────────────────────────────────────
+  addChecklist: (cardId: string, title: string) => void;
+  renameChecklist: (cardId: string, checklistId: string, title: string) => void;
+  deleteChecklist: (cardId: string, checklistId: string) => void;
+  addChecklistItem: (cardId: string, checklistId: string, text: string) => void;
+  toggleChecklistItem: (
+    cardId: string,
+    checklistId: string,
+    itemId: string,
+  ) => void;
+  renameChecklistItem: (
+    cardId: string,
+    checklistId: string,
+    itemId: string,
+    text: string,
+  ) => void;
+  deleteChecklistItem: (
+    cardId: string,
+    checklistId: string,
+    itemId: string,
+  ) => void;
   addCustomField: (field: Omit<CustomField, "id">) => string | null;
   updateCustomField: (fieldId: string, patch: Partial<CustomField>) => void;
   removeCustomField: (fieldId: string) => void;
@@ -283,6 +311,21 @@ export function buildActions(deps: ActionDeps): BoardActions {
       mutate((b) => addComment(b, cardId, comment)),
     removeComment: (cardId, commentId) =>
       mutate((b) => removeComment(b, cardId, commentId)),
+    // ── Checklists ────────────────────────────────────────────────
+    addChecklist: (cardId, title) =>
+      mutate((b) => addChecklist(b, cardId, title)),
+    renameChecklist: (cardId, checklistId, title) =>
+      mutate((b) => renameChecklist(b, cardId, checklistId, title)),
+    deleteChecklist: (cardId, checklistId) =>
+      mutate((b) => deleteChecklist(b, cardId, checklistId)),
+    addChecklistItem: (cardId, checklistId, text) =>
+      mutate((b) => addChecklistItem(b, cardId, checklistId, text)),
+    toggleChecklistItem: (cardId, checklistId, itemId) =>
+      mutate((b) => toggleChecklistItem(b, cardId, checklistId, itemId)),
+    renameChecklistItem: (cardId, checklistId, itemId, text) =>
+      mutate((b) => renameChecklistItem(b, cardId, checklistId, itemId, text)),
+    deleteChecklistItem: (cardId, checklistId, itemId) =>
+      mutate((b) => deleteChecklistItem(b, cardId, checklistId, itemId)),
     addCustomField: (field) => {
       let id: string | null = null;
       mutate((b) => {

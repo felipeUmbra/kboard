@@ -28,6 +28,13 @@ export {
   setCardDueDate,
   addComment,
   removeComment,
+  addChecklist,
+  renameChecklist,
+  deleteChecklist,
+  addChecklistItem,
+  toggleChecklistItem,
+  renameChecklistItem,
+  deleteChecklistItem,
 } from "./cardActions";
 
 export {

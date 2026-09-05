@@ -4,6 +4,8 @@ import type {
   Card,
   CardType,
   CardTypeConfig,
+  Checklist,
+  ChecklistItem,
   CommentEntry,
   CustomFieldValues,
   Label,
@@ -174,6 +176,38 @@ function normalizeCard(id: string, raw: unknown): Card {
             typeof (c as { body?: unknown }).body === "string" &&
             typeof (c as { at?: unknown }).at === "number",
         )
+      : [],
+    checklists: Array.isArray(r.checklists)
+      ? (r.checklists as unknown[]).flatMap((cl): Checklist[] => {
+          if (
+            !cl ||
+            typeof (cl as { id?: unknown }).id !== "string" ||
+            typeof (cl as { title?: unknown }).title !== "string" ||
+            !Array.isArray((cl as { items?: unknown }).items)
+          ) {
+            return [];
+          }
+          const items = ((cl as { items: unknown[] }).items)
+            .map((it): ChecklistItem | null => {
+              if (
+                !it ||
+                typeof (it as { id?: unknown }).id !== "string" ||
+                typeof (it as { text?: unknown }).text !== "string" ||
+                typeof (it as { done?: unknown }).done !== "boolean"
+              ) {
+                return null;
+              }
+              return it as ChecklistItem;
+            })
+            .filter((x): x is ChecklistItem => x !== null);
+          return [
+            {
+              id: (cl as { id: string }).id,
+              title: (cl as { title: string }).title,
+              items,
+            },
+          ];
+        })
       : [],
     boardFieldValues,
     typeFieldValues,

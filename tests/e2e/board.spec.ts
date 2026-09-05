@@ -255,6 +255,7 @@ test.describe("Board view (columns, cards, DnD)", () => {
         dueDate: null,
         activity: [],
         comments: [],
+        checklists: [],
         boardFieldValues: {},
         typeFieldValues: {},
         createdAt: Date.now(),
