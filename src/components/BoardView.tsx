@@ -214,6 +214,7 @@ export function BoardView({ onBackToList }: { onBackToList: () => void }) {
 
       {editingCardId && (
         <CardEditor
+          key={editingCardId}
           cardId={editingCardId}
           board={b}
           onClose={() => {
