@@ -160,3 +160,35 @@ export function useAuth(): AuthContextValue {
 
 // Re-export the cache key so BoardContext can use it.
 export const BOARDS_CACHE_STORAGE_KEY = BOARDS_CACHE_KEY;
+
+/**
+ * Synchronous accessor for the current user's stable id (Google's
+ * `sub` claim). Reads from `localStorage`, the same source the
+ * `useAuth` hook rehydrates from on mount.
+ *
+ * Use this when you need "is this me?" outside a React render tree:
+ *   - Activity log predicates that run before the AuthProvider mounts
+ *   - Test hooks (window.__kboard_*) that need to compare card
+ *     metadata to the current user
+ *   - Future: the Inbox "Assigned to me" filter, search scoping
+ *
+ * Returns `null` if the user is signed out or the profile is missing
+ * the `id` field. This is intentional: callers should treat `null`
+ * as "no current user" rather than throwing.
+ *
+ * The single source of truth for the current user is `useAuth().profile`.
+ * When we move to multi-user (e.g. sharing), this function will gain
+ * a notion of "active identity" alongside the OAuth profile. Until
+ * then, it's a thin read of `localStorage`.
+ */
+export function getMyUserId(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(PROFILE_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { id?: unknown };
+    return typeof parsed.id === "string" ? parsed.id : null;
+  } catch {
+    return null;
+  }
+}

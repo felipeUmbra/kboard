@@ -414,22 +414,33 @@ export function BoardProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const mutate = useCallback(
+  /**
+   * Apply a board change to all derived state. Every action goes
+   * through here so the "what's a mutation" rule lives in one place.
+   *
+   * The three things `publishChange` does:
+   *   1. Update the active board (`setBoard`) so the open board view
+   *      sees the change.
+   *   2. Update the boards list (`setBoards`) so the boards list,
+   *      planner, and inbox all see the change. The match is by the
+   *      active board's id; if there's no active board (the user is
+   *      on the boards list, not inside a board), step 1 is a no-op
+   *      and step 2 finds no match — both safe.
+   *   3. Schedule the Drive save debounce so the change is
+   *      persisted to the user's Drive.
+   *
+   * Adding new secondary views that read from `boards` (search index,
+   * inbox filter, etc.) means teaching them about this function —
+   * not about every action site. That's the win.
+   */
+  const publishChange = useCallback(
     (updater: (b: Board) => Board) => {
-      // Update both the active board and the matching entry in the
-      // boards list. The planner and inbox read from `boards`, so
-      // without this, mutations only show up on the active board and
-      // the list view drifts from the source of truth.
       setBoard((prev) => (prev ? updater(prev) : prev));
       setBoards((prev) => {
-        let activeId: string | undefined;
-        // We need the active board's id to know which entry in the
-        // list to patch. Read it from `board` at call time — this
-        // callback closes over the latest `board` via React's
-        // dependency array below, but for safety we also fall back
-        // to a marker if the active board is gone.
-        const cur = (boardRef.current ?? null) as Board | null;
-        if (cur) activeId = cur.id;
+        // The active board's id is read from a ref so the callback
+        // always sees the latest value, not a stale closure.
+        const cur = boardRef.current;
+        const activeId = cur?.id;
         const next = prev.map((b) => (b.id === activeId ? updater(b) : b));
         // If the active board isn't in the list yet (race during
         // first open), don't add it; the active board state is
@@ -439,6 +450,17 @@ export function BoardProvider({ children }: { children: ReactNode }) {
       scheduleSave();
     },
     [scheduleSave],
+  );
+
+  const mutate = useCallback(
+    (updater: (b: Board) => Board) => {
+      // Thin wrapper around publishChange. Kept for source compatibility
+      // with the existing call sites — every new action should call
+      // publishChange directly. The triple-step (active board, boards
+      // list, save debounce) lives in one place.
+      publishChange(updater);
+    },
+    [publishChange],
   );
 
   /**

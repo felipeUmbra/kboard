@@ -1,12 +1,11 @@
 import { useMemo } from "react";
 import type { Board, Card as CardModel, CardType } from "../models/types";
 import { LabelPill } from "./fields/LabelPill";
-import { FieldChip } from "./fields/FieldChip";
 import { sanitizeRichHtml } from "./fields/sanitize";
 import { CARD_TYPE_META, getMeta, displayLabel } from "../models/cardTypeMeta";
 import { useProgress } from "../models/progress";
 import { TypeChip } from "./TypeChip";
-import { ProgressBar } from "./ProgressBar";
+import { CardChips } from "./CardChips";
 
 /** Strip HTML to plain text for the card-front preview, with a max length. */
 function descriptionPreview(html: string, maxLen = 180): string {
@@ -177,120 +176,14 @@ export function Card({
         </div>
       )}
 
-      {fieldEntries.length > 0 && (
-        <div className="kanban-card__fields">
-          {fieldEntries.slice(0, 3).map(({ field, value }) => (
-            <FieldChip key={field.id} field={field} value={value} />
-          ))}
-          {fieldEntries.length > 3 && (
-            <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-muted)" }}>
-              +{fieldEntries.length - 3}
-            </span>
-          )}
-        </div>
-      )}
-
-      {typeFieldEntries.length > 0 && (
-        <div className="kanban-card__fields">
-          {typeFieldEntries.slice(0, 2).map(({ field, value }) => (
-            <FieldChip key={field.id} field={field} value={value} />
-          ))}
-          {typeFieldEntries.length > 2 && (
-            <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-muted)" }}>
-              +{typeFieldEntries.length - 2}
-            </span>
-          )}
-        </div>
-      )}
-
-      {(card.startDate || card.dueDate) && (
-        <DateBadge
-          startDate={card.startDate}
-          dueDate={card.dueDate}
-        />
-      )}
-
-      {meta.showProgress && (
-        <div style={{ marginTop: "var(--space-2)" }}>
-          <ProgressBar progress={progress} size="xs" showLabel />
-        </div>
-      )}
-    </div>
-  );
-}
-
-function DateBadge({
-  startDate,
-  dueDate,
-}: {
-  startDate: string | null;
-  dueDate: string | null;
-}) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const due = dueDate ? new Date(dueDate + "T00:00:00") : null;
-  const start = startDate ? new Date(startDate + "T00:00:00") : null;
-  const msPerDay = 86400000;
-  const daysUntilDue = due ? Math.round((due.getTime() - today.getTime()) / msPerDay) : null;
-
-  let color: string;
-  let icon: string;
-  if (daysUntilDue === null) {
-    color = "var(--color-text-muted)";
-    icon = "📅";
-  } else if (daysUntilDue < 0) {
-    color = "var(--color-danger, #eb5a46)";
-    icon = "⚠";
-  } else if (daysUntilDue <= 7) {
-    color = "var(--color-warning, #f2d600)";
-    icon = "⏰";
-  } else {
-    color = "var(--color-success, #4bce97)";
-    icon = "📅";
-  }
-
-  const fmt = (d: Date) =>
-    d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-
-  let text: string;
-  if (start && due) {
-    text = `${fmt(start)} → ${fmt(due)}`;
-  } else if (due) {
-    text = fmt(due);
-  } else if (start) {
-    text = `Start ${fmt(start)}`;
-  } else {
-    return null;
-  }
-
-  return (
-    <div
-      className="kanban-card__date"
-      title={
-        daysUntilDue !== null
-          ? daysUntilDue < 0
-            ? `Overdue by ${-daysUntilDue} day(s)`
-            : daysUntilDue === 0
-              ? "Due today"
-              : `Due in ${daysUntilDue} day(s)`
-          : "Start date"
-      }
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 4,
-        padding: "2px 6px",
-        fontSize: "var(--text-xs)",
-        fontWeight: 600,
-        color,
-        background: "var(--color-bg-elevated)",
-        border: `1px solid ${color}`,
-        borderRadius: "var(--radius-sm)",
-        alignSelf: "flex-start",
-      }}
-    >
-      <span aria-hidden="true">{icon}</span>
-      <span>{text}</span>
+      <CardChips
+        card={card}
+        board={board}
+        fieldEntries={fieldEntries}
+        typeFieldEntries={typeFieldEntries}
+        showProgress={meta.showProgress}
+        progress={progress}
+      />
     </div>
   );
 }

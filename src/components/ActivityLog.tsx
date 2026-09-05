@@ -3,44 +3,31 @@
 import { useMemo, useState } from "react";
 import type { ActivityEntry, ActivityKind } from "../models/types";
 
-const KIND_LABEL: Record<ActivityKind, string> = {
-  created: "Created",
-  title_changed: "Title",
-  description_changed: "Description",
-  type_changed: "Type",
-  labels_changed: "Labels",
-  parents_changed: "Parents",
-  start_date_changed: "Start date",
-  due_date_changed: "Due date",
-  moved: "Move",
-  comment_added: "Comment",
+/**
+ * Single source of truth for activity-kind presentation. Each entry
+ * pairs a kind with its filter-pill label and its row icon. The
+ * `Record<ActivityKind, ...>` type forces a complete mapping — adding
+ * a new `ActivityKind` to the union in `types.ts` is a compile error
+ * here, so you can't ship a new event without filling in the row
+ * (the exact bug we want to prevent).
+ *
+ * The filter-pill order in the UI follows `Object.keys(ACTIVITY_META)`,
+ * so the order of entries below is also the order users see.
+ */
+const ACTIVITY_META: Record<ActivityKind, { label: string; icon: string }> = {
+  created: { label: "Created", icon: "✨" },
+  title_changed: { label: "Title", icon: "✏️" },
+  description_changed: { label: "Description", icon: "📝" },
+  type_changed: { label: "Type", icon: "🏷" },
+  labels_changed: { label: "Labels", icon: "🎨" },
+  parents_changed: { label: "Parents", icon: "🔗" },
+  start_date_changed: { label: "Start date", icon: "📅" },
+  due_date_changed: { label: "Due date", icon: "⏰" },
+  moved: { label: "Move", icon: "↔" },
+  comment_added: { label: "Comment", icon: "💬" },
 };
 
-const KIND_ICON: Record<ActivityKind, string> = {
-  created: "✨",
-  title_changed: "✏️",
-  description_changed: "📝",
-  type_changed: "🏷",
-  labels_changed: "🎨",
-  parents_changed: "🔗",
-  start_date_changed: "📅",
-  due_date_changed: "⏰",
-  moved: "↔",
-  comment_added: "💬",
-};
-
-const ALL_KINDS: ActivityKind[] = [
-  "created",
-  "title_changed",
-  "description_changed",
-  "type_changed",
-  "labels_changed",
-  "parents_changed",
-  "start_date_changed",
-  "due_date_changed",
-  "moved",
-  "comment_added",
-];
+const ALL_KINDS = Object.keys(ACTIVITY_META) as ActivityKind[];
 
 export function ActivityLog({ activity }: { activity: ActivityEntry[] }) {
   const [filter, setFilter] = useState<"all" | ActivityKind>("all");
@@ -99,7 +86,7 @@ export function ActivityLog({ activity }: { activity: ActivityEntry[] }) {
               key={k}
               active={filter === k}
               onClick={() => setFilter(k)}
-              label={`${KIND_LABEL[k]} (${count})`}
+              label={`${ACTIVITY_META[k].label} (${count})`}
             />
           );
         })}
@@ -121,7 +108,7 @@ export function ActivityLog({ activity }: { activity: ActivityEntry[] }) {
             }}
           >
             <span aria-hidden="true" style={{ width: 18 }}>
-              {KIND_ICON[e.kind]}
+              {ACTIVITY_META[e.kind].icon}
             </span>
             <span style={{ flex: 1 }}>{e.text}</span>
             <span
