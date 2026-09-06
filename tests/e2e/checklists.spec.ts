@@ -148,9 +148,11 @@ test("delete a checklist removes it from the editor and the chip", async ({
   await editor.getByTestId("checklist-add-checklist-toggle").click();
   await editor.getByTestId("checklist-add-checklist-input").fill("To delete");
   await editor.getByTestId("checklist-add-checklist-submit").click();
-  const itemInput = editor.getByTestId("checklist-add-item-input").last();
-  const itemSubmit = editor.getByTestId("checklist-add-item-submit").last();
-  await itemInput.fill("Item");
+
+  // Open the add-item input by clicking the toggle
+  await editor.getByTestId("checklist-add-item-toggle").click();
+  await editor.getByTestId("checklist-add-item-input").last().fill("Item");
+  await editor.getByTestId("checklist-add-item-submit").last().click();
   await itemSubmit.click();
 
   await editor.getByTestId("checklist-delete").click();

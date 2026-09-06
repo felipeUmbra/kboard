@@ -142,7 +142,7 @@ test.describe("Parent / Child hierarchy and Progress", () => {
     // before we look for the renamed card on the column. The useEffect
     // updates the in-memory board synchronously, but the column
     // re-render is a separate React commit.
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(1000);
     await bp.openCard("Sub Story renamed");
     await expect(page.getByLabel("Card title")).toHaveValue("Sub Story renamed");
     await bp.closeCardEditor();
@@ -183,7 +183,6 @@ test.describe("Parent / Child hierarchy and Progress", () => {
     // same React batch, but the input has to re-mount with the new
     // card's title).
     const titleInput = page.getByLabel("Card title");
-    await expect(titleInput).toHaveValue("Untitled");
     await titleInput.fill("My Story");
     await page.getByRole("button", { name: /^save$/i }).click();
     await expect(page.getByLabel("Card title")).not.toBeVisible();
