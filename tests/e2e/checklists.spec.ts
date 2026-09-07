@@ -153,7 +153,6 @@ test("delete a checklist removes it from the editor and the chip", async ({
   await editor.getByTestId("checklist-add-item-toggle").click();
   await editor.getByTestId("checklist-add-item-input").last().fill("Item");
   await editor.getByTestId("checklist-add-item-submit").last().click();
-  await itemSubmit.click();
 
   await editor.getByTestId("checklist-delete").click();
   await expect(editor.getByTestId("checklist")).toHaveCount(0);
