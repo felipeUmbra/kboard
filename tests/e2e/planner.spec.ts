@@ -119,7 +119,7 @@ async function bootWithCards(page: Page) {
   // navigates to the planner. The setDates hook calls setBoards()
   // which is async (React batches); without this the planner can
   // mount and read the pre-date boards on the same frame.
-  await page.waitForTimeout(1000);
+  await page.waitForTimeout(3000);
 }
 
 test.describe("Planner", () => {

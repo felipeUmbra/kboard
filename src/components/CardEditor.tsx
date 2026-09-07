@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Board, Card as CardModel, CardType } from "../models/types";
 import { Modal } from "./Modal";
 import { RichTextEditor } from "./fields/RichTextEditor";
@@ -78,6 +78,12 @@ export function CardEditor({
   // can read the most recent values without re-firing on every keystroke.
   const titleRef = useRef(title);
   titleRef.current = title;
+  // useLayoutEffect fires synchronously after DOM mutations, ensuring
+  // titleRef.current always holds the latest title value even when
+  // React batches state updates (e.g. after Playwright's .fill()).
+  useLayoutEffect(() => {
+    titleRef.current = title;
+  }, [title]);
   const descriptionHtmlRef = useRef(descriptionHtml);
   descriptionHtmlRef.current = descriptionHtml;
   const lastPersistedRef = useRef<{ title: string; descriptionHtml: string } | null>(null);

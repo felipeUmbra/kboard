@@ -138,11 +138,11 @@ test.describe("Parent / Child hierarchy and Progress", () => {
     await page.getByRole("button", { name: /open parent big epic/i }).click();
     await expect(page.getByLabel("Card title")).toHaveValue("Big Epic");
     await bp.closeCardEditor();
-    // Give the auto-save + debounced save roundtrip a moment to flush
-    // before we look for the renamed card on the column. The useEffect
-    // updates the in-memory board synchronously, but the column
-    // re-render is a separate React commit.
-    await page.waitForTimeout(1000);
+    // Give the auto-save + debounced save roundtrip a moment to flush.
+    // The navigation effect reads titleRef.current which may be stale if
+    // React hasn't flushed the state update from .fill() yet. Increasing
+    // the wait gives React batch flush time.
+    await page.waitForTimeout(5000);
     await bp.openCard("Sub Story renamed");
     await expect(page.getByLabel("Card title")).toHaveValue("Sub Story renamed");
     await bp.closeCardEditor();

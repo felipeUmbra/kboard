@@ -148,6 +148,11 @@ export function BoardProvider({ children }: { children: ReactNode }) {
   const saveTimer = useRef<number | null>(null);
   const boardRef = useRef<Board | null>(board);
   boardRef.current = board;
+  // Keep boardRef.current in sync with board state so that publishChange's
+  // setBoards callback always finds the active board by ID.
+  useEffect(() => {
+    boardRef.current = board;
+  }, [board]);
   // Mirror of the `boards` array, used by the test-only window hook
   // so it can read the latest list state without going through the
   // React render cycle.
@@ -435,17 +440,18 @@ export function BoardProvider({ children }: { children: ReactNode }) {
    */
   const publishChange = useCallback(
     (updater: (b: Board) => Board) => {
+      // Keep boardRef.current in sync so the setBoards callback below
+      // always finds the active board by ID, even when called from
+      // test hooks or other async paths.
+      boardRef.current = board;
       setBoard((prev) => (prev ? updater(prev) : prev));
       setBoards((prev) => {
-        // The active board's id is read from a ref so the callback
-        // always sees the latest value, not a stale closure.
         const cur = boardRef.current;
         const activeId = cur?.id;
         const next = prev.map((b) => (b.id === activeId ? updater(b) : b));
-        // If the active board isn't in the list yet (race during
-        // first open), don't add it; the active board state is
-        // already correct and the next refresh will reconcile.
-        return next === prev ? prev : next;
+        // Always return the new list — the map callback creates a new
+        // array, so next is always a different reference from prev.
+        return next;
       });
       scheduleSave();
     },
