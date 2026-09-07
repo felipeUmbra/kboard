@@ -46,7 +46,7 @@ export function ProgressBar({
               progress.percent === null ? "0%" : `${progress.percent}%`,
             height: "100%",
             background: color,
-            transition: "width 200ms ease, background-color 200ms ease",
+            transition: process.env.NODE_ENV === "test" ? "none" : "width 200ms ease, background-color 200ms ease",
           }}
         />
       </div>

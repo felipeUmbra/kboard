@@ -83,11 +83,7 @@ export function ParentPicker({
             className="btn btn--ghost btn--sm"
             onClick={() => onCreateParent(card.id)}
             disabled={isNewCard}
-            title={
-              isNewCard
-                ? "Name this card first"
-                : "Create a new parent card pre-linked to this one"
-            }
+            title={ isNewCard ? "Name this card first" : "Create a new parent card pre-linked to this one" }
           >
             + Add parent
           </button>
@@ -193,7 +189,7 @@ export function ParentPicker({
               top: "100%",
               left: 0,
               right: 0,
-              marginTop: 4,
+              transition: process.env.NODE_ENV === 'test' ? "none" : "width 200ms ease, background-color 200ms ease",
               background: "var(--color-surface)",
               border: "1px solid var(--color-border)",
               borderRadius: "var(--radius-md)",
@@ -213,7 +209,7 @@ export function ParentPicker({
               autoFocus
               style={{ margin: 6, width: "auto" }}
             />
-            <div style={{ overflowY: "auto", flex: 1 }}>
+            <div role="dialog" data-testid="parent-picker-dialog" style={{ overflowY: "auto", flex: 1 }}>
               {candidates.length === 0 ? (
                 <p
                   style={{
@@ -256,10 +252,7 @@ export function ParentPicker({
                         fontSize: "var(--text-sm)",
                       }}
                     >
-                      <TypeChip type={c.type} size="xs" />
-                      <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {c.title}
-                      </span>
+                        <TypeChip type={c.type} size="xs" /> <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title}</span>
                       {disabled && (
                         <span style={{ fontSize: 10, color: "var(--color-text-muted)" }}>
                           cycle
