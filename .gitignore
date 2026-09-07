@@ -6,6 +6,7 @@ dist-ssr
 .env.local
 .env.*.local
 test-results/
+git-test-results/
 .tmp-yaml-deps/
 playwright-report/
 trace*

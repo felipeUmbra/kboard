@@ -552,6 +552,14 @@
   justify-content: flex-end;
   gap: var(--space-2);
   flex-shrink: 0;
+  /* On mobile, the body uses `flex: 1` + `overflow-y: auto` and can
+     end up with a stacking context that intercepts pointer events on
+     the footer's buttons (Playwright reports
+     "<div class="modal__body">…</div> intercepts pointer events").
+     Lifting the footer above the body in the paint order fixes the
+     click target without changing the layout. */
+  position: relative;
+  z-index: 1;
 }
 
 

@@ -498,7 +498,7 @@ export function BoardProvider({ children }: { children: ReactNode }) {
 
   // Wire test-only window hooks (see useTestHooks). No-op in
   // production builds.
-  useTestHooks(actions, mutate, boardsRef, setBoards);
+  useTestHooks(actions, mutate);
 
   const value = useMemo<BoardContextValue>(
     () => ({
@@ -564,39 +564,29 @@ type KboardTestWindow = Window & {
 function useTestHooks(
   actions: BoardActions,
   mutate: (updater: (b: Board) => Board) => void,
-  boardsRef: React.MutableRefObject<Board[]>,
-  setBoards: React.Dispatch<React.SetStateAction<Board[]>>,
 ) {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const w = window as KboardTestWindow;
     w.__kboard_setCardDates = (cardId, dates) => {
-      // The standard `mutate` only updates the active board. The
-      // Planner view reads from `boards` (the list), so a planner
-      // test must propagate the change there too. We do that
-      // manually here by also patching the matching entry in
-      // `boards` via setBoards.
+      // `mutate` already routes through `publishChange`, which updates
+      // BOTH the active board AND the matching entry in the `boards`
+      // list (so the Planner view, which reads from `boards`, sees the
+      // change). A previous version of this hook also called
+      // `setBoards(next)` with a value derived from `boardsRef.current`,
+      // but that ref is only refreshed on the next render — the
+      // subsequent `setBoards` call would clobber the correct value from
+      // `mutate` with stale data (cards still without dates). Let
+      // `mutate` do the work.
       if (dates.startDate !== undefined) {
         mutate((b) => setCardStartDate(b, cardId, dates.startDate!));
-        const next = boardsRef.current.map((b) =>
-          b.cards[cardId]
-            ? setCardStartDate(b, cardId, dates.startDate!)
-            : b,
-        );
-        setBoards(next);
       }
       if (dates.dueDate !== undefined) {
         mutate((b) => setCardDueDate(b, cardId, dates.dueDate!));
-        const next = boardsRef.current.map((b) =>
-          b.cards[cardId]
-            ? setCardDueDate(b, cardId, dates.dueDate!)
-            : b,
-        );
-        setBoards(next);
       }
     };
     return () => {
       delete w.__kboard_setCardDates;
     };
-  }, [actions, mutate, boardsRef, setBoards]);
+  }, [actions, mutate]);
 }
