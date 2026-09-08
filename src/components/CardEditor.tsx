@@ -103,18 +103,22 @@ export function CardEditor({
     return () => window.clearTimeout(timer);
   }, [title, descriptionHtml, card]);
 
-  // Track the previous cardId so the navigation effect can flush the
-  // outgoing card's drafts before swapping state.
-  const previousCardIdRef = useRef(cardId);
+  // Track the previous cardId from props so we can detect changes
+  // even when the component remounts (due to key change).
+  const prevCardIdRef = useRef(cardId);
 
   // Reset local state when the user navigates to a different card. Also
   // auto-saves the outgoing card's local drafts (the navigation is the
   // implicit "done for now" signal). patchCard's diffing ensures no
   // spurious activity entries when the title/description are unchanged.
   useEffect(() => {
-    if (previousCardIdRef.current === cardId) return;
-    const prevId = previousCardIdRef.current;
+    if (prevCardIdRef.current === cardId) return;
+    const prevId = prevCardIdRef.current;
+    prevCardIdRef.current = cardId;
     if (prevId && board.cards[prevId]) {
+      // Read directly from refs which are updated synchronously in render
+      // and useLayoutEffect. This captures the latest state even when
+      // the component remounts.
       const t = titleRef.current.trim();
       const d = descriptionHtmlRef.current;
       if (t || d) {
@@ -134,7 +138,7 @@ export function CardEditor({
       setDescriptionHtml(draft?.descriptionHtml ?? c.descriptionHtml);
     }
     setActivityOpen(true);
-    previousCardIdRef.current = cardId;
+    prevCardIdRef.current = cardId;
     lastPersistedRef.current = null; // allow re-persist on the new card
   }, [cardId, board, ctx]);
 
