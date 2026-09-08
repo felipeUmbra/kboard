@@ -22,6 +22,17 @@ function buildColumnIndex(board: Board): Map<string, string> {
 }
 
 /**
+ * True when the card currently lives in a column marked as
+ * done/final (its id is in `board.doneColumnIds`). Cards in such
+ * columns are treated as completed: they no longer surface an
+ * "overdue" flag even when their due date is in the past.
+ */
+export function isCardInDoneColumn(board: Board, cardId: string): boolean {
+  const colId = buildColumnIndex(board).get(cardId);
+  return colId !== undefined && board.doneColumnIds.includes(colId);
+}
+
+/**
  * Compute progress for a card based on its descendants.
  * - Tasks return `{total:0, done:0, percent:null}` (no children)
  * - Stories count direct child tasks

@@ -107,4 +107,28 @@ test.describe("Boards list", () => {
     await page.fill(sel.createBoardNameInput, "Now Valid");
     await expect(createBtn).toBeEnabled();
   });
+
+  test("Create is blocked when name duplicates an existing board", async ({ page }) => {
+    const bp = new BoardPage(page);
+    await bp.login();
+    await bp.createBoard("Unique Roadmap");
+    // Re-open the create modal and type the same name (different case to
+    // prove the comparison is case-insensitive).
+    await bp.gotoBoards();
+    // Trigger a Sync so the boards cache is definitely up-to-date.
+    await page.locator(sel.syncButton).click();
+    await expect(page.locator(sel.boardCard).filter({ hasText: "Unique Roadmap" })).toBeVisible();
+    await page.locator(sel.newBoardButton).click();
+    await page.fill(sel.createBoardNameInput, "unique ROADMAP");
+    const createBtn = page.getByRole("button", { name: /^Create$/ });
+    await expect(createBtn).toBeDisabled();
+    // The inline alert explains the collision.
+    await expect(page.getByRole("alert")).toContainText(/already exists/i);
+    // Changing the name re-enables Create.
+    await page.fill(sel.createBoardNameInput, "Another board");
+    await expect(createBtn).toBeEnabled();
+    // Drive should still have exactly one board.
+    const files = await bp.listDriveFiles();
+    expect(files.length).toBe(1);
+  });
 });

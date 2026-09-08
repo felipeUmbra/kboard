@@ -3,7 +3,7 @@ import type { Board, Card as CardModel, CardType } from "../models/types";
 import { LabelPill } from "./fields/LabelPill";
 import { sanitizeRichHtml } from "./fields/sanitize";
 import { CARD_TYPE_META, getMeta, displayLabel } from "../models/cardTypeMeta";
-import { useProgress } from "../models/progress";
+import { useProgress, isCardInDoneColumn } from "../models/progress";
 import { TypeChip } from "./TypeChip";
 import { CardChips } from "./CardChips";
 
@@ -72,6 +72,8 @@ export function Card({
 
   // Progress (only for epics & stories)
   const progress = useProgress(card, board);
+  // True when the card lives in a done/final column → hide overdue flag.
+  const done = useMemo(() => isCardInDoneColumn(board, card.id), [board, card.id]);
 
   const safeHtml = useMemo(() => sanitizeRichHtml(card.descriptionHtml), [card.descriptionHtml]);
   const preview = useMemo(() => descriptionPreview(safeHtml), [safeHtml]);
@@ -183,6 +185,7 @@ export function Card({
         typeFieldEntries={typeFieldEntries}
         showProgress={meta.showProgress}
         progress={progress}
+        done={done}
         renderExtra={() => <ChecklistChip card={card} />}
       />
     </div>

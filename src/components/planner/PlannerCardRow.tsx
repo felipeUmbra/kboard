@@ -13,6 +13,7 @@ import { LabelPill } from "../fields/LabelPill";
 import { useBoard } from "../../state/BoardContext";
 import type { Board, Card } from "../../models/types";
 import { todayIso } from "../../models/dateValidation";
+import { isCardInDoneColumn } from "../../models/progress";
 
 export function PlannerCardRow({
   card,
@@ -31,8 +32,14 @@ export function PlannerCardRow({
     cursor: "grab",
   };
 
+  // A card is only "overdue" when it still needs attention. If it lives
+  // in a column the user marked as done/final (board.doneColumnIds), the
+  // work is considered completed — an overdue due date is no longer
+  // displayed as a problem.
   const isOverdue =
-    card.dueDate != null && card.dueDate < todayIso();
+    card.dueDate != null &&
+    card.dueDate < todayIso() &&
+    !isCardInDoneColumn(board, card.id);
 
   const onActivate = () => {
     void ctx.openBoard(board.id, card.id);

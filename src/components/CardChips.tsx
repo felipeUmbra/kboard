@@ -42,6 +42,9 @@ export function CardChips({
   /** Slot for chips that don't fit the standard pattern. Renders
    *  between the date badge and the progress bar. */
   renderExtra,
+  /** When true the card lives in a done/final column → the date
+   *  badge won't show the overdue flag. */
+  done = false,
 }: {
   card: CardModel;
   board: Board;
@@ -57,6 +60,7 @@ export function CardChips({
    *  chip row stays in the order declared here even when the
    *  caller adds new chip types. */
   renderExtra?: () => ReactNode;
+  done?: boolean;
 }) {
   return (
     <>
@@ -97,7 +101,7 @@ export function CardChips({
       )}
 
       {(card.startDate || card.dueDate) && (
-        <DateBadge startDate={card.startDate} dueDate={card.dueDate} />
+        <DateBadge startDate={card.startDate} dueDate={card.dueDate} done={done} />
       )}
 
       {renderExtra?.()}

@@ -12,6 +12,16 @@ export function BoardListView({
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
 
+  // Block creating a board whose name collides with an existing one
+  // (case-insensitive). Mirrors the guard in createNewBoard so the
+  // user gets inline feedback instead of a thrown error.
+  const trimmedName = name.trim();
+  const duplicateName = creating
+    ? board.boards.find(
+        (b) => b.name.trim().toLowerCase() === trimmedName.toLowerCase(),
+      )
+    : undefined;
+
   return (
     <div style={{ padding: "var(--space-5)", overflowY: "auto" }}>
       <div
@@ -148,7 +158,7 @@ export function BoardListView({
               <button
                 type="button"
                 className="btn btn--primary"
-                disabled={!name.trim()}
+                disabled={!name.trim() || !!duplicateName}
                 onClick={async () => {
                   await board.createNewBoard(name);
                   setCreating(false);
@@ -171,6 +181,19 @@ export function BoardListView({
               autoFocus
             />
           </div>
+          {duplicateName && (
+            <p
+              role="alert"
+              style={{
+                marginTop: "var(--space-2)",
+                fontSize: "var(--text-sm)",
+                color: "var(--color-danger, #eb5a46)",
+              }}
+            >
+              A board named “{duplicateName.name}” already exists. Choose a
+              different name.
+            </p>
+          )}
         </Modal>
       )}
     </div>

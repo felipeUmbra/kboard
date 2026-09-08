@@ -119,7 +119,7 @@ export function Column({ column, board, onOpenCard }: Props) {
                 className="btn btn--ghost"
                 style={{ width: "100%", justifyContent: "flex-start" }}
               >
-                {isDone ? "✓ Mark as not done" : "Mark as done column"}
+                {isDone ? "✓ Mark as not done" : "Mark as done / final column"}
               </button>
               <button
                 type="button"

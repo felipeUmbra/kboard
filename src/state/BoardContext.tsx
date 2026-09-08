@@ -440,10 +440,16 @@ export function BoardProvider({ children }: { children: ReactNode }) {
    */
   const publishChange = useCallback(
     (updater: (b: Board) => Board) => {
-      // Keep boardRef.current in sync so the setBoards callback below
-      // always finds the active board by ID, even when called from
-      // test hooks or other async paths.
-      boardRef.current = board;
+      // NOTE: do NOT assign `boardRef.current = board` here. This
+      // callback is memoized with [scheduleSave] only, so `board` in
+      // this closure is the value from the FIRST render (null, when no
+      // board is active). Writing it here would clobber the fresh
+      // value that's assigned during every render, and the setBoards
+      // matcher below would never find the active board — meaning the
+      // `boards` list (read by the Planner, boards list, and Sidebar)
+      // would silently stop reflecting in-board changes until a full
+      // refreshList() (Sync). boardRef.current is already kept fresh
+      // by the render-time assignment above.
       setBoard((prev) => (prev ? updater(prev) : prev));
       setBoards((prev) => {
         const cur = boardRef.current;
@@ -495,6 +501,7 @@ export function BoardProvider({ children }: { children: ReactNode }) {
         setBoard,
         setBoards,
         setLastError,
+        getBoards: () => boardsRef.current,
         withToken,
         reauthenticate: auth.reauthenticate,
         onBoardDeleted: handleBoardDeleted,

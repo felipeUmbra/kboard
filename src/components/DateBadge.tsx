@@ -12,9 +12,13 @@
 export function DateBadge({
   startDate,
   dueDate,
+  done = false,
 }: {
   startDate: string | null;
   dueDate: string | null;
+  /** When true, the card lives in a done/final column and the due
+   *  date is no longer treated as a deadline (no overdue flag). */
+  done?: boolean;
 }) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -28,6 +32,10 @@ export function DateBadge({
   if (daysUntilDue === null) {
     color = "var(--color-text-muted)";
     icon = "📅";
+  } else if (done) {
+    // In a done/final column: show the date neutrally, never as overdue.
+    color = "var(--color-text-muted)";
+    icon = "✓";
   } else if (daysUntilDue < 0) {
     color = "var(--color-danger, #eb5a46)";
     icon = "⚠";
@@ -57,13 +65,15 @@ export function DateBadge({
     <div
       className="kanban-card__date"
       title={
-        daysUntilDue !== null
-          ? daysUntilDue < 0
-            ? `Overdue by ${-daysUntilDue} day(s)`
-            : daysUntilDue === 0
-              ? "Due today"
-              : `Due in ${daysUntilDue} day(s)`
-          : "Start date"
+        done
+          ? "Completed"
+          : daysUntilDue !== null
+            ? daysUntilDue < 0
+              ? `Overdue by ${-daysUntilDue} day(s)`
+              : daysUntilDue === 0
+                ? "Due today"
+                : `Due in ${daysUntilDue} day(s)`
+            : "Start date"
       }
       style={{
         display: "inline-flex",

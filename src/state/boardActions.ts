@@ -67,6 +67,8 @@ export interface ActionDeps {
   setBoard: React.Dispatch<React.SetStateAction<Board | null>>;
   setBoards: React.Dispatch<React.SetStateAction<Board[]>>;
   setLastError: React.Dispatch<React.SetStateAction<string | null>>;
+  /** Live access to the current boards list (for duplicate-name guard). */
+  getBoards: () => Board[];
   /**
    * Returns a function that runs `op` with a valid Drive token,
    * retrying once with a fresh consent grant on 401/403.
@@ -191,10 +193,23 @@ export function buildActions(deps: ActionDeps): BoardActions {
     setBoard,
     setBoards,
     setLastError,
+    getBoards,
   } = deps;
   return {
     createNewBoard: async (name: string) => {
       const trimmed = name.trim() || "Untitled board";
+      // Prevent creating a second board with the same name as an
+      // existing active one (case-insensitive, after trimming).
+      const duplicate = getBoards().find(
+        (b) => b.name.trim().toLowerCase() === trimmed.toLowerCase(),
+      );
+      if (duplicate) {
+        const err = new Error(
+          `A board named "${duplicate.name}" already exists. Choose a different name.`,
+        );
+        setLastError(err.message);
+        throw err;
+      }
       const now = Date.now();
       const id = cryptoRandomId();
       const todoId = cryptoRandomId();

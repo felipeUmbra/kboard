@@ -46,6 +46,54 @@ test.describe("Board view (columns, cards, DnD)", () => {
     await expect(firstCol.locator(sel.columnDoneDot)).toHaveCount(1);
   });
 
+  test("Overdue flag is hidden for cards in a done/final column", async ({ page }) => {
+    // The default board already marks "Done" as a done/final column. Add a
+    // card directly into Done and give it a past due date via the test-only
+    // window hook. The card's date badge must NOT render the overdue (⚠)
+    // style — completed work doesn't have deadlines.
+    const bp = new BoardPage(page);
+    await bp.addCard("Done", "Finished late", "task");
+
+    // Set a past due date through __kboard_setCardDates.
+    const pastIso = await page.evaluate(() => {
+      const t = new Date();
+      t.setDate(t.getDate() - 3);
+      const y = t.getFullYear();
+      const m = String(t.getMonth() + 1).padStart(2, "0");
+      const d = String(t.getDate()).padStart(2, "0");
+      return `${y}-${m}-${d}`;
+    });
+    const cardId = await page
+      .locator(sel.card)
+      .filter({ hasText: "Finished late" })
+      .first()
+      .getAttribute("data-card-id");
+    expect(cardId).toBeTruthy();
+    await page.evaluate(
+      ({ cid, iso }) => {
+        const w = window as unknown as {
+          __kboard_setCardDates?: (
+            id: string,
+            d: { startDate?: string | null; dueDate?: string | null },
+          ) => void;
+        };
+        w.__kboard_setCardDates?.(cid, { dueDate: iso });
+      },
+      { cid: cardId!, iso: pastIso },
+    );
+
+    // Wait for React to flush, then verify the card's date badge is NOT
+    // marked overdue (no ⚠ icon, no danger coloring — title is "Completed").
+    const badge = page
+      .locator(sel.card)
+      .filter({ hasText: "Finished late" })
+      .first()
+      .locator(".kanban-card__date");
+    await expect(badge).toBeVisible({ timeout: 8_000 });
+    await expect(badge).not.toContainText("⚠");
+    await expect(badge).toHaveAttribute("title", "Completed");
+  });
+
   test("Add a card and it appears in the column", async ({ page }) => {
     const bp = new BoardPage(page);
     const firstCol = page.locator(sel.column).first();
