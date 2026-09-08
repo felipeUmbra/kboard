@@ -66,16 +66,6 @@ export default defineConfig({
     //     isMobile: true,
     //   },
     // },
-    {
-      name: "chromium-mobile-skip",
-      use: {
-        ...devices["Desktop Chrome"],
-        viewport: { width: 375, height: 667 },
-        hasTouch: true,
-        isMobile: true,
-      },
-      grep: /NEVER_MATCH___quarantined__/i,
-    },
   ],
   webServer: {
     // In CI, serve the pre-built production bundle via `vite preview` —
