@@ -115,16 +115,45 @@ async function bootWithCards(page: Page) {
   await setDates("Card yesterday", { dueDate: dates.yesterday });
   await setDates("Card start only", { startDate: dates.plus2 });
 
-  // Wait for React to commit the boards update before the test
-  // navigates to the planner. The setDates hook calls setBoards()
-  // which is async (React batches); without this the planner can
-  // mount and read the pre-date boards on the same frame.
-  await page.waitForTimeout(3000);
+  // Wait deterministically for the boards-list state the Planner reads
+  // (`ctx.boards`) to reflect the dates. The date-badge in the board view
+  // renders from the *active board* (`setBoard`); the Planner buckets from
+  // the *boards list* (`setBoards`). React may batch/commit those two
+  // updates at different times, so we must wait on the list itself — not
+  // on the board view — before navigating.
+  await expect
+    .poll(
+      async () => {
+        const boards = await page.evaluate(() => {
+          const w = window as unknown as {
+            __kboard_getBoardsDates?: () => Array<{
+              boardName: string;
+              cards: Array<{
+                title: string;
+                dueDate: string | null;
+                startDate: string | null;
+              }>;
+            }>;
+          };
+          return w.__kboard_getBoardsDates ? w.__kboard_getBoardsDates() : [];
+        });
+        const b = boards.find((x) => x.boardName === "Planner test board");
+        if (!b) return null;
+        const byTitle = new Map(b.cards.map((c) => [c.title, c]));
+        return (byTitle.get("Card today")?.dueDate ?? null) === dates.today &&
+          (byTitle.get("Card tomorrow")?.dueDate ?? null) === dates.tomorrow &&
+          (byTitle.get("Card yesterday")?.dueDate ?? null) === dates.yesterday &&
+          (byTitle.get("Card start only")?.startDate ?? null) === dates.plus2
+          ? "ready"
+          : "pending";
+      },
+      { timeout: 10_000, intervals: [250] },
+    )
+    .toBe("ready");
 }
 
 test.describe("Planner", () => {
-  // QUARANTINED: Fails intermittently on tablet — bootWithCards helper race
-  test.fixme("renders 7 day columns for the current week and highlights today", async ({
+  test("renders 7 day columns for the current week and highlights today", async ({
     page,
   }) => {
     await bootWithCards(page);
@@ -142,8 +171,7 @@ test.describe("Planner", () => {
     await expect(todayDays).toHaveCount(1);
   });
 
-  // QUARANTINED: Times out on desktop+tablet — bootWithCards helper race
-  test.fixme("cards with dueDate land in the correct day column; overdue gets the overdue chip", async ({
+  test("cards with dueDate land in the correct day column; overdue gets the overdue chip", async ({
     page,
   }) => {
     await bootWithCards(page);
@@ -162,8 +190,7 @@ test.describe("Planner", () => {
     ).toBeVisible();
   });
 
-  // QUARANTINED: Times out on desktop+tablet — bootWithCards helper race
-  test.fixme("start-only cards land under their startDate", async ({ page }) => {
+  test("start-only cards land under their startDate", async ({ page }) => {
     await bootWithCards(page);
     await page.getByTestId("topbar-planner").click();
     const dates = await isoDates(page);
@@ -173,22 +200,21 @@ test.describe("Planner", () => {
     await expect(col.getByText("Card start only")).toBeVisible();
   });
 
-  // QUARANTINED: Times out on desktop+tablet — bootWithCards helper race
-  test.fixme("dateless cards appear in the Sem data disclosure", async ({
+  test("dateless cards appear in the Sem data disclosure", async ({
     page,
   }) => {
     await bootWithCards(page);
     await page.getByTestId("topbar-planner").click();
     const dateless = page.getByTestId("planner-dateless");
     await expect(dateless).toBeVisible();
-    await expect(
-      dateless.getByTestId("planner-dateless-row"),
-    ).toHaveCount(1);
+    // The list lives inside a <details> disclosure which starts collapsed;
+    // open it before asserting the rows (otherwise they are hidden).
+    await dateless.locator("summary").click();
+    await expect(dateless.getByTestId("planner-dateless-row")).toHaveCount(1);
     await expect(dateless.getByText("Card no dates")).toBeVisible();
   });
 
-  // QUARANTINED: Fails on tablet — bootWithCards helper race
-  test.fixme("Hoje navigator shifts the week and Hoje returns to current", async ({
+  test("Hoje navigator shifts the week and Hoje returns to current", async ({
     page,
   }) => {
     await bootWithCards(page);
@@ -215,8 +241,7 @@ test.describe("Planner", () => {
     await expect(page.getByTestId("planner-today")).toBeDisabled();
   });
 
-  // QUARANTINED: Times out on desktop+tablet — bootWithCards helper race
-  test.fixme("clicking a card row opens the board and the card is in the DOM", async ({
+  test("clicking a card row opens the board and the card is in the DOM", async ({
     page,
   }) => {
     await bootWithCards(page);

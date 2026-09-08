@@ -440,24 +440,37 @@ export function BoardProvider({ children }: { children: ReactNode }) {
    */
   const publishChange = useCallback(
     (updater: (b: Board) => Board) => {
-      // NOTE: do NOT assign `boardRef.current = board` here. This
-      // callback is memoized with [scheduleSave] only, so `board` in
-      // this closure is the value from the FIRST render (null, when no
-      // board is active). Writing it here would clobber the fresh
-      // value that's assigned during every render, and the setBoards
-      // matcher below would never find the active board — meaning the
-      // `boards` list (read by the Planner, boards list, and Sidebar)
-      // would silently stop reflecting in-board changes until a full
-      // refreshList() (Sync). boardRef.current is already kept fresh
-      // by the render-time assignment above.
-      setBoard((prev) => (prev ? updater(prev) : prev));
+      // Apply the updater ONCE and reuse the result for both the active
+      // board and the matching entry in the boards list.
+      //
+      // CRITICAL: the updater must run a single time. Many updaters are
+      // NOT idempotent — e.g. `addCard`/`addChildCard` generate a fresh
+      // `cryptoRandomId()` on every invocation, and running them twice
+      // (once for `setBoard`, once for `setBoards`) would produce two
+      // DIFFERENT card ids in the two states, silently desynchronizing
+      // the board view from the Planner/boards list. That desync is what
+      // made the planner tests flaky (dates seeded into the active board
+      // never appeared in the boards list the Planner reads).
+      //
+      // We compute the next board from `boardRef.current` (kept fresh on
+      // every render AND by the spread below), then:
+      //   1. `setBoard(next)` — the open board view sees the change.
+      //   2. `setBoards(prev => prev.map(candidate => candidate.id === next.id ? next : candidate))`
+      //      — the boards list, planner, and inbox see the SAME object.
+      //   3. `scheduleSave()` — persist to Drive (debounced).
+      //
+      // Reading the active board id up-front from the refs (rather than
+      // ref writes inside the updaters) also sidesteps React's uncertainty
+      // about functional-updater execution order within a batch.
+      const current = boardRef.current;
+      if (!current) return; // no active board → nothing to publish
+      const next = updater(current);
+      boardRef.current = next;
+      setBoard(next);
       setBoards((prev) => {
-        const cur = boardRef.current;
-        const activeId = cur?.id;
-        const next = prev.map((b) => (b.id === activeId ? updater(b) : b));
-        // Always return the new list — the map callback creates a new
-        // array, so next is always a different reference from prev.
-        return next;
+        const list = prev.map((b) => (b.id === next.id ? next : b));
+        boardsRef.current = list;
+        return list;
       });
       scheduleSave();
     },
@@ -511,7 +524,7 @@ export function BoardProvider({ children }: { children: ReactNode }) {
 
   // Wire test-only window hooks (see useTestHooks). No-op in
   // production builds.
-  useTestHooks(actions, mutate);
+  useTestHooks(actions, mutate, boardsRef);
 
   const value = useMemo<BoardContextValue>(
     () => ({
@@ -566,6 +579,17 @@ type KboardTestWindow = Window & {
     cardId: string,
     dates: { startDate?: string | null; dueDate?: string | null },
   ) => void;
+  /** Test-only read of the boards list dates, for deterministic waits. */
+  __kboard_getBoardsDates?: () => Array<{
+    boardId: string;
+    boardName: string;
+    cards: Array<{
+      id: string;
+      title: string;
+      dueDate: string | null;
+      startDate: string | null;
+    }>;
+  }>;
 };
 
 /**
@@ -577,6 +601,7 @@ type KboardTestWindow = Window & {
 function useTestHooks(
   actions: BoardActions,
   mutate: (updater: (b: Board) => Board) => void,
+  boardsRef: React.MutableRefObject<Board[]>,
 ) {
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -598,8 +623,22 @@ function useTestHooks(
         mutate((b) => setCardDueDate(b, cardId, dates.dueDate!));
       }
     };
+    // Test-only read of the boards list dates (for deterministic waits).
+    w.__kboard_getBoardsDates = () => {
+      return boardsRef.current.map((b) => ({
+        boardId: b.id,
+        boardName: b.name,
+        cards: Object.values(b.cards).map((c) => ({
+          id: c.id,
+          title: c.title,
+          dueDate: c.dueDate ?? null,
+          startDate: c.startDate ?? null,
+        })),
+      }));
+    };
     return () => {
       delete w.__kboard_setCardDates;
+      delete w.__kboard_getBoardsDates;
     };
   }, [actions, mutate]);
 }
