@@ -32,8 +32,7 @@ async function bootApp(page: Page) {
 }
 
 test.describe("PWA", () => {
-  // QUARANTINED: Fails on desktop+tablet — requires production build for SW precache
-  test.fixme("manifest is linked, well-formed, and exposes icons + share_target", async ({
+  test("manifest is linked, well-formed, and exposes icons + share_target", async ({
     page,
   }) => {
     await bootApp(page);
@@ -81,8 +80,7 @@ test.describe("PWA", () => {
     }
   });
 
-  // QUARANTINED: Fails on desktop+tablet — requires production build for SW precache
-  test.fixme("service worker registers and precaches the app shell", async ({
+  test("service worker registers and precaches the app shell", async ({
     page,
   }) => {
     await bootApp(page);
@@ -137,8 +135,8 @@ test.describe("PWA", () => {
     expect(cachedPaths).toContain("/manifest.webmanifest");
     expect(cachedPaths).toContain("/icons/icon-192.png");
   });
-  // QUARANTINED: Fails on desktop+tablet — requires production build for offline fallback
-  test.fixme("offline navigation fallback serves the app shell", async ({
+
+  test("offline navigation fallback serves the app shell", async ({
     page,
     context,
   }) => {
@@ -205,17 +203,13 @@ test.describe("PWA", () => {
     expect(tags["mobile-web-app-capable"]).toBe("yes");
     expect(tags["apple-touch-icon"]).toBeTruthy();
   });
-  // QUARANTINED: Fails on desktop+tablet — requires production build for share_target
-  test.fixme("share_target handshake opens the share modal", async ({ page }) => {
-    await bootApp(page);
 
+  test("share_target handshake opens the share modal", async ({ page }) => {
     // The real Android share flow POSTs to /share-capture.html, which
     // writes the payload to IndexedDB and redirects to /?share=<id>.
-    // In the test we can't open a Web Share intent, so we simulate
-    // the IndexedDB write directly: this is the *output* of
-    // share-capture.html. The redirect from share-capture.html to
-    // /?share=<id> is then just `page.goto`. Together they exercise
-    // the full app-side flow (App.tsx -> shareInbox.take -> modal).
+    // In the test we simulate this by navigating to share-capture.html
+    // with the query parameters (as the Web App Manifest share_target does).
+    // The capture page writes to IndexedDB and redirects to /?share=<id>.
     const id = "test-share-" + Date.now();
     const payload = {
       title: "Test share title",
@@ -223,35 +217,33 @@ test.describe("PWA", () => {
       url: "https://example.com/article",
       ts: Date.now(),
     };
-    await page.evaluate(
-      async ({ id, payload }) => {
-        const open = indexedDB.open("kboard-share", 1);
-        await new Promise<void>((resolve, reject) => {
-          open.onupgradeneeded = () => {
-            const db = open.result;
-            if (!db.objectStoreNames.contains("pending")) {
-              db.createObjectStore("pending", { keyPath: "id" });
-            }
-          };
-          open.onsuccess = () => resolve();
-          open.onerror = () => reject(open.error);
-        });
-        const db = open.result;
-        const tx = db.transaction("pending", "readwrite");
-        tx.objectStore("pending").put({ id, payload });
-        await new Promise<void>((resolve, reject) => {
-          tx.oncomplete = () => resolve();
-          tx.onerror = () => reject(tx.error);
-          tx.onabort = () => reject(tx.error);
-        });
-        db.close();
-      },
-      { id, payload },
-    );
 
-    // Now navigate as if share-capture.html had redirected us.
-    await page.goto(`/?share=${encodeURIComponent(id)}`);
+    // Install fakes BEFORE navigating to share-capture.html so the fake
+    // auth is available when the redirect lands on /?share=<id> and the
+    // app initializes Google Identity Services.
+    await installFakesOnPage(page);
 
+    // Navigate to share-capture.html with query params - this simulates
+    // the Web App Manifest share_target action. The capture page writes
+    // to IndexedDB and redirects to /?share=<id>.
+    const params = new URLSearchParams({
+      id,
+      title: payload.title,
+      text: payload.text,
+      url: payload.url,
+    });
+    await page.goto(`/share-capture.html?${params.toString()}`);
+
+    // The capture page redirects to /?share=<id> after writing to IndexedDB.
+    await expect(page).toHaveURL(new RegExp(`/\\?share=${encodeURIComponent(id)}`));
+
+    // Now log in - the fake auth is already installed.
+    await page.getByRole("button", { name: /sign in with google/i }).click();
+    await expect(page.getByRole("heading", { name: "Your boards" })).toBeVisible({
+      timeout: 15_000,
+    });
+
+    // Now the share modal should be open.
     const shareModal = page.getByRole("dialog", { name: "Create board from share" });
     await expect(shareModal).toBeVisible({ timeout: 5_000 });
     await expect(page.getByTestId("share-board-name")).toHaveValue("Test share title");

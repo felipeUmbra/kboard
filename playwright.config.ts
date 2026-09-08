@@ -54,6 +54,30 @@ export default defineConfig({
         viewport: { width: 768, height: 1024 },
       },
     },
+    {
+      name: "pwa",
+      testMatch: "**/pwa.spec.ts",
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1280, height: 800 },
+        baseURL: process.env.CI ? "http://localhost:5172" : "http://localhost:5173",
+      },
+      // PWA project uses its own webServer (production preview)
+      webServer: {
+        command: process.env.CI
+          ? "npm run preview -- --port 5172 --strictPort"
+          : "npm run build && npm run preview -- --port 5173 --strictPort",
+        url: process.env.CI ? "http://localhost:5172" : "http://localhost:5173",
+        reuseExistingServer: !process.env.CI,
+        timeout: 180_000,
+        env: {
+          VITE_GOOGLE_CLIENT_ID: "fake-client-id.apps.googleusercontent.com",
+          BASE_PATH: "/",
+        },
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    },
     // QUARANTINED — all mobile tests fail due to modal layout issues at 375px
     // viewport. The Create button is consistently blocked by the modal body/input
     // overlay. Re-enable once the mobile CSS is fixed.
@@ -68,23 +92,15 @@ export default defineConfig({
     // },
   ],
   webServer: {
-    // In CI, serve the pre-built production bundle via `vite preview` —
-    // it handles 4 concurrent workers without the cold-compile latency
-    // that `vite dev` suffers on first request. Locally, `vite dev` is
-    // used for faster iteration (no build step needed).
+    // Main web server for dev/preview — used by chromium-desktop and chromium-tablet.
+    // In CI: serves the pre-built production bundle via `vite preview`.
+    // Locally: uses `vite dev` for fast iteration (no build step).
     command: process.env.CI ? "npm run preview -- --port 5172 --strictPort" : "npm run dev",
     url: "http://localhost:5172",
     reuseExistingServer: !process.env.CI,
-    // The preview server is pre-built and starts almost instantly. The dev
-    // server needs ~60 s on a cold cache. Give both a generous budget.
     timeout: 120_000,
     env: {
-      // A syntactically-valid client ID so the app's startup gate doesn't throw.
-      // Tests don't contact real Google — they intercept via tests/fixtures/fakeAuth.ts.
       VITE_GOOGLE_CLIENT_ID: "fake-client-id.apps.googleusercontent.com",
-      // The dev server uses BASE_PATH "/" (default). preview serves the
-      // pre-built bundle, also at "/". CI builds without BASE_PATH so the
-      // local preview matches what tests expect.
       BASE_PATH: "/",
     },
     stdout: "pipe",
