@@ -212,13 +212,57 @@ test.describe("Board view (columns, cards, DnD)", () => {
   });
 
   test("Drag a card from one column to another", async ({ page, isMobile }) => {
-    test.skip(isMobile, "Cross-column drag-and-drop requires both columns visible at once, which the mobile column rail doesn't support; mobile users tap cards and use the editor.");
     const bp = new BoardPage(page);
     await bp.addCard("To do", "Draggable");
     await expect(page.locator(sel.card).filter({ hasText: "Draggable" })).toBeVisible();
-    await bp.dragCardToColumn("Draggable", "Done");
+
+    if (isMobile) {
+      // Cross-column drag on mobile: only one column is expanded at a
+      // time, so the move targets overlay (MobileColumnTargets) lists
+      // the other columns as drop targets while the drag is active.
+      await bp.dragCardToMobileColumn("Draggable", "Done");
+      // Expand the target column so its DOM (and the moved card) renders.
+      await bp.selectColumnTab("Done");
+      const doneCol = page.locator(sel.column).filter({ hasText: "Done" });
+      await expect(doneCol.locator(sel.card).filter({ hasText: "Draggable" })).toBeVisible({ timeout: 5_000 });
+    } else {
+      await bp.dragCardToColumn("Draggable", "Done");
+      const doneCol = page.locator(sel.column).filter({ hasText: "Done" });
+      await expect(doneCol.locator(sel.card).filter({ hasText: "Draggable" })).toBeVisible({ timeout: 5_000 });
+    }
+  });
+
+  test("Card editor: move card via Column combobox", async ({ page, isMobile }) => {
+    const bp = new BoardPage(page);
+    // The fresh board has columns "To do", "In progress", "Done" in order.
+    await bp.addCard("To do", "Combobox card");
+    await bp.openCard("Combobox card");
+
+    const select = page.locator("#card-col-select");
+    await expect(select).toBeVisible();
+
+    // Options follow the board column order.
+    const optionNames = await select.locator("option").allInnerTexts();
+    expect(optionNames.map((t) => t.trim())).toEqual([
+      "1. To do",
+      "2. In progress",
+      "3. Done",
+    ]);
+
+    // Current column is auto-selected.
+    const currentOption = select.locator("option:checked");
+    await expect(currentOption).toHaveText(/To do/);
+
+    // Switch column + save the edit.
+    await bp.setCardColumn("Done");
+    await bp.closeCardEditor();
+
+    // The card must appear in the Done column.
+    if (isMobile) {
+      await bp.selectColumnTab("Done");
+    }
     const doneCol = page.locator(sel.column).filter({ hasText: "Done" });
-    await expect(doneCol.locator(sel.card).filter({ hasText: "Draggable" })).toBeVisible({ timeout: 5_000 });
+    await expect(doneCol.locator(sel.card).filter({ hasText: "Combobox card" })).toBeVisible({ timeout: 5_000 });
   });
 
   test("Cards persist across reload (verified via Drive)", async ({ page }) => {

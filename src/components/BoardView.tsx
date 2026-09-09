@@ -3,6 +3,7 @@ import { useBoard } from "../state/BoardContext";
 import { Column } from "./Column";
 import { CardEditor } from "./CardEditor";
 import { KanbanDndProvider } from "./KanbanDndContext";
+import { MobileColumnTargets } from "./MobileColumnTargets";
 import { useViewport } from "../hooks/useViewport";
 import type { AddCardDirection } from "../state/cardActions";
 import type { Card } from "../models/types";
@@ -217,6 +218,17 @@ export function BoardView({ onBackToList }: { onBackToList: () => void }) {
                   />
                 ))}
               </div>
+              {/**
+               * Mobile cross-column moves: the rail shows one column at a
+               * time, so this overlay lists every column as a drop target
+               * while a card is being dragged. Must live inside the
+               * KanbanDndProvider so it shares the DndContext's droppable
+               * registration and collision detection.
+               */}
+              <MobileColumnTargets
+                board={b}
+                currentColumnId={b.columns[mobileColumnIndex]?.id}
+              />
             </KanbanDndProvider>
           </div>
         </div>
