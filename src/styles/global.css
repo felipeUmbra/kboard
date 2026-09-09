@@ -27,6 +27,11 @@ body {
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
   overscroll-behavior-y: none;
+  /* Never let a stray child (topbar overflow, drawer, chip row) push the
+     page wider than the viewport — the app is designed to scroll
+     vertically only. Inner horizontal scroll surfaces (kanban, planner)
+     handle their own overflow. */
+  overflow-x: hidden;
 }
 
 img,
