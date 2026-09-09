@@ -278,6 +278,52 @@ export function CardEditor({
         />
       </div>
 
+      {/* Column combobox — lets the user move the card across columns
+          without leaving the editor. The current column is auto-selected
+          and options follow the board's column order. */}
+      {(() => {
+        const currentCol = board.columns.find((c) =>
+          c.cardIds.includes(safeCard.id),
+        );
+        return (
+          <div style={{ marginBottom: "var(--space-5)" }}>
+            <label className="label" htmlFor="card-col-select">
+              Column
+            </label>
+            <select
+              id="card-col-select"
+              className="select"
+              value={currentCol?.id ?? ""}
+              disabled={isNewCard}
+              onChange={(e) => {
+                const toColumnId = e.target.value;
+                if (!toColumnId || toColumnId === currentCol?.id) return;
+                const toCol = board.columns.find((c) => c.id === toColumnId);
+                if (!toCol) return;
+                ctx.moveCard(safeCard.id, toColumnId, toCol.cardIds.length);
+              }}
+            >
+              {board.columns.map((c, i) => (
+                <option key={c.id} value={c.id}>
+                  {i + 1}. {c.name}
+                </option>
+              ))}
+            </select>
+            {currentCol && (
+              <span
+                style={{
+                  fontSize: "var(--text-xs)",
+                  color: "var(--color-text-muted)",
+                }}
+              >
+                {currentCol.cardIds.length} card
+                {currentCol.cardIds.length === 1 ? "" : "s"} in column
+              </span>
+            )}
+          </div>
+        );
+      })()}
+
       <div style={{ marginBottom: "var(--space-5)" }}>
         <label className="label">Type</label>
         <div

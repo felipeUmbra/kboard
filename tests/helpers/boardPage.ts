@@ -310,6 +310,39 @@ export class BoardPage {
       .waitFor({ state: "visible" });
   }
 
+  /**
+   * Move the card to another column via the Card Editor's "Column"
+   * combobox. The combobox options follow the board column order and
+   * the current column is pre-selected; the change applies immediately
+   * (like the Type radio group) and commits on Save.
+   */
+  async setCardColumn(columnName: string) {
+    const select = this.page.locator("#card-col-select");
+    await select.waitFor({ state: "visible", timeout: 5_000 });
+    // The option text is "N. <name>" — match by the column name portion.
+    const option = select
+      .locator("option")
+      .filter({ hasText: new RegExp(columnName, "i") })
+      .first();
+    const value = await option.getAttribute("value");
+    if (!value) throw new Error(`No option for column "${columnName}"`);
+    await select.selectOption(value);
+    await expect(select).toHaveValue(value, { timeout: 3_000 });
+  }
+
+  /** Read the currently-selected column name from the editor combobox. */
+  async getCardColumn(): Promise<string> {
+    const select = this.page.locator("#card-col-select");
+    await select.waitFor({ state: "visible", timeout: 5_000 });
+    const value = await select.inputValue();
+    return (
+      (await select
+        .locator(`option[value="${value}"]`)
+        .innerText()
+        .catch(() => "")) ?? ""
+    );
+  }
+
   async setDescription(text: string) {
     const editor = this.page.locator(sel.tiptap).first();
     await editor.click();
@@ -355,6 +388,70 @@ export class BoardPage {
     await this.page.mouse.up();
     // Wait for the move to settle before the next assertion / drag.
     await this.page.waitForTimeout(100);
+  }
+
+  /**
+   * Mobile-only: drag a card onto a column name in the cross-column
+   * drop overlay (`MobileColumnTargets`). The overlay appears only
+   * while a drag is active, pinned over the column rail on the left
+   * edge, so we long-press the card, move left until the overlay
+   * shows, then drop onto the target column's entry.
+   */
+  async dragCardToMobileColumn(cardTitle: string, toColumnName: string) {
+    const card = this.page.locator(sel.card).filter({ hasText: cardTitle }).first();
+    await card.waitFor({ state: "visible", timeout: 10_000 });
+    const cardBox = await card.boundingBox();
+    if (!cardBox) throw new Error("Could not find card bounding box");
+
+    // Start the drag at the card's center; the long-press is handled by
+    // dnd-kit's TouchSensor (250ms), so hold before moving.
+    await this.page.mouse.move(cardBox.x + cardBox.width / 2, cardBox.y + cardBox.height / 2);
+    await this.page.mouse.down();
+    await this.page.waitForTimeout(350);
+    // Nudge to activate the sensor, then head toward the left edge where
+    // the overlay appears after drag start.
+    await this.page.mouse.move(cardBox.x + cardBox.width / 2 - 20, cardBox.y + 20, { steps: 6 });
+
+    // Wait for the overlay (rendered only while dragging).
+    const overlay = this.page.locator(".mobile-move-targets");
+    await overlay.waitFor({ state: "visible", timeout: 3_000 });
+    // The overlay has a 200ms slide-in animation; wait for it to settle
+    // so bounding boxes are stable before targeting a column entry.
+    await this.page.waitForTimeout(250);
+
+    const target = overlay
+      .locator(".mobile-move-target")
+      .filter({ hasText: new RegExp(toColumnName, "i") })
+      .first();
+
+    // Move onto the target in small steps, re-reading its bounding box
+    // until the drop target reports data-over="true". This converges
+    // even if the overlay is still animating (the box read retries as
+    // the transform settles) and verifies collision detection actually
+    // resolved the drop to this target before we release the pointer.
+    const targetBox = await target.boundingBox();
+    if (!targetBox) throw new Error("Could not find mobile move target bounding box");
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const box = await target.boundingBox();
+      if (box) {
+        await this.page.mouse.move(
+          box.x + box.width / 2,
+          box.y + box.height / 2,
+          { steps: 5 },
+        );
+      }
+      if ((await target.getAttribute("data-over")) === "true") break;
+      await this.page.waitForTimeout(60);
+    }
+    await expect
+      .poll(
+        async () => await target.getAttribute("data-over"),
+        { timeout: 3_000 },
+      )
+      .toBe("true");
+    await this.page.mouse.up();
+    // Wait for the move to settle (and the overlay to unmount).
+    await this.page.waitForTimeout(150);
   }
 
   // ── Drive introspection ───────────────────────────────────────────
