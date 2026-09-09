@@ -36,7 +36,10 @@ export function TopBar({
         📋 Kboard
       </button>
       {activeBoard && (
-        <span style={{ color: "rgba(255,255,255,0.85)", fontSize: "var(--text-sm)" }}>
+        <span
+          className="topbar__board"
+          style={{ color: "rgba(255,255,255,0.85)", fontSize: "var(--text-sm)" }}
+        >
           / {activeBoard.name}
           {syncing && <span style={{ marginLeft: 8, opacity: 0.7 }}>· syncing…</span>}
         </span>

@@ -40,7 +40,11 @@ export const sel = {
   columnOptions: 'button[aria-label="Column options"]',
   columnAddBtn: ".kanban-column__add-btn",
   columnDoneDot: ".kanban-column__done-dot",
-  mobileColumnTab: ".kanban-tab",
+  // Mobile: collapsible column rail. Each strip is a vertical label; the
+  // count "(n)" sits at the bottom. data-active marks the expanded column.
+  mobileColumnTab: ".kanban-rail__strip",
+  mobileColumnRail: ".kanban-rail",
+  mobileColumnRailAdd: 'button[aria-label="Add column"]',
 
   // Card
   card: ".kanban-card",
@@ -104,4 +108,9 @@ export const sel = {
   // Mobile menu / drawer
   mobileMenuButton: 'button[aria-label="Open menu"]',
   backToListButton: 'button[aria-label="Back to boards"]',
+  // Mobile collapsible sidebar rail — icon toolbar when collapsed.
+  sidebarRail: ".sidebar__rail",
+  sidebarRailExpand: 'button[aria-label="Expand menu"]',
+  sidebarRailSection: (label: string) =>
+    `.sidebar__rail-btn[aria-label="${label}"]`,
 } as const;

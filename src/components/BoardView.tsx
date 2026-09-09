@@ -27,6 +27,15 @@ export function BoardView({ onBackToList }: { onBackToList: () => void }) {
     setDraftName(board.activeBoard.name);
   }, [board.activeBoard?.id]);
 
+  // Keep the expanded mobile column index within bounds — columns can be
+  // deleted/reconciled while one is selected.
+  useEffect(() => {
+    if (!board.activeBoard) return;
+    if (mobileColumnIndex >= board.activeBoard.columns.length) {
+      setMobileColumnIndex(0);
+    }
+  }, [board.activeBoard?.columns.length, mobileColumnIndex]);
+
   // Focus-card routing: when Planner / Inbox opens a board with a
   // focusCardId, scroll that card into view and clear the hint so a
   // subsequent openBoard(boardId) (no card id) doesn't re-trigger.
@@ -98,6 +107,11 @@ export function BoardView({ onBackToList }: { onBackToList: () => void }) {
   const columnsToShow =
     viewport.isMobile ? [b.columns[mobileColumnIndex]].filter(Boolean) : b.columns;
 
+  const handleAddColumn = () => {
+    const name = prompt("Column name");
+    if (name && name.trim()) board.addColumn(name);
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
       <div
@@ -159,58 +173,81 @@ export function BoardView({ onBackToList }: { onBackToList: () => void }) {
         </button>
       </div>
 
-      {viewport.isMobile && (
-        <div
-          className="kanban-tabs"
-          role="tablist"
-          aria-label="Columns"
-        >
-          {b.columns.map((c, i) => (
-            <button
-              key={c.id}
-              type="button"
-              role="tab"
-              aria-selected={i === mobileColumnIndex}
-              className="kanban-tab"
-              data-active={i === mobileColumnIndex ? "true" : "false"}
-              onClick={() => setMobileColumnIndex(i)}
-            >
-              {c.name}
-              <span className="kanban-tab__count">{c.cardIds.length}</span>
-            </button>
-          ))}
-        </div>
-      )}
-
-      <div className="kanban-scroll">
-        <KanbanDndProvider>
-          <div className="kanban">
-            {columnsToShow.map((col) => (
-              <Column
-                key={col.id}
-                column={col}
-                board={b}
-                onOpenCard={openCard}
-              />
+      {viewport.isMobile ? (
+        <div className="kanban-mobile">
+          {/* Collapsible column rail — each column is a vertical strip; the
+              name reads vertically and the card count "(xx)" sits at the
+              bottom in normal (horizontal) orientation. Tapping a strip
+              expands that column into the content area. */}
+          <div className="kanban-rail" role="tablist" aria-label="Columns">
+            {b.columns.map((c, i) => (
+              <button
+                key={c.id}
+                type="button"
+                role="tab"
+                aria-selected={i === mobileColumnIndex}
+                className="kanban-rail__strip"
+                data-active={i === mobileColumnIndex ? "true" : "false"}
+                data-done={b.doneColumnIds.includes(c.id) ? "true" : "false"}
+                onClick={() => setMobileColumnIndex(i)}
+              >
+                <span className="kanban-rail__name">{c.name}</span>
+                <span className="kanban-rail__count">({c.cardIds.length})</span>
+              </button>
             ))}
             <button
               type="button"
-              className="btn"
-              style={{
-                minWidth: "var(--column-w)",
-                alignSelf: "flex-start",
-                justifyContent: "flex-start",
-              }}
-              onClick={() => {
-                const name = prompt("Column name");
-                if (name && name.trim()) board.addColumn(name);
-              }}
+              className="kanban-rail__add"
+              onClick={handleAddColumn}
+              aria-label="Add column"
+              title="Add column"
             >
-              + Add column
+              +
             </button>
           </div>
-        </KanbanDndProvider>
-      </div>
+          <div className="kanban-rail__content">
+            <KanbanDndProvider>
+              <div className="kanban">
+                {columnsToShow.map((col) => (
+                  <Column
+                    key={col.id}
+                    column={col}
+                    board={b}
+                    onOpenCard={openCard}
+                  />
+                ))}
+              </div>
+            </KanbanDndProvider>
+          </div>
+        </div>
+      ) : (
+        <div className="kanban-scroll">
+          <KanbanDndProvider>
+            <div className="kanban">
+              {columnsToShow.map((col) => (
+                <Column
+                  key={col.id}
+                  column={col}
+                  board={b}
+                  onOpenCard={openCard}
+                />
+              ))}
+              <button
+                type="button"
+                className="btn"
+                style={{
+                  minWidth: "var(--column-w)",
+                  alignSelf: "flex-start",
+                  justifyContent: "flex-start",
+                }}
+                onClick={handleAddColumn}
+              >
+                + Add column
+              </button>
+            </div>
+          </KanbanDndProvider>
+        </div>
+      )}
 
       {editingCardId && (
         <CardEditor

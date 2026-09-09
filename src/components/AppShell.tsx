@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { TopBar } from "./TopBar";
 import { Sidebar } from "./Sidebar";
 import { useViewport } from "../hooks/useViewport";
@@ -12,34 +12,30 @@ export function AppShell({
   onNavigateList: () => void;
   onNavigatePlanner?: () => void;
 }) {
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [railCollapsed, setRailCollapsed] = useState(false);
   const viewport = useViewport();
-
-  // Close drawer when crossing to desktop
-  useEffect(() => {
-    if (!viewport.isMobile) setDrawerOpen(false);
-  }, [viewport.isMobile]);
+  // Single source of truth for the sidebar's horizontal collapse state on ALL
+  // viewports. On mobile the rail starts collapsed (icons only); desktop and
+  // tablet start expanded. The topbar hamburger toggles it.
+  const [railCollapsed, setRailCollapsed] = useState(viewport.isMobile);
 
   return (
     <div className="app-shell">
       <TopBar
-        onOpenMenu={() => {
-          if (viewport.isMobile) setDrawerOpen(true);
-          else setRailCollapsed((v) => !v);
-        }}
+        onOpenMenu={() => setRailCollapsed((v) => !v)}
         onNavigateList={onNavigateList}
         onNavigatePlanner={onNavigatePlanner}
-        menuLabel={viewport.isMobile ? "Open menu" : railCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+        menuLabel={railCollapsed ? "Expand menu" : "Collapse menu"}
       />
       <div className="app-main">
-        {viewport.isMobile && drawerOpen && (
-          <div className="sidebar__backdrop" onClick={() => setDrawerOpen(false)} />
+        {viewport.isMobile && !railCollapsed && (
+          <div className="sidebar__backdrop" onClick={() => setRailCollapsed(true)} />
         )}
         <Sidebar
-          open={viewport.isMobile ? drawerOpen : true}
-          collapsed={!viewport.isMobile && railCollapsed}
-          onClose={() => setDrawerOpen(false)}
+          open={true}
+          collapsed={railCollapsed}
+          onClose={() => setRailCollapsed(true)}
+          onExpand={() => setRailCollapsed(false)}
+          onToggle={() => setRailCollapsed((v) => !v)}
         />
         <div className="app-content">{children}</div>
       </div>

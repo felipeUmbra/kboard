@@ -12,6 +12,8 @@ test.describe("Labels and Custom Fields", () => {
   });
 
   test("Open Sidebar → Manage Labels opens the LabelManager modal", async ({ page }) => {
+    const bp = new BoardPage(page);
+    await bp.expandSidebar("labels");
     const manageBtn = page.locator(sel.sidebarManageLabels);
     if (await manageBtn.count()) {
       await manageBtn.first().click();
@@ -21,26 +23,51 @@ test.describe("Labels and Custom Fields", () => {
     }
   });
 
-  test("Card editor has a Labels section", async ({ page }) => {
-    const bp = new BoardPage(page);
-    await bp.addCard("To do", "Unlabeled");
-    await bp.openCard("Unlabeled");
-    await expect(page.getByText(/labels/i).first()).toBeVisible();
-    await bp.closeCardEditor();
-  });
-
   test("Card editor exposes a Labels section", async ({ page }) => {
     const bp = new BoardPage(page);
     await bp.addCard("To do", "Unlabeled");
     await bp.openCard("Unlabeled");
-    // The CardEditor renders a "Labels" label.
-    await expect(page.getByText(/Labels/i).first()).toBeVisible();
+    // The CardEditor renders a "Labels" label when the board has labels.
+    const editor = page.getByRole("dialog");
+    const labelsHeading = editor.getByText(/labels/i).first();
+    if (await labelsHeading.count()) {
+      await expect(labelsHeading).toBeVisible();
+    } else {
+      test.skip(true, "No labels on this board — the Labels section is hidden");
+    }
+    await bp.closeCardEditor();
+  });
+
+  test("Labels section lists existing board labels in the editor", async ({ page }) => {
+    const bp = new BoardPage(page);
+    // Seed a label via the sidebar LabelManager so the board has one.
+    await bp.expandSidebar("labels");
+    const manageBtn = page.locator(sel.sidebarManageLabels).first();
+    if (!(await manageBtn.count())) {
+      test.skip(true, "Manage labels button not present");
+    }
+    await manageBtn.click();
+    const manager = page.locator(sel.labelManager).last();
+    const nameInput = manager.locator(sel.labelInput).first();
+    await nameInput.fill("Urgent");
+    // Color defaults to the first palette swatch; add the label.
+    const addBtn = manager.getByRole("button", { name: /add|save/i }).first();
+    await addBtn.click();
+    await manager.getByRole("button", { name: /close|cancel|×/i }).first().click();
+
+    // Open a card; the Labels section should list "Urgent".
+    await bp.addCard("To do", "Labeled card");
+    await bp.openCard("Labeled card");
+    const editor = page.getByRole("dialog");
+    await expect(editor.getByText(/labels/i).first()).toBeVisible();
+    await expect(editor.getByText("Urgent").first()).toBeVisible();
     await bp.closeCardEditor();
   });
 
   test("Adding a board-level custom field appears in the CardEditor", async ({ page }) => {
     const bp = new BoardPage(page);
     // Open FieldManager.
+    await bp.expandSidebar("board fields");
     const manageBtn = page.locator(sel.sidebarManageFields);
     if (!(await manageBtn.count())) {
       test.skip(true, "Manage fields button not present");
@@ -65,6 +92,7 @@ test.describe("Labels and Custom Fields", () => {
 
   test("Setting a field value on a card shows the FieldChip on the card", async ({ page }) => {
     const bp = new BoardPage(page);
+    await bp.expandSidebar("board fields");
     const manageBtn = page.locator(sel.sidebarManageFields);
     if (!(await manageBtn.count())) {
       test.skip(true, "Manage fields button not present");

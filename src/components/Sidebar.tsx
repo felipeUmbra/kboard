@@ -12,10 +12,14 @@ export function Sidebar({
   open,
   collapsed,
   onClose,
+  onExpand,
+  onToggle,
 }: {
   open: boolean;
   collapsed: boolean;
   onClose: () => void;
+  onExpand?: () => void;
+  onToggle?: () => void;
 }) {
   const board = useBoard();
   const [showLabels, setShowLabels] = useState(false);
@@ -23,6 +27,8 @@ export function Sidebar({
   const [typeManagerFor, setTypeManagerFor] = useState<CardType | null>(null);
   const viewport = useViewport();
 
+  // Desktop/tablet collapsed rail: render a thin empty aside (existing
+  // behavior). The responsive CSS hides the title/body at this width.
   if (collapsed && !viewport.isMobile) {
     return (
       <aside className="sidebar" data-open="true" data-collapsed="true">
@@ -30,6 +36,98 @@ export function Sidebar({
           <span className="sidebar__title" style={{ display: "none" }}>Menu</span>
         </div>
         <div className="sidebar__body" style={{ display: "none" }} />
+      </aside>
+    );
+  }
+
+  // Mobile collapsed rail: a narrow vertical rail that shows only icons.
+  // Tapping an icon expands the full menu (which also scrolls to that
+  // section before expanding).
+  if (collapsed && viewport.isMobile) {
+    const expandAndScroll = (section: string | null) => {
+      if (section) {
+        // Remember where to scroll; the expanded body renders after state
+        // flips, so defer the scroll to a microtask after the re-render.
+        window.requestAnimationFrame(() => {
+          const el = document.querySelector<HTMLElement>(
+            `.sidebar__section[data-section="${section}"]`,
+          );
+          el?.scrollIntoView({ block: "start", behavior: "smooth" });
+        });
+      }
+      onExpand?.();
+    };
+    return (
+      <aside
+        className="sidebar sidebar--rail"
+        data-open="true"
+        data-collapsed="true"
+      >
+        <div className="sidebar__rail" role="toolbar" aria-label="Menu">
+          <button
+            type="button"
+            className="sidebar__rail-btn"
+            onClick={onToggle}
+            aria-label="Expand menu"
+            title="Expand menu"
+          >
+            ☰
+          </button>
+          <button
+            type="button"
+            className="sidebar__rail-btn"
+            onClick={() => expandAndScroll("boards")}
+            aria-label="Boards"
+            title="Boards"
+            data-section="boards"
+          >
+            📋
+          </button>
+          {board.activeBoard && (
+            <>
+              <button
+                type="button"
+                className="sidebar__rail-btn"
+                onClick={() => expandAndScroll("labels")}
+                aria-label="Labels"
+                title="Labels"
+                data-section="labels"
+              >
+                🏷️
+              </button>
+              <button
+                type="button"
+                className="sidebar__rail-btn"
+                onClick={() => expandAndScroll("types")}
+                aria-label="Card types"
+                title="Card types"
+                data-section="types"
+              >
+                🃏
+              </button>
+              <button
+                type="button"
+                className="sidebar__rail-btn"
+                onClick={() => expandAndScroll("fields")}
+                aria-label="Board fields"
+                title="Board fields"
+                data-section="fields"
+              >
+                🧩
+              </button>
+              <button
+                type="button"
+                className="sidebar__rail-btn"
+                onClick={() => expandAndScroll("done")}
+                aria-label="Done columns"
+                title="Done columns"
+                data-section="done"
+              >
+                ✔️
+              </button>
+            </>
+          )}
+        </div>
       </aside>
     );
   }
@@ -51,7 +149,7 @@ export function Sidebar({
       </div>
 
       <div className="sidebar__body">
-        <div className="sidebar__section">
+        <div className="sidebar__section" data-section="boards">
           <h3 className="sidebar__section-title">
             Boards
             <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-muted)" }}>
@@ -95,7 +193,7 @@ export function Sidebar({
 
         {board.activeBoard && (
           <>
-            <div className="sidebar__section">
+            <div className="sidebar__section" data-section="labels">
               <h3 className="sidebar__section-title">
                 Labels
                 <button
@@ -128,7 +226,7 @@ export function Sidebar({
               )}
             </div>
 
-            <div className="sidebar__section">
+            <div className="sidebar__section" data-section="types">
               <h3 className="sidebar__section-title">Card types</h3>
               {board.activeBoard.cardTypes.map((cfg) => {
                 const meta = CARD_TYPE_META[cfg.type];
@@ -212,7 +310,7 @@ export function Sidebar({
               })}
             </div>
 
-            <div className="sidebar__section">
+            <div className="sidebar__section" data-section="fields">
               <h3 className="sidebar__section-title">
                 Board fields
                 <button
@@ -317,7 +415,7 @@ export function Sidebar({
       )}
 
       {board.activeBoard && (
-        <div className="sidebar__section">
+        <div className="sidebar__section" data-section="done">
           <h3 className="sidebar__section-title">Done columns</h3>
           <p
             style={{

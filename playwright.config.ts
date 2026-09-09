@@ -78,18 +78,17 @@ export default defineConfig({
         stderr: "pipe",
       },
     },
-    // QUARANTINED — all mobile tests fail due to modal layout issues at 375px
-    // viewport. The Create button is consistently blocked by the modal body/input
-    // overlay. Re-enable once the mobile CSS is fixed.
-    // {
-    //   name: "chromium-mobile",
-    //   use: {
-    //     ...devices["Desktop Chrome"],
-    //     viewport: { width: 375, height: 667 },
-    //     hasTouch: true,
-    //     isMobile: true,
-    //   },
-    // },
+    {
+      name: "chromium-mobile",
+      testIgnore: "**/pwa.spec.ts",
+      use: {
+        // A real mobile device descriptor gives consistent emulation
+        // (viewport, deviceScaleFactor, isMobile, hasTouch, userAgent).
+        // Mixing `Desktop Chrome` with `isMobile: true` produced a scaled
+        // layout viewport (404×717) that broke Playwright's hit testing.
+        ...devices["Pixel 5"],
+      },
+    },
   ],
   webServer: {
     // Main web server for dev/preview — used by chromium-desktop and chromium-tablet.

@@ -12,11 +12,15 @@ test.describe("Board view (columns, cards, DnD)", () => {
   });
 
   test("Default columns render (To Do / In progress / Done)", async ({ page, isMobile }) => {
-    // On mobile, only the active column is visible at a time. The column
-    // tabs at the top expose the others — verify all 3 are present as tabs.
+    // On mobile only the active column is visible at a time; the collapsible
+    // column rail exposes all of them as vertical strips.
     if (isMobile) {
+      await expect(page.locator(sel.mobileColumnRail)).toBeVisible({ timeout: 5_000 });
       await expect(page.locator(sel.mobileColumnTab)).toHaveCount(3, { timeout: 5_000 });
-      await expect(page.locator(sel.mobileColumnTab).first()).toBeVisible();
+      // The expanded (default first) column's strip is marked active and its
+      // content is rendered.
+      await expect(page.locator(sel.mobileColumnTab).first()).toHaveAttribute("data-active", "true");
+      await expect(page.locator(sel.column).first()).toBeVisible();
     } else {
       await expect(page.locator(sel.column)).toHaveCount(3, { timeout: 5_000 });
       await expect(page.locator(sel.columnTitle).first()).toBeVisible();
@@ -24,10 +28,15 @@ test.describe("Board view (columns, cards, DnD)", () => {
   });
 
   test("Add column via prompt", async ({ page, isMobile }) => {
-    test.skip(isMobile, "Adding a column requires the + Add column button which sits beside the full board on desktop/tablet; on mobile the toolbar is collapsed.");
     const bp = new BoardPage(page);
     await bp.addColumn("Backlog");
-    await expect(page.locator(sel.column).filter({ hasText: "Backlog" })).toBeVisible();
+    // Mobile: the new column appears as a strip in the rail and can be
+    // expanded. Desktop/tablet: the column is added inline.
+    if (isMobile) {
+      await expect(page.locator(sel.mobileColumnTab).filter({ hasText: "Backlog" })).toBeVisible();
+    } else {
+      await expect(page.locator(sel.column).filter({ hasText: "Backlog" })).toBeVisible();
+    }
   });
 
   test("Rename column by clicking title", async ({ page }) => {
@@ -203,7 +212,7 @@ test.describe("Board view (columns, cards, DnD)", () => {
   });
 
   test("Drag a card from one column to another", async ({ page, isMobile }) => {
-    test.skip(isMobile, "Dragging across non-visible columns isn't a real mobile flow; mobile users tap to open cards and use the card editor's move controls.");
+    test.skip(isMobile, "Cross-column drag-and-drop requires both columns visible at once, which the mobile column rail doesn't support; mobile users tap cards and use the editor.");
     const bp = new BoardPage(page);
     await bp.addCard("To do", "Draggable");
     await expect(page.locator(sel.card).filter({ hasText: "Draggable" })).toBeVisible();

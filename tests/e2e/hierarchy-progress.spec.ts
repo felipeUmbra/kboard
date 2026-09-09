@@ -33,7 +33,7 @@ test.describe("Parent / Child hierarchy and Progress", () => {
   });
 
   test("Progress bar updates as tasks are moved to Done", async ({ page, isMobile }) => {
-    test.skip(isMobile, "Cross-column drag-and-drop requires both columns visible at once, which the mobile tab UI doesn't support.");
+    test.skip(isMobile, "Cross-column drag-and-drop requires both columns visible at once, which the mobile column rail doesn't support.");
     const bp = new BoardPage(page);
     // Add 2 tasks; both initially in "To do".
     await bp.addCard("To do", "Task A");
@@ -49,7 +49,7 @@ test.describe("Parent / Child hierarchy and Progress", () => {
   });
 
   test("Drag & drop updates progress bar color", async ({ page, isMobile }) => {
-    test.skip(isMobile, "Cross-column drag-and-drop requires both columns visible at once, which the mobile tab UI doesn't support.");
+    test.skip(isMobile, "Cross-column drag-and-drop requires both columns visible at once, which the mobile column rail doesn't support.");
     const bp = new BoardPage(page);
     // Create an Epic, give it 3 children, move 2 to Done — Epic progress >= 66% → green.
     await bp.addCard("To do", "Parent Epic", "epic");
@@ -166,7 +166,7 @@ test.describe("Parent / Child hierarchy and Progress", () => {
     await titleInput.fill("First Story");
     await expect(page.getByRole("button", { name: /^save$/i })).toBeEnabled();
     await expect(page.getByRole("button", { name: /open parent big epic/i })).toBeVisible();
-    await page.getByRole("button", { name: /^save$/i }).click();
+    await bp.clickButtonFallback(page.getByRole("button", { name: /^save$/i }));
     await expect(page.getByLabel("Card title")).not.toBeVisible();
     await bp.openCard("First Story");
     await expect(page.getByRole("button", { name: /open parent big epic/i })).toBeVisible();
@@ -184,7 +184,7 @@ test.describe("Parent / Child hierarchy and Progress", () => {
     // card's title).
     const titleInput = page.getByLabel("Card title");
     await titleInput.fill("My Story");
-    await page.getByRole("button", { name: /^save$/i }).click();
+    await bp.clickButtonFallback(page.getByRole("button", { name: /^save$/i }));
     await expect(page.getByLabel("Card title")).not.toBeVisible();
     await bp.openCard("Lonely Task");
     await expect(page.getByRole("button", { name: /open parent my story/i })).toBeVisible();
@@ -202,7 +202,9 @@ test.describe("Parent / Child hierarchy and Progress", () => {
     // dialog has both an X (aria-label "Close") and a "Close" button;
     // both share the same handler. Use getByText to target the visible
     // text of the footer button.
-    await page.getByRole("dialog").getByText("Close", { exact: true }).click();
+    await bp.clickButtonFallback(
+      page.getByRole("dialog").getByText("Close", { exact: true }),
+    );
     await expect(page.getByLabel("Card title")).not.toBeVisible();
     await expect(page.getByText("Untitled")).toHaveCount(0);
   });
@@ -251,12 +253,16 @@ test.describe("Parent / Child hierarchy and Progress", () => {
     await page.waitForTimeout(600);
     // Cancel the confirm: the modal stays open with the draft.
     page.once("dialog", (d) => d.dismiss());
-    await page.getByRole("dialog").getByText("Close", { exact: true }).click();
+    await bp.clickButtonFallback(
+      page.getByRole("dialog").getByText("Close", { exact: true }),
+    );
     await expect(page.getByLabel("Card title")).toBeVisible();
     await expect(page.getByLabel("Card title")).toHaveValue("Editable renamed");
     // Accept the confirm: the modal closes and the draft is discarded.
     page.once("dialog", (d) => d.accept());
-    await page.getByRole("dialog").getByText("Close", { exact: true }).click();
+    await bp.clickButtonFallback(
+      page.getByRole("dialog").getByText("Close", { exact: true }),
+    );
     await expect(page.getByLabel("Card title")).not.toBeVisible();
     await bp.openCard("Editable");
     await expect(page.getByLabel("Card title")).toHaveValue("Editable");

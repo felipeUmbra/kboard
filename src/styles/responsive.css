@@ -421,29 +421,61 @@
 }
 
 /* ============================================================
-   MOBILE (<768px) — drawer sidebar, bottom sheet modals
+   MOBILE (<768px) — collapsible icon rail + bottom sheet modals
    ============================================================ */
 @media (max-width: 767.98px) {
   .topbar__menu-btn {
     display: inline-flex;
   }
 
+  /* Keep the header from overflowing on narrow screens. The board name is
+     secondary to the menu/logo and may truncate. */
+  .topbar__board {
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .topbar__user {
+    flex-shrink: 0;
+  }
+
+  .topbar__user .btn {
+    padding-left: var(--space-2);
+    padding-right: var(--space-2);
+  }
+
+  /* The sidebar is a horizontally-collapsible rail:
+       collapsed → a narrow inline icon rail (in the flex flow)
+       expanded → a full-width drawer that overlays the content. */
   .sidebar {
+    position: static;
+    inset: auto;
+    transform: none;
+    box-shadow: none;
+    width: var(--sidebar-w-collapsed);
+    transition: width var(--motion-base);
+    z-index: auto;
+  }
+
+  .sidebar[data-collapsed="false"] {
     position: fixed;
-    inset: 0 auto 0 0;
+    inset: var(--topbar-h) auto 0 0;
+    width: min(var(--sidebar-w), 86vw);
     z-index: var(--z-drawer);
-    transform: translateX(-100%);
     box-shadow: var(--shadow-xl);
+    animation: drawer-in var(--motion-base);
   }
 
-  .sidebar[data-open="true"] {
-    transform: translateX(0);
+  @keyframes drawer-in {
+    from { transform: translateX(-100%); }
+    to   { transform: translateX(0); }
   }
 
-  .sidebar__close {
-    display: inline-flex;
-  }
-
+  /* The backdrop only exists on mobile when the drawer is open
+     (rendered by AppShell). */
   .sidebar__backdrop {
     display: block;
     position: fixed;
@@ -451,6 +483,49 @@
     background: rgba(0, 0, 0, 0.4);
     z-index: calc(var(--z-drawer) - 1);
     animation: fade-in var(--motion-base);
+  }
+
+  /* Collapsed mobile rail hides the full menu content; only the icon
+     toolbar (.sidebar__rail) is rendered by the component. */
+  .sidebar[data-collapsed="true"] .sidebar__header,
+  .sidebar[data-collapsed="true"] .sidebar__body {
+    display: none;
+  }
+
+  .sidebar__rail {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-1);
+    padding: var(--space-2) 6px;
+    flex: 1;
+  }
+
+  .sidebar__rail-btn {
+    width: 100%;
+    height: var(--tap-target);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    border-radius: var(--radius-md);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: var(--color-text);
+  }
+
+  .sidebar__rail-btn:hover {
+    background: var(--color-border);
+  }
+
+  .sidebar__rail-btn:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  .sidebar__close {
+    display: inline-flex;
   }
 
   .modal-backdrop {
@@ -557,9 +632,14 @@
      the footer's buttons (Playwright reports
      "<div class="modal__body">…</div> intercepts pointer events").
      Lifting the footer above the body in the paint order fixes the
-     click target without changing the layout. */
+     click target without changing the layout. `isolation: isolate`
+     creates a fresh stacking context for the footer itself so the
+     body can never paint above it, and an opaque background stops any
+     body content from showing through underneath. */
   position: relative;
   z-index: 1;
+  isolation: isolate;
+  background: var(--color-surface);
 }
 
 

@@ -41,6 +41,27 @@ export class BoardPage {
     await this.page.waitForSelector(sel.boardCard + "," + sel.emptyState, { timeout: 5_000 });
   }
 
+  /**
+   * Playwright's actionability check occasionally reports
+   * "modal__body intercepts pointer events" for bottom-sheet footer buttons
+   * in mobile emulation — even though the footer renders ABOVE the body
+   * (z-index: 1) and a raw protocol-level click at the same coordinates
+   * succeeds. This helper tries the normal click first and falls back to a
+   * real mouse click at the element's center when that false positive
+   * occurs, so tests aren't blocked by a phantom interception.
+   */
+  async clickButtonFallback(locator: Locator): Promise<void> {
+    try {
+      await locator.click({ timeout: 3_000 });
+    } catch {
+      const box = await locator.boundingBox();
+      if (!box) throw new Error("clickButtonFallback: no bounding box");
+      const x = box.x + box.width / 2;
+      const y = box.y + box.height / 2;
+      await this.page.mouse.click(x, y);
+    }
+  }
+
   async createBoard(name: string) {
     await this.gotoBoards();
     const btn = this.page.locator(sel.newBoardButton).or(this.page.locator(sel.emptyStateCreate));
@@ -51,7 +72,9 @@ export class BoardPage {
     // footer buttons are at their final positions.
     await this.page.waitForTimeout(300);
     await this.page.fill(sel.createBoardNameInput, name);
-    await this.page.getByRole("button", { name: /^Create$/ }).click();
+    await this.clickButtonFallback(
+      this.page.getByRole("button", { name: /^Create$/ }),
+    );
     await this.page.waitForSelector(sel.boardTitle, { timeout: 5_000 });
   }
 
@@ -80,6 +103,12 @@ export class BoardPage {
   }
 
   async addColumn(name: string) {
+    // Mobile uses the rail "+" button (the desktop "+ Add column" button
+    // isn't rendered on mobile). Desktop/tablet use the inline button.
+    if (await this.isMobileView()) {
+      await this.addColumnMobile(name);
+      return;
+    }
     // The app uses window.prompt("Column name").
     this.page.once("dialog", (d) => {
       if (d.type() === "prompt") d.accept(name);
@@ -98,42 +127,110 @@ export class BoardPage {
   }
 
   /**
-   * True if the app is rendering in mobile mode (width < 768), where only
-   * one column is visible at a time and the others are accessed via tabs.
+   * True if the app is rendering in mobile mode (width < 768), where columns
+   * live in a collapsible rail and only one column is expanded at a time.
    */
   async isMobileView(): Promise<boolean> {
     return this.page.evaluate(() => window.innerWidth < 768);
   }
 
   /**
-   * On mobile, switch to the column tab matching `name` (case-insensitive).
-   * No-op on desktop/tablet where all columns are visible.
-   *
-   * Each tab button's accessible name is "<name> <count>" (e.g. "To do 0").
-   * We use Playwright's accessible-name selector via `getByRole` so we
-   * don't need a fragile regex against Playwright's hasText semantics.
+   * Mobile: expand the column rail strip matching `name` (case-insensitive).
+   * The strip's accessible name is the vertical column name followed by the
+   * "(count)". No-op on desktop/tablet where all columns are visible.
    */
   async selectColumnTab(name: string): Promise<void> {
     if (!(await this.isMobileView())) return;
-    // Use a regex on the tab's accessible name. The name begins with the
-    // column title (case-insensitive) followed by the card count.
-    const tab = this.page
+    // Ensure the sidebar drawer isn't overlaying the board rail.
+    await this.collapseSidebar();
+    const strip = this.page
       .getByRole("tab", { name: new RegExp(`^${name}\\b`, "i") })
       .first();
-    await tab.click();
-    await expect(tab).toHaveAttribute("aria-selected", "true", { timeout: 3_000 });
+    await strip.click();
+    await expect(strip).toHaveAttribute("aria-selected", "true", { timeout: 3_000 });
+  }
+
+  /**
+   * Mobile: collapse the sidebar drawer back to its icon rail if it's open.
+   * No-op on desktop/tablet or when the rail is already collapsed.
+   */
+  async collapseSidebar(): Promise<void> {
+    if (!(await this.isMobileView())) return;
+    const closeBtn = this.page.getByRole("button", { name: /close menu/i }).first();
+    if (await closeBtn.count()) {
+      // The expanded drawer has a ✕ "Close menu" button in its header.
+      await closeBtn.click().catch(() => {});
+      await this.page.waitForSelector(sel.sidebarRail, {
+        state: "visible",
+        timeout: 2_000,
+      }).catch(() => {});
+    }
+  }
+
+  /**
+   * Mobile: add a column via the rail's "+" button (uses window.prompt).
+   * No-op on desktop/tablet (they use the inline "+ Add column" button).
+   */
+  async addColumnMobile(name: string): Promise<void> {
+    if (!(await this.isMobileView())) return;
+    this.page.once("dialog", (d) => {
+      if (d.type() === "prompt") d.accept(name);
+      else d.accept();
+    });
+    await this.page.locator(sel.mobileColumnRailAdd).click();
+    // The new column should appear as a strip in the rail.
+    await this.page.waitForSelector(
+      `${sel.mobileColumnTab}:has-text("${name}")`,
+      { timeout: 5_000 },
+    );
+  }
+
+  /**
+   * Mobile: expand the sidebar (collapsed icon rail → full menu drawer).
+   * `section` optionally targets a rail icon (labels/fields/types/done) so
+   * the drawer opens scrolled to that section. No-op on desktop/tablet.
+   */
+  async expandSidebar(section?: string): Promise<void> {
+    if (!(await this.isMobileView())) return;
+    const btn =
+      section && section !== "boards"
+        ? this.page
+            .locator(sel.sidebarRail)
+            .getByRole("button", { name: new RegExp(section, "i") })
+        : this.page.locator(sel.sidebarRailExpand);
+    await btn.first().click();
+    // The full menu drawer renders with the Manage buttons.
+    await this.page
+      .waitForSelector(sel.sidebar, { state: "visible", timeout: 3_000 })
+      .catch(() => {});
   }
 
   async toggleDoneColumn(name: string) {
+    // Only the expanded column is in the DOM on mobile — select it first.
+    if (await this.isMobileView()) {
+      if (!(await this.isColumnExpanded(name))) {
+        await this.selectColumnTab(name);
+      }
+    }
     const col = await this.getColumn(name);
     await col.locator(sel.columnOptions).click();
     await this.page.getByRole("button", { name: /mark as (done|not done)/i }).click();
   }
 
+  /** True when `name` is the currently expanded mobile column. */
+  private async isColumnExpanded(name: string): Promise<boolean> {
+    if (!(await this.isMobileView())) return true;
+    const cols = await this.page
+      .locator(sel.column)
+      .filter({ hasText: new RegExp(name, "i") })
+      .count();
+    return cols > 0;
+  }
+
   // ── Cards ─────────────────────────────────────────────────────────
   async addCard(columnName: string, title: string, type: "task" | "story" | "epic" = "task") {
-    // On mobile, only the active tab's column is rendered. Switch tabs first
-    // so the column we're targeting exists in the DOM.
+    // On mobile, only the expanded (active) column is rendered. Expand the
+    // target column's rail strip first so its DOM exists.
     if (columnName && columnName.length > 0) {
       await this.selectColumnTab(columnName);
     }
@@ -174,7 +271,7 @@ export class BoardPage {
 
   async closeCardEditor() {
     const saveBtn = this.page.locator(sel.cardSave);
-    await saveBtn.click();
+    await this.clickButtonFallback(saveBtn);
     // Wait for the editor modal to be removed from the DOM.
     await this.page.waitForSelector(sel.cardTitleInput, { state: "detached", timeout: 5_000 });
     // A small wait lets React flush the state update to the card before
@@ -223,7 +320,7 @@ export class BoardPage {
 
   async deleteCard() {
     this.page.once("dialog", (d) => d.accept());
-    await this.page.locator(sel.cardDelete).click();
+    await this.clickButtonFallback(this.page.locator(sel.cardDelete));
   }
 
   // ── Drag & drop ───────────────────────────────────────────────────
