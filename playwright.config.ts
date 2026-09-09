@@ -71,6 +71,10 @@ export default defineConfig({
         // Mixing `Desktop Chrome` with `isMobile: true` produced a scaled
         // layout viewport (404×717) that broke Playwright's hit testing.
         ...devices["Pixel 5"],
+        // Pixel 5 is 393x851 ≈ 20:9. Force an exact 20:9 (360x800) layout
+        // viewport so the mobile UI is exercised at that aspect ratio; the
+        // device descriptor still supplies mobile touch + high-DPI emulation.
+        viewport: { width: 360, height: 800 },
       },
     },
   ],

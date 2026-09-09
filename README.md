@@ -8,6 +8,8 @@ A Trello-inspired Kanban board that signs you in with Google and stores your boa
 - ✅ **Google Drive storage** — every board is one JSON file in your `appDataFolder`
 - ✅ **Boards, columns, cards** with full CRUD
 - ✅ **Drag-and-drop** with `@dnd-kit` — works on touch (long-press) and mouse
+- ✅ **Mobile cross-column drag** — with one column visible at a time, dragging a card shows a column-target overlay (pinned to the sidebar rail) listing every column; drop anywhere on the target moves the card there
+- ✅ **Card editor Column picker** — a combobox in the editor auto-selects the card's current column and lists the others in board order; changing it moves the card (applies on save)
 - ✅ **Three-level card hierarchy** — Epics contain Stories, Stories contain Tasks, with type-safe parent linking, cycle prevention, and progress rollup
 - ✅ **Activity log** — every change is auto-recorded (create, title/description/type/label/parent/date changes, moves, comments) with filterable pills and a collapsible timeline
 - ✅ **Comments** — per-card threaded comments with author, avatar, and timestamp; current user can delete their own
@@ -21,7 +23,7 @@ A Trello-inspired Kanban board that signs you in with Google and stores your boa
 - ✅ **In-memory drafts with localStorage recovery** — unsaved title/description edits survive page reloads and navigation; explicit discard marks the draft as a tombstone
 - ✅ **Background Drive reconciliation** — opening a board re-checks Drive in the background (60 s TTL per board); newer versions replace the cache without disrupting the user
 - ✅ **Offline-first cache** — boards and revalidation metadata are persisted to `localStorage` so the boards list and the last seen board content load instantly, even with no network
-- ✅ **Mobile-first responsive design** — drawer sidebar, bottom-sheet modals, column tabs, sticky touch targets
+- ✅ **Mobile-first responsive design** — drawer sidebar, bottom-sheet modals, column tabs, sticky touch targets, and a layout that fills the whole screen (no gaps at the right edge or bottom, top bar and sidebar rail always cover their full area, modals fit the viewport) — tested at a 20:9 aspect ratio
 - ✅ **Tablet and desktop** — collapsible rail, multi-column side-by-side, full sidebar
 - ✅ **Dark mode** via `prefers-color-scheme`
 - ✅ **Accessibility** — keyboard navigation, focus rings, screen-reader announcements, reduced-motion support
@@ -122,7 +124,8 @@ src/
 ├── auth/              # Google Identity Services wrapper + auth hook
 ├── components/        # React UI components
 │   ├── fields/        # Custom field subcomponents (chip, editor, manager)
-│   ├── ActivityLog.tsx, ChildrenList.tsx, CommentThread.tsx, …
+│   ├── ActivityLog.tsx, CardEditor.tsx (column picker, drafts),
+│   │   MobileColumnTargets.tsx (mobile drag overlay), …
 ├── drive/             # Google Drive REST client + board repository
 ├── hooks/             # Custom React hooks (useViewport)
 ├── models/            # Domain types, validators, migrations, progress rollup

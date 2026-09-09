@@ -23,6 +23,37 @@ test.describe("Responsive + A11y (all viewports)", () => {
     expect(overflow).toBe(false);
   });
 
+  test("Mobile: topbar row and sidebar rail fill the viewport with no gaps", async ({ page, isMobile }) => {
+    test.skip(!isMobile, "Desktop/tablet don't use the mobile rail or compact topbar.");
+    const bp = new BoardPage(page);
+    await bp.addCard("To do", "Scroll card");
+
+    // 1) The collapsed sidebar rail spans the full height under the topbar:
+    //    its bottom edge must reach the viewport bottom (no gap on scroll).
+    const rail = page.locator(sel.sidebarRail);
+    await rail.waitFor({ state: "visible", timeout: 3_000 });
+    const railBox = await rail.boundingBox();
+    const vh = await page.evaluate(() => window.innerHeight);
+    expect(railBox).not.toBeNull();
+    expect(railBox!.y).toBeGreaterThanOrEqual(0);
+    expect(railBox!.y + railBox!.height).toBeGreaterThanOrEqual(vh - 1);
+
+    // 2) Every topbar child is fully inside the topbar's painted box —
+    //    none extend past its bottom or right edge (the "Sign out clips
+    //    out of the blue bar" bug).
+    const topbarBox = await page.locator("header.topbar").boundingBox();
+    expect(topbarBox).not.toBeNull();
+    const oob = await page.evaluate((tb) => {
+      const children = Array.from(document.querySelectorAll("header.topbar *"));
+      return children.filter((el) => {
+        const r = (el as HTMLElement).getBoundingClientRect();
+        if (r.width <= 0 || r.height <= 0) return false;
+        return r.right > tb.right + 1 || r.bottom > tb.bottom + 1;
+      }).length;
+    }, topbarBox);
+    expect(oob).toBe(0);
+  });
+
   test("A11y: cards are keyboard-activatable with Enter", async ({ page }) => {
     const bp = new BoardPage(page);
     await bp.addCard("To do", "A11y card");

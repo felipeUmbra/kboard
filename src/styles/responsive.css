@@ -17,7 +17,6 @@
 
 /* ===== Top bar ===== */
 .topbar {
-  height: var(--topbar-h);
   padding: 0 var(--space-4);
   background-color: var(--color-accent);
   color: #fff;
@@ -25,8 +24,14 @@
   align-items: center;
   gap: var(--space-3);
   flex-shrink: 0;
+  /* Cover the device notch/home indicator: add the safe-area insets to
+     both the padding and the total height, and keep any overflowing
+     children clipped to the bar's own background. */
   padding-top: env(safe-area-inset-top);
-  height: calc(var(--topbar-h) + env(safe-area-inset-top));
+  padding-right: max(var(--space-4), env(safe-area-inset-right));
+  padding-bottom: env(safe-area-inset-bottom);
+  height: calc(var(--topbar-h) + env(safe-area-inset-top) + env(safe-area-inset-bottom));
+  overflow: hidden;
 }
 
 .topbar__title {
@@ -447,26 +452,45 @@
     padding-right: var(--space-2);
   }
 
+  .topbar__user .topbar__name {
+    display: none;
+  }
+
+  /* The flexible spacer collapses first, then the user block shrinks, so
+     the bar never overflows its blue background even when everything (menu
+     + logo + board name + planner + user) doesn't fit the viewport width. */
+  .topbar__spacer {
+    flex-shrink: 1;
+    min-width: var(--space-2);
+  }
+
   /* The sidebar is a horizontally-collapsible rail:
-       collapsed → a narrow inline icon rail (in the flex flow)
+       collapsed → a narrow inline icon rail (sticky, so it never scrolls
+                    away and leaves a gap at the bottom)
        expanded → a full-width drawer that overlays the content. */
   .sidebar {
-    position: static;
+    position: sticky;
+    top: calc(var(--topbar-h) + env(safe-area-inset-top) + env(safe-area-inset-bottom));
+    align-self: stretch;
     inset: auto;
     transform: none;
     box-shadow: none;
     width: var(--sidebar-w-collapsed);
     transition: width var(--motion-base);
     z-index: auto;
+    height: calc(100dvh - var(--topbar-h) - env(safe-area-inset-top) - env(safe-area-inset-bottom));
   }
 
   .sidebar[data-collapsed="false"] {
     position: fixed;
-    inset: var(--topbar-h) auto 0 0;
+    inset: calc(var(--topbar-h) + env(safe-area-inset-top) + env(safe-area-inset-bottom)) auto 0 0;
     width: min(var(--sidebar-w), 86vw);
     z-index: var(--z-drawer);
     box-shadow: var(--shadow-xl);
     animation: drawer-in var(--motion-base);
+    /* Reach the very bottom of the viewport and reserve space for the
+       home indicator so the drawer never shows a gap behind it. */
+    padding-bottom: env(safe-area-inset-bottom);
   }
 
   @keyframes drawer-in {
@@ -526,39 +550,6 @@
 
   .sidebar__close {
     display: inline-flex;
-  }
-
-  .modal-backdrop {
-    align-items: flex-end;
-  }
-
-  .modal {
-    max-width: 100%;
-    max-height: 92dvh;
-    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
-    animation: sheet-up var(--motion-base);
-  }
-
-  .modal__header {
-    padding-top: var(--space-3);
-    position: relative;
-  }
-
-  .modal__header::before {
-    content: "";
-    position: absolute;
-    top: 6px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 36px;
-    height: 4px;
-    background: var(--color-border-strong);
-    border-radius: var(--radius-full);
-  }
-
-  @keyframes sheet-up {
-    from { transform: translateY(100%); }
-    to   { transform: translateY(0); }
   }
 }
 
@@ -692,6 +683,61 @@
 
 .sidebar__backdrop {
   display: none;
+}
+
+/* ============================================================
+   MOBILE MODAL OVERRIDES — must come AFTER the base .modal rules
+   so the bottom sheet fills the whole screen (no clipped footer).
+   ============================================================ */
+@media (max-width: 767.98px) {
+  .modal-backdrop {
+    align-items: flex-end;
+  }
+
+  .modal {
+    width: 100%;
+    max-width: 100%;
+    max-height: 100dvh;
+    height: 100dvh;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    animation: sheet-up var(--motion-base);
+    /* Reserve space for the home indicator so content/footer is never
+       hidden behind it. */
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .modal__footer {
+    padding-bottom: calc(var(--space-3) + env(safe-area-inset-bottom));
+  }
+
+  .modal__body {
+    /* Slightly tighter side padding on narrow screens so wide elements
+       (title, Column select, fields) never clip. */
+    padding-left: var(--space-4);
+    padding-right: var(--space-4);
+  }
+
+  .modal__header {
+    padding-top: var(--space-3);
+    position: relative;
+  }
+
+  .modal__header::before {
+    content: "";
+    position: absolute;
+    top: 6px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 36px;
+    height: 4px;
+    background: var(--color-border-strong);
+    border-radius: var(--radius-full);
+  }
+
+  @keyframes sheet-up {
+    from { transform: translateY(100%); }
+    to   { transform: translateY(0); }
+  }
 }
 
 /* ===== Main content area ===== */
