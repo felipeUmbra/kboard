@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { Card } from "./types";
+import type { Card } from "../models/types";
 import { cardDrafts, draftDiffersFromCard, type CardDraft } from "./cardDrafts";
 
 describe("draftDiffersFromCard", () => {

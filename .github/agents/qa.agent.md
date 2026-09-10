@@ -47,6 +47,11 @@ tests/
 
 ## Approach
 
+### Before Every Commit
+1. Run `npm run typecheck` — must pass with zero errors
+2. Run `npx vitest run` — all unit + integration tests must pass
+3. Run E2E tests for the affected project(s) if applicable
+
 ### Writing New Tests
 1. Read the relevant spec file(s) to understand existing patterns and coverage gaps
 2. Use `BoardPage` POM methods for common actions — extend it if needed
@@ -54,6 +59,7 @@ tests/
 4. Use `Date.now()` or `Math.random()` for unique test data (concurrency-safe)
 5. Add `test.beforeEach` setup only when the test truly needs it
 6. Write deterministic waits: `await expect(locator).toBeVisible()` over `waitForTimeout`
+7. **Import paths matter**: test files co-located in `src/` must use paths relative to the PROJECT ROOT, not relative to the test's own folder. E.g. from `src/state/cardDrafts.test.ts` use `"../models/types"`, NOT `"./types"` — otherwise `tsc --noEmit` in CI (GitHub Actions `npm run typecheck`) fails with TS2307 because the import resolves to the test's own directory.
 
 ### Debugging Failures
 1. Check if it's a timing issue (auto-wait vs explicit wait)
