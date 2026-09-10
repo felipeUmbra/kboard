@@ -62,13 +62,9 @@ export default defineConfig({
         short_name: "Kboard",
         description:
           "A Trello-inspired Kanban board backed by your Google Drive.",
-        // start_url is relative to the manifest URL. On GitHub Pages
-        // the manifest lives at <BASE_PATH>/manifest.webmanifest, and
-        // "/" resolves to the same scope, so a single value works
-        // for both root and subpath deployments.
-        start_url: "/",
-        scope: "/",
-        id: "/",
+        // start_url, scope, and id are intentionally omitted —
+        // vite-plugin-pwa defaults them to `basePath` which equals
+        // `base` (= BASE_PATH env var or "/").
         display: "standalone",
         orientation: "any",
         background_color: "#f4f5f7",
@@ -76,31 +72,26 @@ export default defineConfig({
         categories: ["productivity", "utilities"],
         icons: [
           {
-            src: "/icons/icon-192.png",
+            src: `${base}icons/icon-192.png`,
             sizes: "192x192",
             type: "image/png",
             purpose: "any",
           },
           {
-            src: "/icons/icon-512.png",
+            src: `${base}icons/icon-512.png`,
             sizes: "512x512",
             type: "image/png",
             purpose: "any",
           },
           {
-            src: "/icons/icon-512-maskable.png",
+            src: `${base}icons/icon-512-maskable.png`,
             sizes: "512x512",
             type: "image/png",
             purpose: "maskable",
           },
         ],
-        // Web Share Target API: Android "Share to Kboard" lands here.
-        // We use a real HTML file as the action URL so GitHub Pages
-        // (and any static host) can serve a 200 with a real body, and
-        // the share-capture page persists the payload to IndexedDB
-        // and redirects to /?share=<id> as a normal GET.
         share_target: {
-          action: "/share-capture.html",
+          action: `${base}share-capture.html`,
           method: "POST",
           enctype: "multipart/form-data",
           params: {
@@ -132,6 +123,9 @@ export default defineConfig({
     },
   },
   preview: {
+    // When a non-root BASE_PATH is set, the preview server must also
+    // serve under that subpath so /kboard/ paths resolve correctly.
+    ...(base !== "/" && { base }),
     port: 5172,
     headers: {
       "Cross-Origin-Opener-Policy": "same-origin-allow-popups",

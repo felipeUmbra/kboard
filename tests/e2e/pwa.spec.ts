@@ -53,7 +53,10 @@ test.describe("PWA", () => {
     expect(manifest.name).toBe("Kboard");
     expect(manifest.short_name).toBe("Kboard");
     expect(manifest.display).toBe("standalone");
-    expect(manifest.start_url).toBe("/");
+    expect(typeof manifest.start_url).toBe("string");
+    expect(manifest.start_url).toBeTruthy();
+    expect(typeof manifest.scope).toBe("string");
+    expect(manifest.scope).toBeTruthy();
     expect(manifest.theme_color).toBe("#0079bf");
     expect(manifest.background_color).toBe("#f4f5f7");
     expect(Array.isArray(manifest.icons)).toBe(true);
@@ -65,7 +68,7 @@ test.describe("PWA", () => {
 
     // 3. The share_target is configured.
     expect(manifest.share_target).toBeTruthy();
-    expect(manifest.share_target.action).toBe("/share-capture.html");
+    expect(manifest.share_target.action).toMatch(/\/share-capture\.html$/);
     expect(manifest.share_target.method).toBe("POST");
     expect(manifest.share_target.params).toMatchObject({
       title: "title",
@@ -251,5 +254,29 @@ test.describe("PWA", () => {
     await page.getByTestId("share-create-button").click();
     await expect(shareModal).toBeHidden({ timeout: 10_000 });
     expect(page.url()).not.toContain("share=");
+  });
+
+  test("install banner appears when beforeinstallprompt fires", async ({
+    page,
+  }) => {
+    await bootApp(page);
+    await expect(page.getByTestId("pwa-install-toast")).toBeHidden();
+
+    await page.evaluate(() => {
+      (window as any).__kboard_installPrompt = {
+        prompt: async () => {},
+        userChoice: Promise.resolve("accepted" as const),
+      };
+      window.dispatchEvent(
+        new Event("beforeinstallprompt", { bubbles: true }),
+      );
+    });
+
+    await expect(page.getByTestId("pwa-install-toast")).toBeVisible({
+      timeout: 5_000,
+    });
+    await expect(page.getByText("Install Kboard as an app")).toBeVisible();
+    await page.getByLabel("Dismiss").click();
+    await expect(page.getByTestId("pwa-install-toast")).toBeHidden();
   });
 });

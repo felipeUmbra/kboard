@@ -8,6 +8,14 @@ interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
 
+// Non-standard Chromium/Edge/Android event fired when the PWA is
+// installable. The browser provides a `.prompt()` method and a
+// `userChoice` promise. Not in any WebIDL spec or lib.dom.d.ts.
+interface BeforeInstallPromptEvent extends Event {
+  prompt(): Promise<void>;
+  userChoice: Promise<"accepted" | "dismissed">;
+}
+
 // Provided by vite-plugin-pwa. We import { registerSW } from it in
 // main.tsx to wire the service worker into the React app without
 // auto-applying updates.
