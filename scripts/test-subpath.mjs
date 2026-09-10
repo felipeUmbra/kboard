@@ -84,6 +84,8 @@ try {
   testExitCode = 1;
 } finally {
   console.log("\n▸ Stopping preview server…\n");
-    try { preview.kill("SIGTERM"); } catch { /* already dead */ }
-    await new Promise((r) => setTimeout(r, 500));
-    try { preview.kill("SIGKILL"); } catch { /* already dead */ }
+  try { preview.kill("SIGTERM"); } catch { /* already dead */ }
+  await new Promise((r) => setTimeout(r, 500));
+  try { preview.kill("SIGKILL"); } catch { /* already dead */ }
+  process.exit(testExitCode);
+}
