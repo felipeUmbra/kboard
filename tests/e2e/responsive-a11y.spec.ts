@@ -44,13 +44,16 @@ test.describe("Responsive + A11y (all viewports)", () => {
     const topbarBox = await page.locator("header.topbar").boundingBox();
     expect(topbarBox).not.toBeNull();
     const oob = await page.evaluate((tb) => {
+      // boundingBox() only exposes x/y/width/height — derive the edges.
+      const tbRight = tb.x + tb.width;
+      const tbBottom = tb.y + tb.height;
       const children = Array.from(document.querySelectorAll("header.topbar *"));
       return children.filter((el) => {
         const r = (el as HTMLElement).getBoundingClientRect();
         if (r.width <= 0 || r.height <= 0) return false;
-        return r.right > tb.right + 1 || r.bottom > tb.bottom + 1;
+        return r.right > tbRight + 1 || r.bottom > tbBottom + 1;
       }).length;
-    }, topbarBox);
+    }, topbarBox!);
     expect(oob).toBe(0);
   });
 
