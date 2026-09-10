@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useBoard } from "../state/BoardContext";
 import { LabelPill } from "./fields/LabelPill";
-import { FieldChip } from "./fields/FieldChip";
 import { LabelManager } from "./fields/LabelManager";
 import { FieldManager } from "./fields/FieldManager";
 import { useViewport } from "../hooks/useViewport";
@@ -25,6 +24,11 @@ export function Sidebar({
   const [showLabels, setShowLabels] = useState(false);
   const [showFields, setShowFields] = useState(false);
   const [typeManagerFor, setTypeManagerFor] = useState<CardType | null>(null);
+  // Collapsible sidebar sections. Defaults to expanded (open) so existing
+  // behavior is preserved; users can collapse sections to hide unused info.
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+  const toggleSection = (section: string) =>
+    setCollapsedSections((prev) => ({ ...prev, [section]: !prev[section] }));
   const viewport = useViewport();
 
   // Desktop/tablet collapsed rail: render a thin empty aside (existing
@@ -186,7 +190,15 @@ export function Sidebar({
           <>
             <div className="sidebar__section" data-section="labels">
               <h3 className="sidebar__section-title">
-                Labels
+                <button
+                  type="button"
+                  className="sidebar__section-toggle"
+                  onClick={() => toggleSection("labels")}
+                  aria-expanded={!collapsedSections.labels}
+                >
+                  <span className="sidebar__section-caret" aria-hidden="true" />
+                  Labels
+                </button>
                 <button
                   type="button"
                   onClick={() => setShowLabels(true)}
@@ -196,30 +208,42 @@ export function Sidebar({
                   +
                 </button>
               </h3>
-              {board.activeBoard.labels.length === 0 ? (
-                <p style={{ padding: "0 var(--space-3)", color: "var(--color-text-muted)", fontSize: "var(--text-sm)" }}>
-                  No labels yet.
-                </p>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-1)", padding: "0 var(--space-2)" }}>
-                  {board.activeBoard.labels.map((l) => (
-                    <div key={l.id} style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-                      <LabelPill label={l} />
-                      <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-muted)" }}>
-                        {Object.values(board.activeBoard!.cards).reduce(
-                          (n, c) => n + (c.labelIds.includes(l.id) ? 1 : 0),
-                          0,
-                        )}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
+              {!collapsedSections.labels &&
+                (board.activeBoard.labels.length === 0 ? (
+                  <p style={{ padding: "0 var(--space-3)", color: "var(--color-text-muted)", fontSize: "var(--text-sm)" }}>
+                    No labels yet.
+                  </p>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-1)", padding: "0 var(--space-2)" }}>
+                    {board.activeBoard.labels.map((l) => (
+                      <div key={l.id} style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
+                        <LabelPill label={l} />
+                        <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-muted)" }}>
+                          {Object.values(board.activeBoard!.cards).reduce(
+                            (n, c) => n + (c.labelIds.includes(l.id) ? 1 : 0),
+                            0,
+                          )}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
             </div>
 
             <div className="sidebar__section" data-section="types">
-              <h3 className="sidebar__section-title">Card types</h3>
-              {board.activeBoard.cardTypes.map((cfg) => {
+              <h3 className="sidebar__section-title">
+                <button
+                  type="button"
+                  className="sidebar__section-toggle"
+                  onClick={() => toggleSection("types")}
+                  aria-expanded={!collapsedSections.types}
+                >
+                  <span className="sidebar__section-caret" aria-hidden="true" />
+                  Card types
+                </button>
+              </h3>
+              {!collapsedSections.types &&
+                board.activeBoard.cardTypes.map((cfg) => {
                 const meta = CARD_TYPE_META[cfg.type];
                 const count = Object.values(board.activeBoard!.cards).filter(
                   (c) => c.type === cfg.type,
@@ -303,7 +327,15 @@ export function Sidebar({
 
             <div className="sidebar__section" data-section="fields">
               <h3 className="sidebar__section-title">
-                Board fields
+                <button
+                  type="button"
+                  className="sidebar__section-toggle"
+                  onClick={() => toggleSection("fields")}
+                  aria-expanded={!collapsedSections.fields}
+                >
+                  <span className="sidebar__section-caret" aria-hidden="true" />
+                  Board fields
+                </button>
                 <button
                   type="button"
                   onClick={() => setShowFields(true)}
@@ -313,45 +345,26 @@ export function Sidebar({
                   +
                 </button>
               </h3>
-              {board.activeBoard.customFields.length === 0 ? (
-                <p style={{ padding: "0 var(--space-3)", color: "var(--color-text-muted)", fontSize: "var(--text-sm)" }}>
-                  No board-level fields.
-                </p>
-              ) : (
-                <ul style={{ listStyle: "none", padding: "0 var(--space-2)" }}>
-                  {board.activeBoard.customFields.map((f) => {
-                    const usedCount = Object.values(board.activeBoard!.cards).filter(
-                      (c) =>
-                        c.boardFieldValues[f.id] !== undefined &&
-                        c.boardFieldValues[f.id] !== "" &&
-                        c.boardFieldValues[f.id] !== false,
-                    ).length;
-                    const sample = Object.values(board.activeBoard!.cards)
-                      .map((c) => c.boardFieldValues[f.id])
-                      .find((v) => v !== undefined && v !== "" && v !== false);
-                    return (
+              {!collapsedSections.fields &&
+                (board.activeBoard.customFields.length === 0 ? (
+                  <p style={{ padding: "0 var(--space-3)", color: "var(--color-text-muted)", fontSize: "var(--text-sm)" }}>
+                    No board-level fields.
+                  </p>
+                ) : (
+                  <ul style={{ listStyle: "none", padding: "0 var(--space-2)" }}>
+                    {board.activeBoard.customFields.map((f) => (
                       <li
                         key={f.id}
                         style={{
                           padding: "var(--space-1) var(--space-2)",
                           fontSize: "var(--text-sm)",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "var(--space-2)",
                         }}
                       >
                         <span style={{ color: "var(--color-text-muted)" }}>{f.name}</span>
-                        {sample !== undefined && (
-                          <FieldChip field={f} value={sample} />
-                        )}
-                        <span style={{ marginLeft: "auto", color: "var(--color-text-muted)", fontSize: "var(--text-xs)" }}>
-                          {usedCount}
-                        </span>
                       </li>
-                    );
-                  })}
-                </ul>
-              )}
+                    ))}
+                  </ul>
+                ))}
             </div>
           </>
         )}
