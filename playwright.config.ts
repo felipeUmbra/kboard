@@ -111,6 +111,8 @@ export default defineConfig({
     },
     // Subpath deployment: verifies all manifest URLs resolve under /kboard/.
     // Requires an external preview server (npm run test:e2e:subpath starts it).
+    // Excluded from `npm run test:e2e` by default — run via
+    // `npm run test:e2e:subpath` or explicitly: --project=pwa-subpath.
     {
       name: "pwa-subpath",
       testMatch: "**/pwa-subpath.spec.ts",
