@@ -1,15 +1,14 @@
 name: Playwright E2E (PR)
 
-# Fast-feedback E2E suite that runs on every pull request.
+# Fast-feedback suite that runs on every PR to `main`.
 #
 # This complements the deploy workflow (.github/workflows/deploy.yml):
-#   - PRs targeting `main` or `Dev` get this smoke test for fast feedback.
-#   - Merges to `main` trigger the full deploy workflow, which runs the
-#     same tests against all 3 viewports (desktop, tablet, mobile) and
-#     blocks the deploy if anything fails.
-#
-# Only the desktop project runs here to keep the suite under ~3 minutes.
-# The full multi-viewport run happens during the deploy gate.
+#   - PRs targeting `main` get type-checking plus the full E2E matrix
+#     (desktop, tablet, mobile and the dedicated PWA project) for fast
+#     feedback before merging.
+#   - Merges to `main` trigger the deploy workflow, which re-runs the
+#     same tests plus the /kboard/ subpath deployment checks and blocks
+#     the deploy if anything fails.
 
 permissions:
   contents: read
@@ -20,10 +19,28 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  e2e:
-    name: E2E (Chromium, desktop)
+  # Type-checking moved here from deploy.yml so PRs get static feedback
+  # without waiting for a deploy trigger (deploy.yml only runs on pushes
+  # to `main`). Runs in parallel with the E2E job for fastest feedback.
+  typecheck:
+    name: Type-check
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+
+      - run: npm run typecheck
+
+  e2e:
+    name: E2E (Chromium, desktop + tablet + mobile + PWA)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -55,10 +72,13 @@ jobs:
           VITE_GOOGLE_CLIENT_ID: "placeholder.apps.googleusercontent.com"
         run: npm run build
 
-      - name: Run Playwright tests (desktop only)
+      - name: Run Playwright tests (desktop + tablet + mobile + PWA)
+        # Same matrix as the deploy gate: all three viewport projects plus
+        # the dedicated `pwa` project (service worker + install prompt
+        # against the production preview build above).
         env:
           CI: "true"
-        run: npx playwright test --project=chromium-desktop
+        run: npm run test:e2e
 
       - name: Upload Playwright HTML report
         if: always()
@@ -81,5 +101,5 @@ jobs:
 # interpreting the bare `on` as a boolean true and flagging the file.
 "on":
   pull_request:
-    branches: [main, Dev]
+    branches: [main]
   workflow_dispatch:
