@@ -73,14 +73,16 @@ test.describe("Labels and Custom Fields", () => {
       test.skip(true, "Manage fields button not present");
     }
     await manageBtn.first().click();
-    // Add a short_text field via the form.
-    const nameInput = page.locator(sel.fieldManager).last().locator('input[type="text"]').first();
+    // The manager first lists field types — pick Short text to open the form.
+    const manager = page.locator(sel.fieldManager).last();
+    await manager.getByRole("button", { name: /short text/i }).first().click();
+    // Fill the field name in the form.
+    const nameInput = manager.locator('#fld-name');
     await nameInput.fill("Priority");
-    // The type select defaults to short_text in the current form.
-    const addBtn = page.locator(sel.fieldManager).last().getByRole("button", { name: /add|save/i }).first();
+    const addBtn = manager.getByRole("button", { name: /create field/i }).first();
     await addBtn.click();
     // Close the manager.
-    const closeBtn = page.locator(sel.fieldManager).last().getByRole("button", { name: /close|cancel|×/i }).first();
+    const closeBtn = manager.getByRole("button", { name: /close|cancel|×/i }).first();
     if (await closeBtn.count()) await closeBtn.click();
 
     // Open a card and confirm the new field renders.
@@ -98,23 +100,34 @@ test.describe("Labels and Custom Fields", () => {
       test.skip(true, "Manage fields button not present");
     }
     await manageBtn.first().click();
-    const nameInput = page.locator(sel.fieldManager).last().locator('input[type="text"]').first();
+    const manager = page.locator(sel.fieldManager).last();
+    await manager.getByRole("button", { name: /short text/i }).first().click();
+    const nameInput = manager.locator('#fld-name');
     await nameInput.fill("Priority");
-    const addBtn = page.locator(sel.fieldManager).last().getByRole("button", { name: /add|save/i }).first();
+    const addBtn = manager.getByRole("button", { name: /create field/i }).first();
     await addBtn.click();
-    const closeBtn = page.locator(sel.fieldManager).last().getByRole("button", { name: /close|cancel|×/i }).first();
+    const closeBtn = manager.getByRole("button", { name: /close|cancel|×/i }).first();
     if (await closeBtn.count()) await closeBtn.click();
 
     await bp.addCard("To do", "Chip card");
     await bp.openCard("Chip card");
-    // Set value via the FieldValueInput.
-    const fieldInput = page.getByLabel(/priority/i).first();
-    if (await fieldInput.count()) {
-      await fieldInput.fill("High");
+    // Set value via the FieldValueInput (label never links by htmlFor, so
+    // target the input inside the "Board fields" field-row for "Priority").
+    const fieldRow = page
+      .getByRole("dialog")
+      .locator(".field-row")
+      .filter({ hasText: /^Priority/ })
+      .first();
+    if (await fieldRow.count()) {
+      await fieldRow.locator("input").first().fill("High");
       await bp.closeCardEditor();
-      await expect(page.locator(sel.cardFields).filter({ hasText: /priority/i }).first()).toBeVisible({ timeout: 5_000 });
+      // FieldChip renders the value ("High"), not the field name — verify
+      // the chip on the card contains that value.
+      await expect(
+        page.locator(".kanban-card__fields .field-chip").filter({ hasText: "High" }).first(),
+      ).toBeVisible({ timeout: 5_000 });
     } else {
-      test.skip(true, "Priority field input not found");
+      test.skip(true, "Priority field row not found");
     }
   });
 

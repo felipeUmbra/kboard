@@ -13,30 +13,15 @@ concurrency:
 
 jobs:
   # ──────────────────────────────────────────────────────────────────
-  # Stage 1 — Static checks (fast feedback)
-  # ──────────────────────────────────────────────────────────────────
-  typecheck:
-    name: Type-check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-      - run: npm ci --no-audit --no-fund
-      - run: npm run typecheck
-
-  # ──────────────────────────────────────────────────────────────────
-  # Stage 2 — End-to-end tests against the dev server
-  #   Runs against `npm run dev` so HMR + Vite-optimized source is
-  #   exercised (closer to what local devs run). Output artifacts
-  #   (HTML report, screenshots, traces) are uploaded on every run,
-  #   even on failure, so failures are debuggable from the GH UI.
+  # Stage 1 — End-to-end tests against the production preview server
+  #   CI runs the pre-built bundle via `npm run preview` (production
+  #   build) so service-worker / PWA behavior is exercised. Output
+  #   artifacts (HTML report, screenshots, traces) are uploaded on every
+  #   run, even on failure, so failures are debuggable from the GH UI.
+  #   Type-checking runs on PRs (playwright.yml), not here.
   # ──────────────────────────────────────────────────────────────────
   e2e:
     name: E2E (Chromium, desktop + tablet + mobile)
-    needs: typecheck
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -105,11 +90,11 @@ jobs:
           retention-days: 7
 
   # ──────────────────────────────────────────────────────────────────
-  # Stage 3 — Build production bundle (gated on typecheck + tests)
+  # Stage 2 — Build production bundle (gated on tests)
   # ──────────────────────────────────────────────────────────────────
   build:
     name: Build production bundle
-    needs: [typecheck, e2e]
+    needs: [e2e]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -154,7 +139,7 @@ jobs:
           path: dist
 
   # ──────────────────────────────────────────────────────────────────
-  # Stage 4 — Deploy to GitHub Pages (gated on build)
+  # Stage 3 — Deploy to GitHub Pages (gated on build)
   # ──────────────────────────────────────────────────────────────────
   deploy:
     needs: build

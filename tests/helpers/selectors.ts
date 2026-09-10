@@ -77,7 +77,7 @@ export const sel = {
   sidebar: "aside.sidebar",
   sidebarBoardsList: ".sidebar__section ul",
   sidebarManageLabels: 'button[aria-label="Manage labels"]',
-  sidebarManageFields: 'button[aria-label="Manage fields"]',
+  sidebarManageFields: 'button[aria-label="Manage board fields"]',
   sidebarDoneColumn: (columnName: string) =>
     `.sidebar__section li:has-text("${columnName}") input[type="checkbox"]`,
 
