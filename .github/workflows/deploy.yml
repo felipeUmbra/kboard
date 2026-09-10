@@ -77,10 +77,16 @@ jobs:
           fi
           npm run build
 
-      - name: Run Playwright tests
+      - name: Run Playwright tests (viewport + PWA)
         env:
           CI: "true"
         run: npm run test:e2e
+
+      - name: Run PWA subpath deployment tests
+        # scripts/test-subpath.mjs sets BASE_PATH=/kboard/ internally.
+        env:
+          CI: "true"
+        run: npm run test:e2e:subpath
 
       - name: Upload Playwright HTML report
         if: always()
