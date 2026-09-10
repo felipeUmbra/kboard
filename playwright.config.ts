@@ -62,21 +62,27 @@ export default defineConfig({
         viewport: { width: 1280, height: 800 },
         baseURL: process.env.CI ? "http://localhost:5172" : "http://localhost:5173",
       },
-      // PWA project uses its own webServer (production preview)
-      webServer: {
-        command: process.env.CI
-          ? "npm run preview -- --port 5172 --strictPort"
-          : "npm run build && npm run preview -- --port 5173 --strictPort",
-        url: process.env.CI ? "http://localhost:5172" : "http://localhost:5173",
-        reuseExistingServer: !process.env.CI,
-        timeout: 180_000,
-        env: {
-          VITE_GOOGLE_CLIENT_ID: "fake-client-id.apps.googleusercontent.com",
-          BASE_PATH: "/",
+      // PWA project uses its own webServer (production preview). This is a
+      // supported runtime feature, but `@playwright/test` 1.62's shipped
+      // types don't declare `webServer` on a project entry — only on the
+      // top-level `TestConfig`. Cast through `unknown` to keep `tsc`
+      // (the GH deploy `typecheck` job) green without changing behavior.
+      ...({
+        webServer: {
+          command: process.env.CI
+            ? "npm run preview -- --port 5172 --strictPort"
+            : "npm run build && npm run preview -- --port 5173 --strictPort",
+          url: process.env.CI ? "http://localhost:5172" : "http://localhost:5173",
+          reuseExistingServer: !process.env.CI,
+          timeout: 180_000,
+          env: {
+            VITE_GOOGLE_CLIENT_ID: "fake-client-id.apps.googleusercontent.com",
+            BASE_PATH: "/",
+          },
+          stdout: "pipe",
+          stderr: "pipe",
         },
-        stdout: "pipe",
-        stderr: "pipe",
-      },
+      } as object),
     },
     {
       name: "chromium-mobile",

@@ -53,7 +53,7 @@ export function TopBar({
           style={{ color: "#fff" }}
           data-testid="topbar-planner"
         >
-          📅 Planner
+          📅<span className="topbar__planner-label"> Planner</span>
         </button>
       )}
       {profile && (

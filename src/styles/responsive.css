@@ -433,6 +433,19 @@
     display: inline-flex;
   }
 
+  /* Tighten the topbar's spacing so every child (menu + logo + board name
+     + planner + user/sign-out) stays inside the 360px-wide bar. */
+  .topbar {
+    gap: var(--space-2);
+    padding-left: var(--space-3);
+    padding-right: var(--space-3);
+  }
+
+  .topbar .btn {
+    padding-left: var(--space-2);
+    padding-right: var(--space-2);
+  }
+
   /* Keep the header from overflowing on narrow screens. The board name is
      secondary to the menu/logo and may truncate. */
   .topbar__board {
@@ -453,6 +466,12 @@
   }
 
   .topbar__user .topbar__name {
+    display: none;
+  }
+
+  /* On very narrow screens the Planner button is icon-only so the
+     topbar fits without pushing the user block off the right edge. */
+  .topbar__planner-label {
     display: none;
   }
 
