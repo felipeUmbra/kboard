@@ -470,6 +470,12 @@
     display: none;
   }
 
+  /* On very narrow screens the Planner button is icon-only so the
+     topbar fits without pushing the user block off the right edge. */
+  .topbar__planner-label {
+    display: none;
+  }
+
   /* The flexible spacer collapses first, then the user block shrinks, so
      the bar never overflows its blue background even when everything (menu
      + logo + board name + planner + user) doesn't fit the viewport width. */

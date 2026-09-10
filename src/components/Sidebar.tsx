@@ -67,15 +67,6 @@ export function Sidebar({
           <button
             type="button"
             className="sidebar__rail-btn"
-            onClick={onToggle}
-            aria-label="Expand menu"
-            title="Expand menu"
-          >
-            ☰
-          </button>
-          <button
-            type="button"
-            className="sidebar__rail-btn"
             onClick={() => expandAndScroll("boards")}
             aria-label="Boards"
             title="Boards"
@@ -103,7 +94,7 @@ export function Sidebar({
                 title="Card types"
                 data-section="types"
               >
-                🃏
+                <PostitStackIcon />
               </button>
               <button
                 type="button"
@@ -453,5 +444,45 @@ export function Sidebar({
         </div>
       )}
     </aside>
+  );
+}
+
+/** A stack of colorful sticky notes — used for the "Card types" rail icon.
+ *  Matches the visual idea of the `Evidence/post.png` reference (three
+ *  fanned post-its): each note has its own post-it color and a slight
+ *  rotation/offset so the stack reads at a glance. */
+function PostitStackIcon() {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      focusable="false"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinejoin="round"
+    >
+      {/* Back note (peeking top-right) — lilac */}
+      <path
+        d="M15.2 4.4 19 7.1l-1.2 5.1-4.4-1.1z"
+        fill="#c5a3ff"
+      />
+      {/* Middle note (rotated left) — pink */}
+      <path
+        d="M9.5 6.5 15.7 8.4l-1.4 7.1-6.2-1.4z"
+        fill="#ffa8c5"
+      />
+      {/* Front note (straight) — yellow */}
+      <rect x="4.6" y="5.2" width="11" height="13" rx="1.5" fill="#ffe95e" />
+      {/* Folded corner of the front note (darker yellow) */}
+      <path
+        d="M13.5 18.2v-2.2a1.5 1.5 0 0 1 1.5-1.5h1.6"
+        fill="none"
+        stroke="#d9c13b"
+        strokeWidth="1.4"
+      />
+    </svg>
   );
 }
