@@ -40,6 +40,7 @@ const preview = spawn(
 );
 
 // Wait for the server to be ready.
+let ready = false;
 await new Promise((resolve, reject) => {
   const timeout = setTimeout(() => {
     preview.kill();
@@ -49,7 +50,8 @@ await new Promise((resolve, reject) => {
   preview.stdout.on("data", (chunk) => {
     const line = chunk.toString();
     process.stdout.write(`  [preview] ${line}`);
-    if (line.includes("Local:") || line.includes("localhost")) {
+    if (!ready && (line.includes("Local:") || line.includes("localhost"))) {
+      ready = true;
       clearTimeout(timeout);
       // Give the server a moment to fully bind.
       setTimeout(resolve, 500);
@@ -65,8 +67,11 @@ await new Promise((resolve, reject) => {
     reject(err);
   });
 
+  // Only reject if the server dies BEFORE it becomes ready (e.g. port
+  // conflict). Once ready, the exit event fires later when we kill the
+  // process ourselves during cleanup — that must not reject.
   preview.on("exit", (code) => {
-    if (code && code !== null && code !== 0) {
+    if (!ready && code && code !== null && code !== 0) {
       clearTimeout(timeout);
       reject(new Error(`Preview exited with code ${code}`));
     }
@@ -84,6 +89,8 @@ try {
   testExitCode = 1;
 } finally {
   console.log("\n▸ Stopping preview server…\n");
-    try { preview.kill("SIGTERM"); } catch { /* already dead */ }
-    await new Promise((r) => setTimeout(r, 500));
-    try { preview.kill("SIGKILL"); } catch { /* already dead */ }
+  try { preview.kill("SIGTERM"); } catch { /* already dead */ }
+  await new Promise((r) => setTimeout(r, 500));
+  try { preview.kill("SIGKILL"); } catch { /* already dead */ }
+  process.exit(testExitCode);
+}
