@@ -15,7 +15,8 @@ import { defineConfig, devices } from "@playwright/test";
  * Debug:  npm run test:e2e:debug
  */
 export default defineConfig({
-  testDir: "tests/e2e",
+  testDir: "tests",
+  testMatch: ["e2e/**/*.spec.ts", "regression/**/*.spec.ts"],
   // Each spec file should be independent — fully parallel is fine.
   fullyParallel: true,
   forbidOnly: !!process.env.CI,

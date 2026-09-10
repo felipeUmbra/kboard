@@ -1,11 +1,11 @@
 {
     "schema_version": 2,
-    "commit": "d910edce6bf4d58e8e3211f9c5f815060640b937",
-    "indexed_at": "2026-09-09T05:34:37Z",
-    "project": "H-Dev-Github-kboard",
-    "nodes": 724,
-    "edges": 2193,
-    "original_size": 4718592,
-    "compressed_size": 907858,
+    "commit": "efa04f70b206e30a7a37e8020263e2f7e73f7399",
+    "indexed_at": "2026-09-10T17:22:50Z",
+    "project": "kboard",
+    "nodes": 778,
+    "edges": 2305,
+    "original_size": 4456448,
+    "compressed_size": 946116,
     "compression_level": 3
 }
