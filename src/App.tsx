@@ -8,6 +8,7 @@ import { BoardView } from "./components/BoardView";
 import { Banner } from "./components/Banner";
 import { UpdateToast } from "./components/UpdateToast";
 import { ShareToBoardModal } from "./components/ShareToBoardModal";
+import { InstallPrompt } from "./components/InstallPrompt";
 import { PlannerView } from "./views/PlannerView";
 import {
   getShareIdFromUrl,
@@ -184,6 +185,7 @@ export function App() {
         />
       )}
       <UpdateToast onReload={() => void applyPwaUpdate()} />
+      <InstallPrompt />
     </AppShell>
   );
 }

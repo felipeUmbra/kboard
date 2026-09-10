@@ -43,6 +43,11 @@ export default defineConfig({
   projects: [
     {
       name: "chromium-desktop",
+      // PWA specs run only in dedicated `pwa`/`pwa-subpath` projects
+      // (which spin up their own production preview servers). The
+      // desktop/tablet/mobile projects serve the dev server (no SW,
+      // root base), so PWA specs would fail there.
+      testIgnore: "**/pwa*.spec.ts",
       use: {
         ...devices["Desktop Chrome"],
         viewport: { width: 1280, height: 800 },
@@ -50,6 +55,7 @@ export default defineConfig({
     },
     {
       name: "chromium-tablet",
+      testIgnore: "**/pwa*.spec.ts",
       use: {
         ...devices["Desktop Chrome"],
         viewport: { width: 768, height: 1024 },
@@ -57,7 +63,10 @@ export default defineConfig({
     },
     {
       name: "pwa",
+      // Only the existing pwa.spec.ts runs here. The subpath spec
+      // runs via `npm run test:e2e:subpath` / --project=pwa-subpath.
       testMatch: "**/pwa.spec.ts",
+      testIgnore: "**/pwa-subpath.spec.ts",
       use: {
         ...devices["Desktop Chrome"],
         viewport: { width: 1280, height: 800 },
@@ -87,7 +96,7 @@ export default defineConfig({
     },
     {
       name: "chromium-mobile",
-      testIgnore: "**/pwa.spec.ts",
+      testIgnore: "**/pwa*.spec.ts",
       use: {
         // A real mobile device descriptor gives consistent emulation
         // (viewport, deviceScaleFactor, isMobile, hasTouch, userAgent).
@@ -98,6 +107,17 @@ export default defineConfig({
         // viewport so the mobile UI is exercised at that aspect ratio; the
         // device descriptor still supplies mobile touch + high-DPI emulation.
         viewport: { width: 360, height: 800 },
+      },
+    },
+    // Subpath deployment: verifies all manifest URLs resolve under /kboard/.
+    // Requires an external preview server (npm run test:e2e:subpath starts it).
+    {
+      name: "pwa-subpath",
+      testMatch: "**/pwa-subpath.spec.ts",
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1280, height: 800 },
+        baseURL: "http://localhost:5174",
       },
     },
   ],

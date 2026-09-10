@@ -1,4 +1,4 @@
-// PWA runtime registration.
+// PWA runtime registration + install prompt plumbing.
 //
 // We register the service worker from main.tsx (not the plugin's
 // auto-injected script) so we can:
@@ -11,6 +11,13 @@
 // cardDrafts.ts keeps unsaved edits in localStorage so they survive a
 // reload, but auto-reload still feels surprising. The toast pattern
 // matches Linear / Figma / Notion and puts the user in control.
+//
+// Install prompt: Chrome/Edge/Android fire `beforeinstallprompt` when
+// the app meets installability criteria. We capture the event and
+// expose `__kboard_installPrompt` so the InstallPrompt banner can
+// call `prompt()` on demand. iOS Safari never fires this event — the
+// banner shows an iOS-specific "Share → Add to Home Screen" hint
+// instead (gated by user-agent + navigator.standalone).
 //
 // `import.meta.env.DEV` is the build-time gate. In dev the plugin is
 // disabled (vite.config.ts -> devOptions.enabled: false) and there is
@@ -46,6 +53,45 @@ export function registerPwa(): void {
     __kboard_updateSW?: (reloadPage?: boolean) => Promise<void>;
   };
   (window as KboardWindow).__kboard_updateSW = updateSW;
+
+  // --- Install prompt plumbing ---
+  let storedPrompt: BeforeInstallPromptEvent | null = null;
+
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    storedPrompt = e as BeforeInstallPromptEvent;
+    window.dispatchEvent(new CustomEvent("kboard:installable"));
+  });
+
+  window.addEventListener("appinstalled", () => {
+    storedPrompt = null;
+    window.dispatchEvent(new CustomEvent("kboard:install-dismissed"));
+  });
+
+  type KboardInstallWindow = Window & {
+    __kboard_installPrompt?: {
+      prompt: () => Promise<"accepted" | "dismissed">;
+    } | null;
+  };
+
+  Object.defineProperty(
+    (window as KboardInstallWindow),
+    "__kboard_installPrompt",
+    {
+      get: () =>
+        storedPrompt
+          ? {
+              async prompt() {
+                await storedPrompt!.prompt();
+                const result = storedPrompt!.userChoice;
+                storedPrompt = null;
+                return result;
+              },
+            }
+          : null,
+      configurable: true,
+    },
+  );
 }
 
 /**
@@ -60,7 +106,5 @@ export async function applyPwaUpdate(): Promise<void> {
   const fn = (window as KboardWindow).__kboard_updateSW;
   if (!fn) return;
   await fn(true);
-  // updateSW(true) reloads the page on success; if for some reason
-  // it doesn't, fall back to a manual reload.
   window.location.reload();
 }

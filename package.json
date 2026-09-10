@@ -19,6 +19,7 @@
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:debug": "playwright test --debug",
     "test:e2e:chromium": "playwright test --project=chromium-desktop",
+    "test:e2e:subpath": "node scripts/test-subpath.mjs",
     "test:e2e:report": "playwright show-report"
   },
   "dependencies": {
