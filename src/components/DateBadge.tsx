@@ -37,13 +37,13 @@ export function DateBadge({
     color = "var(--color-text-muted)";
     icon = "✓";
   } else if (daysUntilDue < 0) {
-    color = "var(--color-danger, #eb5a46)";
+    color = "var(--color-danger)";
     icon = "⚠";
   } else if (daysUntilDue <= 7) {
-    color = "var(--color-warning, #f2d600)";
+    color = "var(--color-warning)";
     icon = "⏰";
   } else {
-    color = "var(--color-success, #4bce97)";
+    color = "var(--color-success)";
     icon = "📅";
   }
 

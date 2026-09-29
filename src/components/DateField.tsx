@@ -87,7 +87,7 @@ export function DateField({
             padding: "6px 10px",
             background: "var(--color-surface)",
             border: `1px solid ${
-              issue ? "var(--color-warning, #f2d600)" : "var(--color-border)"
+              issue ? "var(--color-warning)" : "var(--color-border)"
             }`,
             borderRadius: "var(--radius-md)",
             color: "var(--color-text)",
@@ -186,7 +186,7 @@ export function DateField({
                   style={{
                     flex: 1,
                     fontSize: "var(--text-xs)",
-                    color: "var(--color-danger, #eb5a46)",
+                    color: "var(--color-danger)",
                   }}
                 >
                   Clear

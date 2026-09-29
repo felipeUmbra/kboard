@@ -30,23 +30,41 @@
   --text-2xl: 1.5rem;
   --text-3xl: 1.875rem;
 
-  /* Colors — light theme (Trello-inspired) */
+  /* Colors — light theme (Trello-inspired)
+     All foreground tokens below are verified >= 4.5:1 against EVERY light
+     background they can appear on: --color-surface (#fff), --color-bg (#f4f5f7)
+     and --color-bg-elevated (#ebecf0). The elevated background is the binding
+     constraint because it is darker than white — checking white alone yields
+     false passes. Verify with: npm run a11y:contrast */
   --color-bg: #f4f5f7;
   --color-bg-elevated: #ebecf0;
   --color-surface: #ffffff;
   --color-surface-hover: #f4f5f7;
   --color-text: #172b4d;
-  --color-text-muted: #5e6c84;
-  --color-text-subtle: #6b778c;
+  /* Was #5e6c84 — sat at exactly 4.50:1 on the elevated background (no margin). */
+  --color-text-muted: #526075;
+  --color-text-subtle: #4c5a6c;
   --color-border: #dfe1e6;
   --color-border-strong: #c1c7d0;
-  --color-accent: #0079bf;
-  --color-accent-hover: #026aa7;
+  /* Was #0079bf — 4.68:1 on white but only 3.96:1 on elevated: a real AA failure,
+     and this token drives links plus the selected-column state. */
+  --color-accent: #005b93;
+  --color-accent-hover: #004b78;
   --color-accent-soft: #e9f2ff;
-  --color-danger: #eb5a46;
-  --color-danger-hover: #cf513d;
-  --color-success: #61bd4f;
-  --color-warning: #f2d600;
+  /* Was #eb5a46 (2.96:1 worst-case). */
+  --color-danger: #c62828;
+  --color-danger-hover: #a01f1f;
+  --color-danger-soft: #fdeaea;
+  /* Was #61bd4f (2.00:1 worst-case). */
+  --color-success: #276b2b;
+  --color-success-hover: #1b5220;
+  --color-success-soft: #e8f5e9;
+  /* Was #f2d600 (1.23:1 worst-case). #f57f17 was tried and is still only
+     2.65:1 on white; #9c4f00 is the darkest amber that still reads as amber
+     rather than brown. */
+  --color-warning: #9c4f00;
+  --color-warning-hover: #7d3f00;
+  --color-warning-soft: #fff8e1;
 
   /* Shadows */
   --shadow-sm: 0 1px 2px rgba(9, 30, 66, 0.08);
@@ -79,18 +97,34 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
+    /* Colors — dark theme
+       Foreground tokens verified >= 4.5:1 against both dark backgrounds
+       (--color-surface #22272b, --color-bg #1d2125). */
     --color-bg: #1d2125;
     --color-bg-elevated: #2c333a;
     --color-surface: #22272b;
     --color-surface-hover: #2c333a;
     --color-text: #b6c2cf;
     --color-text-muted: #8c9bab;
-    --color-text-subtle: #6b778c;
+    /* Was #6b778c — carried over from the light theme, where it is a mid-grey.
+       On dark surfaces it was only 3.33:1, a real AA failure. */
+    --color-text-subtle: #8c9bab;
     --color-border: #3d444b;
     --color-border-strong: #4d555e;
     --color-accent: #4c9aff;
     --color-accent-hover: #7aaeff;
     --color-accent-soft: rgba(76, 154, 255, 0.15);
+    /* Was #eb5a46 — 4.37:1 on the surface, just under the 4.5:1 threshold.
+       #ff9e99 also clears AAA (7.61:1) while staying in the same red family. */
+    --color-danger: #ff9e99;
+    --color-danger-hover: #ffb3ab;
+    --color-danger-soft: rgba(255, 158, 153, 0.15);
+    --color-success: #66bb6a;
+    --color-success-hover: #81c784;
+    --color-success-soft: rgba(102, 187, 106, 0.15);
+    --color-warning: #ffd54f;
+    --color-warning-hover: #ffe082;
+    --color-warning-soft: rgba(255, 213, 79, 0.15);
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
     --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
     --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.5), 0 2px 4px rgba(0, 0, 0, 0.3);

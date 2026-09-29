@@ -15,88 +15,205 @@
  *         AAA results are informational and never affect the exit code.
  */
 
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const TOKENS_PATH = join(__dirname, "..", "src", "styles", "tokens.css");
+
+const AA = 4.5;
+const AAA = 7;
+
+// --- colour maths (WCAG 2.x relative luminance + contrast ratio) -------------
+
+function parseHex(hex) {
+  const h = hex.trim().replace("#", "");
+  const full =
+    h.length === 3
+      ? h
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : h;
+  return [
+    parseInt(full.slice(0, 2), 16),
+    parseInt(full.slice(2, 4), 16),
+    parseInt(full.slice(4, 6), 16),
+  ];
+}
+
 function getLuminance(hex) {
-  const r = parseInt(hex.slice(1, 3), 16) / 255;
-  const g = parseInt(hex.slice(3, 5), 16) / 255;
-  const b = parseInt(hex.slice(5, 7), 16) / 255;
-  const a = [r, g, b].map((v) =>
-    v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4),
-  );
-  return 0.2126 * a[0] + 0.7152 * a[1] + 0.0722 * a[2];
+  const [r, g, b] = parseHex(hex).map((v) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
 function contrastRatio(fg, bg) {
   const l1 = getLuminance(fg);
   const l2 = getLuminance(bg);
-  const lighter = Math.max(l1, l2);
-  const darker = Math.min(l1, l2);
-  return (lighter + 0.05) / (darker + 0.05);
+  return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
 }
 
-/** Minimum ratio across every background the foreground can sit on. */
 const worstCase = (fg, backgrounds) =>
   Math.min(...backgrounds.map((bg) => contrastRatio(fg, bg)));
 
-// Backgrounds each foreground may appear against, per theme.
-const LIGHT_BGS = ["#ffffff", "#f4f5f7", "#ebecf0"]; // surface, bg, bg-elevated
-const DARK_BGS = ["#22272b", "#1d2125"]; // surface, bg
+// --- parse tokens.css -------------------------------------------------------
 
-// ---------------------------------------------------------------------------
-// TARGET palette — these are the values Sprint 1 (AA) and Sprint 5 (AAA)
-// propose. Update this file in the same commit that edits tokens.css.
-// ---------------------------------------------------------------------------
-const AA = 4.5;
+const css = readFileSync(TOKENS_PATH, "utf8");
 
-const lightTheme = {
-  "text": ["#172b4d", LIGHT_BGS],
-  "text-muted": ["#526075", LIGHT_BGS],
-  "accent": ["#005b93", LIGHT_BGS],
-  "success": ["#276b2b", LIGHT_BGS],
-  "danger": ["#c62828", LIGHT_BGS],
-  "warning": ["#9c4f00", LIGHT_BGS],
-};
+/**
+ * Split tokens.css into its light `:root` block and the
+ * `@media (prefers-color-scheme: dark)` block, then read the
+ * `--color-*` custom properties declared in each.
+ *
+ * Reading the real file (rather than a hardcoded copy) means a token edit
+ * that breaks contrast fails this check instead of silently passing.
+ */
+function readTokens(source) {
+  const lightStart = source.indexOf(":root");
+  const darkStart = source.indexOf("prefers-color-scheme: dark");
+  if (lightStart === -1) throw new Error("no :root block in tokens.css");
 
-const darkTheme = {
-  "text": ["#b6c2cf", DARK_BGS],
-  "text-muted": ["#8c9bab", DARK_BGS],
-  "accent": ["#4c9aff", DARK_BGS],
-  "success": ["#66bb6a", DARK_BGS],
-  "danger": ["#ff9e99", DARK_BGS],
-  "warning": ["#ffd54f", DARK_BGS],
-};
+  // The light block runs from its :root up to the dark media query.
+  const lightSlice = source.slice(
+    lightStart,
+    darkStart === -1 ? source.length : darkStart,
+  );
+  const darkSlice = darkStart === -1 ? "" : source.slice(darkStart);
 
-const aaaTheme = {
-  "success (AAA)": ["#144a17", LIGHT_BGS],
-  "danger (AAA)": ["#8e0000", LIGHT_BGS],
-  "warning (AAA)": ["#743a00", LIGHT_BGS],
-};
+  const collect = (slice) => {
+    const out = {};
+    const re = /--color-([a-z-]+)\s*:\s*(#[0-9a-fA-F]{3,8})\s*;/g;
+    let m;
+    while ((m = re.exec(slice)) !== null) out[m[1]] = m[2];
+    return out;
+  };
 
-function report(title, table, threshold, fatal) {
-  console.log(`\n=== ${title} ===`);
+  return { light: collect(lightSlice), dark: collect(darkSlice) };
+}
+
+const { light, dark } = readTokens(css);
+
+// Foreground tokens that must meet 4.5:1. Background tokens are excluded:
+// they are never used as text. Each theme is checked against its own set.
+const FOREGROUND_TOKENS = [
+  "text",
+  "text-muted",
+  "text-subtle",
+  "accent",
+  "danger",
+  "success",
+  "warning",
+];
+
+const lightBackgrounds = [light.surface, light.bg, light["bg-elevated"]];
+const darkBackgrounds = [dark.surface, dark.bg];
+
+function check(themeName, tokens, backgrounds, threshold) {
+  console.log(
+    `\n=== ${themeName} (${threshold}:1, worst of ${backgrounds.length} backgrounds) ===`,
+  );
   let ok = true;
-  for (const [name, [fg, bgs]] of Object.entries(table)) {
-    const ratio = worstCase(fg, bgs);
+  for (const name of FOREGROUND_TOKENS) {
+    const fg = tokens[name];
+    if (!fg) {
+      console.log(`  ${name.padEnd(14)} MISSING TOKEN - skipped`);
+      continue;
+    }
+    const ratio = worstCase(fg, backgrounds);
     const pass = ratio >= threshold;
-    if (fatal) ok = ok && pass;
-    const mark = pass ? "PASS" : fatal ? "FAIL" : "BELOW (non-fatal)";
+    if (!pass) ok = false;
     console.log(
-      `  ${name.padEnd(18)} ${fg}  worst ${ratio.toFixed(2)}:1  ${mark}`,
+      `  ${name.padEnd(14)} ${fg}  worst ${ratio.toFixed(2)}:1  ${pass ? "PASS" : "FAIL"}`,
     );
   }
   return ok;
 }
 
-const aaOk =
-  report(`LIGHT THEME (AA, worst of ${LIGHT_BGS.length} backgrounds)`, lightTheme, AA, true) &
-  report(`DARK THEME (AA, worst of ${DARK_BGS.length} backgrounds)`, darkTheme, AA, true)
-    ? 1
-    : 0;
+// --- extra palettes that are NOT in tokens.css -----------------------------
+// Card-type colours render as text on their own softColor (TypeChip) AND on
+// --color-bg-elevated (Sidebar), so they are checked against both.
+const TYPE_META = [
+  ["epic", "#7b3fb0", "#f3e8fd"],
+  ["story", "#15703f", "#dffbe8"],
+  ["task", "#4a5769", "#e9eaee"],
+];
 
-report("AAA TIER (Sprint 5, optional - non-fatal)", aaaTheme, 7, false);
+// Label palette entries are user-chosen backgrounds; LabelPill picks between
+// #172b4d and #ffffff. Each must reach 4.5:1 with at least one of them.
+const LABEL_PALETTE = [
+  ["green", "#61bd4f"],
+  ["yellow", "#f2d600"],
+  ["orange", "#ff9f1f"],
+  ["red", "#d03a3a"],
+  ["purple", "#c377e0"],
+  ["blue", "#0079bf"],
+  ["cyan", "#00c2e0"],
+  ["lime", "#51e898"],
+  ["pink", "#ff78cb"],
+  ["dark", "#344563"],
+  ["grey", "#b3bac5"],
+  ["gold", "#fbd86f"],
+];
 
+const DARK_FG = "#172b4d";
+const WHITE_FG = "#ffffff";
+
+console.log(`Reading tokens from ${TOKENS_PATH}`);
 console.log(
-  aaOk
-    ? "\nAll AA contrast checks passed."
-    : "\nSome AA checks FAILED - fix before shipping.",
+  `Light backgrounds: ${lightBackgrounds.join(", ")}  (bg-elevated is the binding constraint)`,
 );
-process.exit(aaOk ? 0 : 1);
+console.log(`Dark backgrounds:  ${darkBackgrounds.join(", ")}`);
+
+const lightOk = check("LIGHT THEME", light, lightBackgrounds, AA);
+const darkOk = check("DARK THEME", dark, darkBackgrounds, AA);
+
+// --- card type meta ---------------------------------------------------------
+console.log("\n=== CARD TYPE META (4.5:1 on softColor AND on bg-elevated) ===");
+let typeOk = true;
+for (const [name, color, soft] of TYPE_META) {
+  const onSoft = contrastRatio(color, soft);
+  const onElevated = contrastRatio(color, light["bg-elevated"]);
+  const pass = onSoft >= AA && onElevated >= AA;
+  if (!pass) typeOk = false;
+  console.log(
+    `  ${name.padEnd(14)} ${color}  onSoft ${onSoft.toFixed(2)}  onElevated ${onElevated.toFixed(2)}  ${pass ? "PASS" : "FAIL"}`,
+  );
+}
+
+// --- label palette ----------------------------------------------------------
+console.log(
+  `\n=== LABEL PALETTE (best of ${DARK_FG} / ${WHITE_FG} must reach 4.5:1) ===`,
+);
+let paletteOk = true;
+for (const [name, bg] of LABEL_PALETTE) {
+  const onDark = contrastRatio(DARK_FG, bg);
+  const onWhite = contrastRatio(WHITE_FG, bg);
+  const best = Math.max(onDark, onWhite);
+  const pass = best >= AA;
+  if (!pass) paletteOk = false;
+  const chosen = onDark >= onWhite ? DARK_FG : WHITE_FG;
+  console.log(
+    `  ${name.padEnd(14)} ${bg}  best ${best.toFixed(2)}:1 (${chosen})  ${pass ? "PASS" : "FAIL"}`,
+  );
+}
+
+// AAA is aspirational and opt-in: reported for visibility, never enforced.
+if (dark.warning) {
+  const aaaRatio = worstCase(dark.warning, darkBackgrounds);
+  console.log(
+    `\n(AAA 7:1 not enforced here; dark --color-warning is ${aaaRatio.toFixed(2)}:1.)`,
+  );
+}
+
+const allOk = lightOk && darkOk && typeOk && paletteOk;
+console.log(
+  allOk
+    ? "\nAll AA contrast checks passed."
+    : "\nSome AA checks FAILED - fix tokens.css before shipping.",
+);
+process.exit(allOk ? 0 : 1);
+

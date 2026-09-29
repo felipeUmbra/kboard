@@ -641,7 +641,11 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--color-success, #4bce97);
+  /* The dot carries meaning ("this is a done column") so it must be
+     distinguishable from the card background, not merely decorative —
+     WCAG 1.4.11 wants >= 3:1 for UI components. Green clears that on both
+     light and dark surfaces. */
+  background: var(--color-success);
   margin-right: 6px;
   vertical-align: middle;
 }

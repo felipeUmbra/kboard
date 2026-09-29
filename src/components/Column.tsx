@@ -130,7 +130,7 @@ export function Column({ column, board, onOpenCard }: Props) {
                   setColMenuOpen(false);
                 }}
                 className="btn btn--ghost"
-                style={{ width: "100%", justifyContent: "flex-start", color: "var(--color-danger, #eb5a46)" }}
+                style={{ width: "100%", justifyContent: "flex-start", color: "var(--color-danger)" }}
               >
                 Delete column
               </button>

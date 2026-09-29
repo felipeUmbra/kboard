@@ -27,6 +27,7 @@ A Trello-inspired Kanban board that signs you in with Google and stores your boa
 - ✅ **Tablet and desktop** — collapsible rail, multi-column side-by-side, full sidebar
 - ✅ **Dark mode** via `prefers-color-scheme`
 - ✅ **Accessibility** — keyboard navigation, focus rings, screen-reader announcements, reduced-motion support
+- ✅ **WCAG 2.1 AA colour contrast** — every foreground token verified ≥ 4.5:1 against *every* background it can appear on (light and dark), enforced by `npm run a11y:contrast` and by unit + E2E regression tests
 - ✅ **End-to-end tested** with Playwright across 3 viewports (desktop, tablet, mobile) against a fake Drive + fake Google Identity Services
 - ✅ **Zero backend** — pure static SPA, deploy anywhere
 - ✅ **Installable Progressive Web App** — manifest + service worker; "Add to Home Screen" on iOS / Android gives you a standalone app icon, splash screen, and full-screen launch
@@ -94,6 +95,7 @@ Open <http://localhost:5172/> and click **Sign in with Google**.
 | `npm run test:e2e:headed` | Run the e2e suite with a visible browser window |
 | `npm run test:e2e:debug` | Run the e2e suite with the Playwright inspector attached |
 | `npm run test:e2e:report` | Open the last HTML report from a Playwright run |
+| `npm run a11y:contrast` | Verify every colour token meets WCAG AA contrast against all its backgrounds (exit 1 on failure) |
 
 ## Where your data lives
 

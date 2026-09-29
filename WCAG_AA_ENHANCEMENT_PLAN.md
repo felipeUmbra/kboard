@@ -18,7 +18,10 @@
 
 ---
 
-## Sprint 1: Critical Color Contrast Fixes (P0)
+## Sprint 1: Critical Color Contrast Fixes (P0) — ✅ COMPLETE
+
+> **Status: shipped.** All tokens verified, unit + E2E regression tests added.
+> Outcomes and two extra findings are recorded at the end of this section.
 
 ### 1.1 Update Design Tokens — `src/styles/tokens.css`
 
@@ -85,40 +88,129 @@ does, is not sufficient.
 
 **Verification**: Run contrast check script after changes.
 
-### 1.2 Update Component Styles for New Tokens — `src/styles/components.css`
+### Sprint 1 outcome — what actually shipped
 
-Search and replace any hardcoded color values that should use the new tokens:
+All figures below are the **verified worst case across every background**, not
+white-only numbers. `npm run a11y:contrast` parses `tokens.css` directly, so a
+future token edit that breaks contrast fails the check rather than silently
+passing.
 
-```bash
-# Find hardcoded semantic colors
-grep -rn "#61bd4f\|#eb5a46\|#f2d600" src/styles/
-```
+| Token | Light (worst of 3) | Dark (worst of 2) |
+|-------|-------------------|-------------------|
+| `--color-text` | #172b4d — 11.95 ✅ | #b6c2cf — 8.33 ✅ |
+| `--color-text-muted` | #526075 — 5.41 ✅ | #8c9bab — 5.31 ✅ |
+| `--color-text-subtle` | #4c5a6c — 5.96 ✅ | #8c9bab — 5.31 ✅ |
+| `--color-accent` | #005b93 — 6.10 ✅ | #4c9aff — 5.29 ✅ |
+| `--color-danger` | #c62828 — 4.76 ✅ | #ff9e99 — 7.61 ✅ |
+| `--color-success` | #276b2b — 5.52 ✅ | #66bb6a — 6.38 ✅ |
+| `--color-warning` | #9c4f00 — 5.04 ✅ | #ffd54f — 10.68 ✅ |
 
-Update any direct hex usage to use CSS variables.
+Also added `-soft` and `-hover` variants for success / danger / warning, which
+did not exist before.
 
-### 1.3 Add Soft Color Variants for Badges/Chips
+### Three findings beyond the original Sprint 1 scope
 
-Create consistent background colors for status indicators:
+All were surfaced while verifying the planned values. Each was a real AA (1.4.3)
+failure, not a cosmetic issue.
 
-```css
-/* In tokens.css :root */
---color-success-soft: #e8f5e9;
---color-danger-soft: #fdeaea;
---color-warning-soft: #fff8e1;
---color-accent-soft: #e9f2ff;  /* Already exists */
+1. **Dark `--color-text-subtle` was 3.33:1.** The dark theme block reused the
+   light theme's mid-grey `#6b778c` — fine on white, far too dark on `#22272b`.
+   Now `#8c9bab` in dark. There is a unit test asserting the dark block actually
+   overrides the light hexes, specifically to catch a repeat of this.
 
-/* Dark mode */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-success-soft: rgba(102, 187, 106, 0.15);
-    --color-danger-soft: rgba(239, 83, 80, 0.15);
-    --color-warning-soft: rgba(255, 179, 0, 0.15);
-    --color-accent-soft: rgba(76, 154, 255, 0.15);
-  }
-}
-```
+2. **All three card-type colours failed as text.** `CARD_TYPE_META.color` is
+   rendered as text on `softColor` in `TypeChip` *and* on the elevated
+   background in `Sidebar`:
+   - epic `#a25ddc` → 3.46:1 ❌
+   - story `#4bce97` → **1.81:1** ❌ (worst offender found anywhere in the app)
+   - task `#5e6c84` → 4.42:1 ❌
 
-Update components using these (ProgressBar, TypeChip, CardChips, ActivityLog, Banner).
+   Corrected to `#7b3fb0`, `#15703f`, `#4a5769` — all now ≥ 5.20:1 in both
+   contexts, and still ≥ 3:1 for the 3px card stripe (WCAG 1.4.11).
+
+3. **`pickForeground` chose unreadable label text.** `LabelPill` picked between
+   near-black and white using a `0.299r + 0.587g + 0.114b` average thresholded
+   at `0.6`. On mid-tone palette colours it chose white, giving green `#61bd4f`
+   at **2.36:1** and cyan `#00c2e0` at **2.14:1**. Replaced with proper WCAG
+   relative luminance, selecting whichever candidate actually wins — correct for
+   any hex a user can pick, not just the curated palette. The palette's `red`
+   was also re-pitched `#eb5a46` → `#d03a3a`, because it tops out at 4.09:1
+   with *either* foreground.
+
+### Tests added
+
+| File | Coverage |
+|------|----------|
+| `tests/unit/a11y-contrast.test.ts` | **52 tests**: contrast maths vs WCAG reference values, every token in both themes, dark-block override check, card-type meta (text + 3:1 stripe), non-text 1.4.11 (focus ring, done dot), banner soft-tint pairings, `pickForeground`, full label palette |
+| `tests/unit/helpers/contrast.ts` | Test oracle — deliberately a *separate* implementation from the build script, so a bug in the maths can't cancel itself out and pass everything. Also handles `rgba()` alpha compositing, which a hex-only path cannot |
+| `tests/e2e/a11y-contrast.spec.ts` | 6 tests reading real `getComputedStyle` in the browser, light + dark, incl. a translucent-background walk |
+
+The E2E suite is the one that matters most: it measures what actually renders,
+so it catches a token that is compliant in isolation but lands on an unexpected
+background, or a hardcoded hex that bypasses the token system entirely.
+
+**Regression guard verified by deliberately breaking it**: reverting
+`--color-accent` to the old `#0079bf` fails with
+`--color-accent (#0079bf) is 3.96:1 on its worst light background`.
+
+**Known gap**: nothing currently fails the build if someone reintroduces a
+hardcoded hex instead of using a token. `npm run a11y:contrast` would not
+notice, because the offending colour is not in `tokens.css`. Worth a lint rule
+in a later sprint if this turns out to be a recurring problem.
+
+### 1.3 Add Soft Color Variants for Badges/Chips — ✅ DONE
+
+Soft variants were added for all three semantic hues in both themes. They are
+now actually **consumed** by `.banner--error` / `.banner--success`, which
+previously relied on the border colour alone to signal severity. The pairings
+are contrast-verified and unit-tested:
+
+| Kind | Light (text on soft) | Dark (text on 15% tint over surface) |
+|------|----------------------|---------------------------------------|
+| danger | 4.85:1 | 5.61:1 |
+| success | 5.79:1 | 4.87:1 |
+| warning | 5.60:1 | 7.30:1 |
+
+Note the dark figures are measured against the **composited** background — the
+dark `-soft` tokens are `rgba(..., 0.15)`, so a contrast check against the raw
+tint value would be measuring something the user never sees.
+
+### 1.2 Update Component Styles for New Tokens — ✅ DONE
+
+Swept `src/` for hardcoded semantic hexes and dead `var(--token, #fallback)`
+pairs. All removed; every `var()` now resolves against a defined token, so a
+future rename can't silently fall back to a stale colour.
+
+| File | Was | Now |
+|------|-----|-----|
+| `DateBadge.tsx` | `var(--color-danger, #eb5a46)` etc. | `var(--color-danger)` |
+| `DateField.tsx` | `var(--color-warning, #f2d600)`, `var(--color-danger, #eb5a46)` | `var(--color-warning)`, `var(--color-danger)` |
+| `ProgressBar.tsx` | `var(--color-danger, #eb5a46)` etc. | `var(--color-danger)` etc. |
+| `Column.tsx`, `BoardListView.tsx` | `var(--color-danger, #eb5a46)` | `var(--color-danger)` |
+| `components.css` | `var(--color-success, #4bce97)` (done-dot) | `var(--color-success)` |
+| `responsive.css` | `linear-gradient(..., #0079bf, ...)` | `var(--color-accent)` |
+
+### 1.4 Fixes to pre-existing test infrastructure
+
+Two test-infrastructure bugs surfaced while validating Sprint 1. Neither was
+caused by the colour work, but both had to be fixed to get a clean run:
+
+1. **All 6 PWA tests were permanently failing.** `playwright.config.ts` put a
+   `webServer` *inside* the `pwa` project entry, cast through `unknown` to
+   satisfy `tsc`. Playwright 1.62 only reads `webServer` from the top-level
+   `TestConfig` and **silently ignores** it on a project, so the production
+   preview server never started and every test hit `ERR_CONNECTION_REFUSED` on
+   :5173. Fixed by promoting it to a top-level `webServer` array (which also
+   let the `unknown` cast go away). Confirmed pre-existing by reproducing on a
+   clean tree.
+
+2. **`clickButtonFallback` could exhaust the test budget.** On a click
+   interception it fell through to `boundingBox()` with **no timeout**, which
+   inherits the 30s *test* timeout — so a fallback that ran after the initial
+   3s click attempt had already failed would consume the entire test and
+   surface a misleading `boundingBox: Test timeout exceeded`. Each step is now
+   individually bounded and the original click error is rethrown when the
+   fallback is impossible.
 
 ---
 

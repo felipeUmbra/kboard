@@ -6,7 +6,10 @@ import type { CardType } from "./types";
 export interface CardTypeMeta {
   type: CardType;
   defaultLabel: string;
-  color: string;            // accent hex
+  /** Foreground hex. Rendered as text on `softColor` (TypeChip) and on
+   *  --color-bg-elevated (Sidebar), so it must clear 4.5:1 against BOTH.
+   *  Also used as the 3px card stripe, where only 3:1 is required. */
+  color: string;
   /** Soft tinted background for stripes/badges. */
   softColor: string;
   icon: string;             // unicode glyph
@@ -17,11 +20,15 @@ export interface CardTypeMeta {
   showProgress: boolean;    // epics & stories do; tasks don't
 }
 
+// Contrast-verified against every background each colour is rendered on:
+//   TypeChip text-on-softColor, Sidebar text-on-bg-elevated, card stripe on
+//   --color-surface. Run `npm run a11y:contrast` after changing any of these.
 export const CARD_TYPE_META: Record<CardType, CardTypeMeta> = {
   epic: {
     type: "epic",
     defaultLabel: "Epic",
-    color: "#a25ddc",
+    // Was #a25ddc — 3.46:1 on its own softColor, a text-contrast failure.
+    color: "#7b3fb0",
     softColor: "#f3e8fd",
     icon: "◆",
     canHaveParent: false,
@@ -33,7 +40,8 @@ export const CARD_TYPE_META: Record<CardType, CardTypeMeta> = {
   story: {
     type: "story",
     defaultLabel: "Story",
-    color: "#4bce97",
+    // Was #4bce97 — 1.81:1 on its own softColor, the worst offender found.
+    color: "#15703f",
     softColor: "#dffbe8",
     icon: "★",
     canHaveParent: true,
@@ -45,7 +53,7 @@ export const CARD_TYPE_META: Record<CardType, CardTypeMeta> = {
   task: {
     type: "task",
     defaultLabel: "Task",
-    color: "#5e6c84",
+    color: "#4a5769",
     softColor: "#e9eaee",
     icon: "•",
     canHaveParent: true,

@@ -70,29 +70,12 @@ export default defineConfig({
       use: {
         ...devices["Desktop Chrome"],
         viewport: { width: 1280, height: 800 },
-        baseURL: process.env.CI ? "http://localhost:5172" : "http://localhost:5173",
+        baseURL: "http://localhost:5173",
       },
-      // PWA project uses its own webServer (production preview). This is a
-      // supported runtime feature, but `@playwright/test` 1.62's shipped
-      // types don't declare `webServer` on a project entry — only on the
-      // top-level `TestConfig`. Cast through `unknown` to keep `tsc`
-      // (the GH deploy `typecheck` job) green without changing behavior.
-      ...({
-        webServer: {
-          command: process.env.CI
-            ? "npm run preview -- --port 5172 --strictPort"
-            : "npm run build && npm run preview -- --port 5173 --strictPort",
-          url: process.env.CI ? "http://localhost:5172" : "http://localhost:5173",
-          reuseExistingServer: !process.env.CI,
-          timeout: 180_000,
-          env: {
-            VITE_GOOGLE_CLIENT_ID: "fake-client-id.apps.googleusercontent.com",
-            BASE_PATH: "/",
-          },
-          stdout: "pipe",
-          stderr: "pipe",
-        },
-      } as object),
+      // NOTE: the production preview server this project needs lives in the
+      // top-level `webServer` array, not here. Playwright ignores a
+      // project-level `webServer`, which is why this used to be cast through
+      // `unknown` and silently did nothing.
     },
     {
       name: "chromium-mobile",
@@ -123,19 +106,54 @@ export default defineConfig({
       },
     },
   ],
-  webServer: {
-    // Main web server for dev/preview — used by chromium-desktop and chromium-tablet.
-    // In CI: serves the pre-built production bundle via `vite preview`.
-    // Locally: uses `vite dev` for fast iteration (no build step).
-    command: process.env.CI ? "npm run preview -- --port 5172 --strictPort" : "npm run dev",
-    url: "http://localhost:5172",
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-    env: {
-      VITE_GOOGLE_CLIENT_ID: "fake-client-id.apps.googleusercontent.com",
-      BASE_PATH: "/",
+  webServer: [
+    {
+      // Main web server for dev/preview — used by chromium-desktop,
+      // chromium-tablet and chromium-mobile.
+      // In CI: serves the pre-built production bundle via `vite preview`.
+      // Locally: uses `vite dev` for fast iteration (no build step).
+      command: process.env.CI
+        ? "npm run preview -- --port 5172 --strictPort"
+        : "npm run dev",
+      url: "http://localhost:5172",
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+      env: {
+        VITE_GOOGLE_CLIENT_ID: "fake-client-id.apps.googleusercontent.com",
+        BASE_PATH: "/",
+      },
+      stdout: "pipe",
+      stderr: "pipe",
     },
-    stdout: "pipe",
-    stderr: "pipe",
-  },
+    {
+      // PWA project needs a *production* preview of the built bundle (the
+      // service worker and manifest only exist there — vite dev never emits
+      // them, since devOptions.enabled is false).
+      //
+      // This used to live as a `webServer` key inside the `pwa` project entry,
+      // cast through `unknown` to satisfy tsc. That was wrong: Playwright
+      // 1.62 only reads `webServer` from the TOP-LEVEL TestConfig, and
+      // silently ignores it on a project. The preview server therefore never
+      // started and all six pwa.spec.ts tests failed with
+      // ERR_CONNECTION_REFUSED on :5173.
+      //
+      // As an array, every entry boots regardless of which project is
+      // selected, so the preview build now actually runs. Playwright requires
+      // baseURL to be set explicitly when webServer is an array — the `pwa`
+      // project already sets its own baseURL, so the top-level one only
+      // applies to the other projects.
+      command: process.env.CI
+        ? "npm run preview -- --port 5173 --strictPort"
+        : "npm run build && npm run preview -- --port 5173 --strictPort",
+      url: "http://localhost:5173",
+      reuseExistingServer: !process.env.CI,
+      timeout: 180_000,
+      env: {
+        VITE_GOOGLE_CLIENT_ID: "fake-client-id.apps.googleusercontent.com",
+        BASE_PATH: "/",
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  ],
 });

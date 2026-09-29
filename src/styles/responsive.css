@@ -293,12 +293,18 @@
   animation: slide-down var(--motion-base);
 }
 
+/* Tinted background + solid foreground. The pairing is contrast-checked:
+   danger #c62828 on #fdeaea = 4.85:1, success #276b2b on #e8f5e9 = 5.79:1,
+   warning #9c4f00 on #fff8e1 = 5.60:1 — all >= 4.5:1, and the tint makes the
+   severity obvious without relying on the border colour alone. */
 .banner--error {
+  background: var(--color-danger-soft);
   border-color: var(--color-danger);
   color: var(--color-danger);
 }
 
 .banner--success {
+  background: var(--color-success-soft);
   border-color: var(--color-success);
   color: var(--color-success);
 }
@@ -311,7 +317,7 @@
   align-items: center;
   justify-content: center;
   padding: var(--space-4);
-  background: linear-gradient(135deg, #0079bf 0%, #5067c5 100%);
+  background: linear-gradient(135deg, var(--color-accent) 0%, #3d4fa8 100%);
   padding-top: max(var(--space-4), env(safe-area-inset-top));
   padding-bottom: max(var(--space-4), env(safe-area-inset-bottom));
 }

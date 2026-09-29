@@ -49,16 +49,37 @@ export class BoardPage {
    * succeeds. This helper tries the normal click first and falls back to a
    * real mouse click at the element's center when that false positive
    * occurs, so tests aren't blocked by a phantom interception.
+   *
+   * Both steps are individually bounded. `boundingBox()` with no timeout
+   * inherits the *test* timeout (30s), so a fallback that ran after the
+   * initial click had already burned 3s would exhaust the whole test budget
+   * and report the misleading "boundingBox: Test timeout exceeded" instead
+   * of the real cause. Failing fast here keeps the diagnostic useful.
    */
   async clickButtonFallback(locator: Locator): Promise<void> {
     try {
       await locator.click({ timeout: 3_000 });
-    } catch {
-      const box = await locator.boundingBox();
-      if (!box) throw new Error("clickButtonFallback: no bounding box");
-      const x = box.x + box.width / 2;
-      const y = box.y + box.height / 2;
-      await this.page.mouse.click(x, y);
+      return;
+    } catch (clickError) {
+      // Element may have moved or detached while we waited; re-check that
+      // it is still actionable before attempting the coordinate fallback.
+      try {
+        await locator.waitFor({ state: "visible", timeout: 2_000 });
+      } catch {
+        throw clickError;
+      }
+
+      let box;
+      try {
+        box = await locator.boundingBox({ timeout: 2_000 });
+      } catch {
+        // No usable box: surface the original click failure, which is far
+        // more actionable than "no bounding box".
+        throw clickError;
+      }
+      if (!box) throw clickError;
+
+      await this.page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
     }
   }
 

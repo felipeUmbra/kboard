@@ -16,10 +16,10 @@ export function ProgressBar({
     progress.percent === null
       ? "var(--color-border)"
       : progress.percent < 33
-        ? "var(--color-danger, #eb5a46)"
+        ? "var(--color-danger)"
         : progress.percent < 66
-          ? "var(--color-warning, #f2d600)"
-          : "var(--color-success, #4bce97)";
+          ? "var(--color-warning)"
+          : "var(--color-success)";
 
   return (
     <div

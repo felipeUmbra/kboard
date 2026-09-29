@@ -187,7 +187,7 @@ export function BoardListView({
               style={{
                 marginTop: "var(--space-2)",
                 fontSize: "var(--text-sm)",
-                color: "var(--color-danger, #eb5a46)",
+                color: "var(--color-danger)",
               }}
             >
               A board named “{duplicateName.name}” already exists. Choose a

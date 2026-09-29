@@ -1,12 +1,19 @@
 // Core domain types for Kboard.
 // All data is JSON-serializable and persisted to Google Drive.
 
-/** Curated color palette used for labels and preset-list options. */
+/** Curated color palette used for labels and preset-list options.
+ *
+ *  Every entry is verified to reach >= 4.5:1 against at least one of the
+ *  two foregrounds LabelPill picks between (#172b4d / #ffffff). Mid-tone
+ *  colours that pass with neither were re-pitched — e.g. "red" was #eb5a46,
+ *  which tops out at 4.09:1 and is now #d03a3a.
+ *
+ *  Re-verify with: npm run a11y:contrast  */
 export const COLOR_PALETTE = [
   { id: "green",  value: "#61bd4f" },
   { id: "yellow", value: "#f2d600" },
   { id: "orange", value: "#ff9f1f" },
-  { id: "red",    value: "#eb5a46" },
+  { id: "red",    value: "#d03a3a" },
   { id: "purple", value: "#c377e0" },
   { id: "blue",   value: "#0079bf" },
   { id: "cyan",   value: "#00c2e0" },
