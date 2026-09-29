@@ -20,7 +20,8 @@
     "test:e2e:debug": "playwright test --debug",
     "test:e2e:chromium": "playwright test --project=chromium-desktop",
     "test:e2e:subpath": "node scripts/test-subpath.mjs",
-    "test:e2e:report": "playwright show-report"
+    "test:e2e:report": "playwright show-report",
+    "a11y:contrast": "node scripts/check-contrast.js"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.1.0",
