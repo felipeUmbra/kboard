@@ -2,6 +2,13 @@
 
 A Trello-inspired Kanban board that signs you in with Google and stores your boards as JSON files in your own Google Drive (in the hidden `appDataFolder`, so they don't clutter your Drive UI).
 
+> **📄 Documentation** — full specs live in [`Docs/`](./Docs):
+> [PRD](./Docs/PRD.md) · [TRD](./Docs/TRD.md) · [App Flow](./Docs/APP-FLOW.md) ·
+> [UX/UI Design](./Docs/UX-UI-DESIGN.md) · [Data Model](./Docs/DATA-MODEL.md) ·
+> [Implementation Plan](./Docs/IMPLEMENTATION-PLAN.md).
+> Accessibility audits are at [`WCAG_AA_AUDIT_REPORT.md`](./WCAG_AA_AUDIT_REPORT.md)
+> and [`WCAG_AA_ENHANCEMENT_PLAN.md`](./WCAG_AA_ENHANCEMENT_PLAN.md).
+
 ## Features
 
 - ✅ **Google OAuth 2.0** sign-in via Google Identity Services
@@ -32,7 +39,7 @@ A Trello-inspired Kanban board that signs you in with Google and stores your boa
 - ✅ **Bypass blocks** — a "Skip to main content" link is the first focusable element (WCAG 2.4.1)
 - ✅ **Keyboard drag-and-drop** — cards are movable with Space + Arrow keys, documented in an in-app shortcuts panel
 - ✅ **Touch targets** — 44px minimum for buttons, inputs and rich-text controls on touch devices (WCAG 2.5.5)
-- ✅ **End-to-end tested** with Playwright across 3 viewports (desktop, tablet, mobile) against a fake Drive + fake Google Identity Services
+- ✅ **End-to-end tested** with Playwright across 3 viewports (desktop, tablet, mobile) plus a dedicated PWA project, against a fake Drive + fake Google Identity Services — 325 tests
 - ✅ **Zero backend** — pure static SPA, deploy anywhere
 - ✅ **Installable Progressive Web App** — manifest + service worker; "Add to Home Screen" on iOS / Android gives you a standalone app icon, splash screen, and full-screen launch
 - ✅ **Offline app shell** — Workbox precaches the SPA shell, manifest, and icons so the boards list loads even with no network. Drive writes are deferred via the existing in-memory + localStorage draft path until you're back online
@@ -102,6 +109,7 @@ Open <http://localhost:5172/> and click **Sign in with Google**.
 | `npm run a11y:contrast` | Verify every colour token meets WCAG AA contrast against all its backgrounds (exit 1 on failure) |
 | `npm run lint:colors` | Fail on hardcoded hex colours in `src/` outside the token file |
 | `npm run a11y` | Run both accessibility gates above |
+| `npm run test:unit` | Run the Vitest unit + integration suites (155 tests) |
 
 ## Where your data lives
 
@@ -133,21 +141,38 @@ src/
 ├── components/        # React UI components
 │   ├── fields/        # Custom field subcomponents (chip, editor, manager)
 │   ├── ActivityLog.tsx, CardEditor.tsx (column picker, drafts),
+│   │   DndKeyboardHelp.tsx (keyboard shortcuts), AppShell.tsx (skip link),
 │   │   MobileColumnTargets.tsx (mobile drag overlay), …
 ├── drive/             # Google Drive REST client + board repository
 ├── hooks/             # Custom React hooks (useViewport)
 ├── models/            # Domain types, validators, migrations, progress rollup
+│   ├── colorContrast.ts   # pickForeground() — WCAG foreground selection
+│   └── …
+├── share/             # Web Share Target inbox (IndexedDB)
 ├── state/             # React context for board state + debounced sync
 │   ├── cardDrafts.ts  # localStorage-backed in-progress card edits
 │   └── BoardContext.tsx, boardActions.ts, cardActions.ts, …
-├── styles/            # Design tokens, global CSS, responsive rules
+├── styles/            # tokens.css (design tokens), global.css, components.css,
+│                      # responsive.css
+├── views/             # PlannerView
 ├── App.tsx
 ├── main.tsx
 └── vite-env.d.ts
+
+scripts/
+├── check-contrast.js      # npm run a11y:contrast — token contrast gate
+├── lint-color-literals.js # npm run lint:colors — no hardcoded colours
+└── test-subpath.mjs       # PWA subpath deployment test runner
+
+Docs/                # PRD, TRD, app flow, UX/UI, data model, plan
+
 tests/
-├── e2e/               # Playwright end-to-end specs (board, sync, hierarchy, …)
+├── e2e/               # Playwright specs (board, sync, hierarchy, a11y, pwa, …)
+├── regression/        # Playwright regression specs
 ├── fixtures/          # fakeDrive, fakeAuth (intercept Google APIs in tests)
-└── helpers/           # BoardPage, selectors, login helpers
+├── helpers/           # BoardPage, selectors, login helpers
+├── unit/              # Contrast maths, colour linter, duplication guards
+└── integration/       # State action behaviour
 ```
 
 ## Tech stack
@@ -161,6 +186,22 @@ tests/
 - **Google Identity Services** for OAuth
 - **Google Drive REST API v3** for storage
 - Zero backend — pure client-side SPA
+
+## Quality gates
+
+Every pull request runs four automated gates. Nothing merges on a manual
+"looks right" check.
+
+| Gate | Command | What it prevents |
+|---|---|---|
+| Types | `npm run typecheck` | Type errors |
+| Unit | `npm run test:unit` | Domain-logic regressions |
+| Accessibility | `npm run a11y` | A contrast failure or a hardcoded colour reaching the UI |
+| E2E | `npm run test:e2e` | Broken user flows on desktop, tablet, mobile and PWA |
+
+The accessibility gates are the unusual part: they are **build failures, not
+review comments**. A colour that would fail WCAG AA cannot be merged, which is
+why the palette has stayed conformant as the UI has grown.
 
 ## Deploying
 
