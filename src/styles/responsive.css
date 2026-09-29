@@ -19,7 +19,7 @@
 .topbar {
   padding: 0 var(--space-4);
   background-color: var(--color-accent);
-  color: #fff;
+  color: var(--color-on-accent);
   display: flex;
   align-items: center;
   gap: var(--space-3);
@@ -71,7 +71,7 @@
 }
 
 .topbar__menu-btn {
-  color: #fff;
+  color: var(--color-on-accent);
   padding: var(--space-2);
   border-radius: var(--radius-md);
   display: none;
@@ -139,6 +139,20 @@
   min-height: 36px;
 }
 
+/* WCAG 2.5.8 Target Size (Minimum) is 24x24 CSS px, but the plan targets
+   44px on touch. Buttons are everywhere in this app (toolbar, card editor,
+   column menus), so they are the highest-leverage place to fix the shortfall.
+   Scoped to coarse pointers so the denser desktop layout is unchanged. */
+@media (pointer: coarse) {
+  .btn {
+    min-height: var(--tap-target);
+    /* Width too: an icon-only button (the modal close "✕") is content-sized
+       and came out 37px wide, which fails 2.5.5 on the narrow axis even
+       though the height was fine. */
+    min-width: var(--tap-target);
+  }
+}
+
 .btn:hover:not(:disabled) {
   background: var(--color-surface-hover);
   border-color: var(--color-border-strong);
@@ -151,7 +165,7 @@
 
 .btn--primary {
   background: var(--color-accent);
-  color: #fff;
+  color: var(--color-on-accent);
   border-color: var(--color-accent);
 }
 
@@ -162,7 +176,7 @@
 
 .btn--danger {
   background: var(--color-danger);
-  color: #fff;
+  color: var(--color-on-danger);
   border-color: var(--color-danger);
 }
 
@@ -197,6 +211,15 @@
   color: var(--color-text);
   font-size: var(--text-sm);
   transition: border-color var(--motion-fast), box-shadow var(--motion-fast);
+}
+
+/* Sprint 3.3: text inputs computed to ~36px tall, under the 44px target.
+   Raised on touch pointers only, so the desktop forms keep their density. */
+@media (pointer: coarse) {
+  .input,
+  .select {
+    min-height: var(--tap-target);
+  }
 }
 
 .input:focus,
@@ -317,7 +340,11 @@
   align-items: center;
   justify-content: center;
   padding: var(--space-4);
-  background: linear-gradient(135deg, var(--color-accent) 0%, #3d4fa8 100%);
+  background: linear-gradient(
+    135deg,
+    var(--color-accent) 0%,
+    var(--color-accent-gradient-end) 100%
+  );
   padding-top: max(var(--space-4), env(safe-area-inset-top));
   padding-bottom: max(var(--space-4), env(safe-area-inset-bottom));
 }
@@ -816,5 +843,57 @@
   flex-direction: column;
   background-color: var(--color-bg);
   overflow: hidden;
+}
+
+/* Focus lands here when the skip link is used. Suppress the ring on the
+   container itself: the ring would outline the entire viewport, and the
+   reason focus moved here is that the user already knows where they are.
+   The skip link itself keeps a visible ring. */
+.app-content:focus {
+  outline: none;
+}
+
+/* ===== Skip link (WCAG 2.4.1) =====
+   Visually hidden until focused, using the standard clip technique rather
+   than display:none / visibility:hidden (both remove the element from the
+   accessibility tree AND the tab order) or a negative transform.
+
+   The transform approach was tried first and is a trap: `translateY(-120%)`
+   places the box at a negative y, outside the viewport, and Chromium then
+   EXCLUDES it from sequential focus navigation — so Tab skipped the skip
+   link entirely even though .focus() still worked. The same trap applies to
+   the usual `margin: -1px` that accompanies this recipe: combined with
+   top/left:0 it lands the 1x1 box at (-1, -1), which is equally outside the
+   viewport. The element is already position:absolute and therefore out of
+   flow, so no negative margin is needed to protect layout. */
+.skip-link {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1000;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.skip-link:focus {
+  /* Un-clip and give it real presence. */
+  width: auto;
+  height: auto;
+  padding: var(--space-3) var(--space-4);
+  overflow: visible;
+  clip: auto;
+  clip-path: none;
+  background: var(--color-surface);
+  color: var(--color-accent);
+  font-weight: 600;
+  text-decoration: underline;
+  border: 2px solid var(--color-accent);
+  border-radius: 0 0 var(--radius-md) 0;
 }
  

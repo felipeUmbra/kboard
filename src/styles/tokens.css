@@ -51,14 +51,23 @@
   --color-accent: #005b93;
   --color-accent-hover: #004b78;
   --color-accent-soft: #e9f2ff;
+  /* Text/icon colour for anything sitting ON an accent-filled surface.
+     Light: white gives 7.20:1 on the light accent (near-black would be
+     1.96:1, so white is the only viable choice here). */
+  --color-on-accent: #ffffff;
+  /* Trailing stop of the login screen gradient. Decorative only — the login
+     card itself sits on --color-surface, so this needs no contrast check. */
+  --color-accent-gradient-end: #3d4fa8;
   /* Was #eb5a46 (2.96:1 worst-case). */
   --color-danger: #c62828;
   --color-danger-hover: #a01f1f;
   --color-danger-soft: #fdeaea;
+  --color-on-danger: #ffffff;
   /* Was #61bd4f (2.00:1 worst-case). */
   --color-success: #276b2b;
   --color-success-hover: #1b5220;
   --color-success-soft: #e8f5e9;
+  --color-on-success: #ffffff;
   /* Was #f2d600 (1.23:1 worst-case). #f57f17 was tried and is still only
      2.65:1 on white; #9c4f00 is the darkest amber that still reads as amber
      rather than brown. */
@@ -114,14 +123,22 @@
     --color-accent: #4c9aff;
     --color-accent-hover: #7aaeff;
     --color-accent-soft: rgba(76, 154, 255, 0.15);
+    /* The dark accent is a LIGHT blue, so white on it is only 2.85:1 — a
+       live AA failure that the hardcoded `#fff` in TopBar and the mobile
+       rail badges was hiding. Near-black gives 4.95:1 and pure black 7.37:1;
+       near-black is used so this stays consistent with --color-on-light. */
+    --color-on-accent: #172b4d;
+    --color-accent-gradient-end: #2c3a86;
     /* Was #eb5a46 — 4.37:1 on the surface, just under the 4.5:1 threshold.
        #ff9e99 also clears AAA (7.61:1) while staying in the same red family. */
     --color-danger: #ff9e99;
     --color-danger-hover: #ffb3ab;
     --color-danger-soft: rgba(255, 158, 153, 0.15);
+    --color-on-danger: #172b4d;
     --color-success: #66bb6a;
     --color-success-hover: #81c784;
     --color-success-soft: rgba(102, 187, 106, 0.15);
+    --color-on-success: #172b4d;
     --color-warning: #ffd54f;
     --color-warning-hover: #ffe082;
     --color-warning-soft: rgba(255, 213, 79, 0.15);

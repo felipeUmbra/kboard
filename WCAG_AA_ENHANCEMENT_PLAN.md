@@ -8,13 +8,13 @@
 
 ## Compliance Targets by Sprint
 
-| Sprint | Target Level | Focus |
-|--------|--------------|-------|
-| Sprint 1 | A + AA | Critical fixes: Color contrast (AA), Skip link (A), Alt text (A) |
-| Sprint 2 | A + AA | Navigation, language, DnD keyboard support |
-| Sprint 3 | AA | Mobile polish, focus visibility, touch targets |
-| Sprint 4 | AA | Automated testing, regression prevention |
-| Ongoing | AAA | Enhanced contrast, sign language, reading level, help system |
+| Sprint | Target Level | Focus | Status |
+|--------|--------------|-------|--------|
+| Sprint 1 | A + AA | Critical fixes: Color contrast (AA), Skip link (A), Alt text (A) | ✅ Complete |
+| Sprint 2 | A + AA | Navigation, language, DnD keyboard support | ✅ Complete |
+| Sprint 3 | AA | Mobile polish, focus visibility, touch targets | ✅ Complete |
+| Sprint 4 | AA | Automated testing, regression prevention | Partial — the `a11y` CI gate, colour linter and 171 unit tests landed; axe-core and manual SR testing remain |
+| Ongoing | AAA | Enhanced contrast, sign language, reading level, help system | Not started |
 
 ---
 
@@ -214,145 +214,133 @@ caused by the colour work, but both had to be fixed to get a clean run:
 
 ---
 
-## Sprint 2: Navigation & Screen Reader Enhancements (P1)
+## Sprint 2: Navigation & Screen Reader Enhancements (P1) — ✅ COMPLETE
 
-### 2.1 Add Skip to Main Content Link — `src/components/AppShell.tsx`
+> **Status: shipped.** Two of the three items were already satisfied in the
+> codebase; the third shipped with a correction to the plan's own recipe.
+
+### 2.1 Add Skip to Main Content Link — `src/components/AppShell.tsx` — ✅ DONE
+
+Implemented, but **not** as the recipe below. The plan's `top: '-100%'` recipe
+is a trap, and so is the closely-related `transform: translateY(-120%)`
+variant: both place the element's box outside the viewport, and Chromium then
+**excludes it from sequential focus navigation**. The link still accepts
+programmatic `.focus()`, so the bug is invisible to a "does it focus?" test
+and only shows up when a real user presses Tab.
+
+The shipped version uses the standard clip technique, with two adjustments
+that are also load-bearing:
 
 ```tsx
-// Add at top of AppShell return, before TopBar
-return (
-  <div className="app-shell">
-    {/* Skip link - first focusable element */}
-    <a 
-      href="#main-content" 
-      className="skip-link"
-      style={{
-        position: 'absolute',
-        top: '-100%',
-        left: 'var(--space-4)',
-        zIndex: 'var(--z-toast)',
-        padding: 'var(--space-2) var(--space-3)',
-        background: 'var(--color-accent)',
-        color: '#fff',
-        borderRadius: 'var(--radius-md)',
-        textDecoration: 'none',
-        fontWeight: 600,
-      }}
-    >
-      Skip to main content
-    </a>
-    
-    <TopBar ... />
-    <div className="app-main">
-      {/* ... existing code ... */}
-      <div className="app-content" id="main-content">
-        {children}
-      </div>
-    </div>
-  </div>
-);
+<a className="skip-link" href="#main-content">Skip to main content</a>
 ```
 
-Add focus-visible style in `global.css`:
 ```css
-.skip-link:focus-visible {
-  top: var(--space-4);
-  outline: none;
-  box-shadow: var(--focus-ring);
+.skip-link {
+  position: absolute;   /* out of flow, so no negative margin is needed */
+  top: 0; left: 0;
+  width: 1px; height: 1px;
+  /* NO margin: -1px — with top/left:0 it lands the box at (-1,-1), which is
+     equally outside the viewport and reproduces the same bug. */
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
 }
+.skip-link:focus { /* un-clip, real padding/border/background */ }
 ```
 
-### 2.2 Fix Avatar Alt Text — `src/components/TopBar.tsx`
+`.app-content` became `<main id="main-content" tabIndex={-1}>`.
+`tabIndex={-1}` is required — without it, activating the link scrolls but
+leaves focus in the sidebar, which is the exact behaviour 2.4.1 exists to
+prevent.
 
-```tsx
-// Line ~64: Change empty alt to descriptive
-<div className="topbar__avatar" aria-hidden>
-  {profile.picture ? (
-    <img 
-      src={profile.picture} 
-      alt={`${profile.name}'s avatar`} 
-    />
-  ) : (
-    <span>{(profile.name?.[0] ?? "?").toUpperCase()}</span>
-  )}
-</div>
-```
+### 2.2 Fix Avatar Alt Text — `src/components/TopBar.tsx` — N/A (already correct)
 
-Also check `CommentThread.tsx` line ~183 - already correct with `alt={name}`.
+The plan assumed `TopBar`'s avatar had an empty `alt`. It does not need
+changing: the avatar sits inside a wrapper that is already `aria-hidden`
+(`<div className="topbar__avatar" aria-hidden>`), and the image carries
+`alt=""`. That is the **correct** treatment for a decorative avatar — the
+user's name is already announced as text in `.topbar__name` immediately
+before it, so a second announcement of "X's avatar" would be redundant noise
+for a screen reader user.
 
-### 2.3 Add Language Attributes to Dynamic Content
+`CommentThread`'s avatar uses `alt={name}` and is not `aria-hidden`, which is
+also correct — it is the only representation of the author there.
 
-For dates and user content, add `lang` where appropriate:
+Rather than "fix" these into regressions, a guard test now asserts that
+**every** `<img>` in the app has an `alt` attribute (present, possibly empty),
+which catches the genuine 1.1.1 failure mode (a missing `alt`) without
+penalising the decorative case.
 
-```tsx
-// In date display components
-<time dateTime={isoString} lang="en">{formattedDate}</time>
+### 2.3 Add Language Attributes to Dynamic Content — ✅ DONE (already correct)
 
-// For user-generated content (descriptions, comments)
-// Can't reliably detect language, but can mark as unknown
-<div lang="en" dir="auto">{userContent}</div>
-```
+`index.html` already declares `<html lang="en">`, satisfying 3.1.1. The
+component-level `lang`/`dir="auto"` suggestions in the plan were not applied:
+
+- A fixed `lang="en"` on user-typed content would be **wrong** — a board in
+  Portuguese would be mislabelled as English, which is a 3.1.2 failure, not a
+  3.1.1 fix.
+- Detecting the language of arbitrary text is not something a client-side
+  board app can do reliably.
+
+The one part worth taking is `<time dateTime={iso}>` for machine-readable
+dates. `DateBadge` already renders the formatted date as text; this was left
+alone rather than changed blind, to avoid regressing the date e2e assertions.
+
+A regression test now asserts `html[lang]` exists and is well-formed.
+
+### Sprint 2 outcome
+
+- `src/components/AppShell.tsx` — skip link + `<main>` landmark
+- `src/styles/responsive.css` — `.skip-link` styles
+- `tests/e2e/a11y-sprint2-3.spec.ts` — 6 tests covering skip link order,
+  activation, clipping, `lang`, and alt text
 
 ---
 
-## Sprint 3: DnD & Mobile Polish (P2)
+## Sprint 3: DnD & Mobile Polish (P2) — ✅ COMPLETE
 
-### 3.1 Add DnD Keyboard Instructions
+### 3.1 Add DnD Keyboard Instructions — ✅ DONE
 
-Add visible keyboard shortcut hint for drag-and-drop:
+Shipped as `src/components/DndKeyboardHelp.tsx`, a reusable `<details>`
+disclosure rendered in the board header and the planner header.
 
-```tsx
-// In Column.tsx or BoardView.tsx - add to column header or as tooltip
-<button
-  type="button"
-  className="btn btn--ghost btn--icon"
-  aria-label="Column options"
-  title="Column options (press Space/Enter to open)"
->
-  ⋯
-</button>
+`@dnd-kit`'s `KeyboardSensor` was **already wired up** in both
+`KanbanDndContext` and `PlannerDndContext` — 2.1.1 was already satisfied.
+What was missing was discoverability: nothing told a keyboard user that
+dragging was possible at all. The shortcut list names only the keys dnd-kit
+actually binds (Space / Arrow keys / Escape), and a test asserts a card can
+in fact be moved with the keyboard alone, so the instructions cannot drift
+away from the implementation.
 
-// Add keyboard help in sidebar or as collapsible help panel
-<details className="keyboard-help">
-  <summary>Keyboard shortcuts</summary>
-  <ul>
-    <li><kbd>Tab</kbd> / <kbd>Shift+Tab</kbd> - Navigate</li>
-    <li><kbd>Enter</kbd> / <kbd>Space</kbd> - Activate buttons, open cards</li>
-    <li><kbd>Esc</kbd> - Close modals, cancel edits</li>
-    <li><kbd>Arrow keys</kbd> - Navigate within lists</li>
-    <li>Drag & Drop: Focus card → <kbd>Space</kbd> to pick up → <kbd>Arrow keys</kbd> to move → <kbd>Space</kbd> to drop</li>
-  </ul>
-</details>
-```
+`<details>` is used rather than a custom disclosure because it is keyboard
+operable, announces its expanded state, and works before JS runs.
 
-### 3.2 Verify Mobile Focus Visibility
+### 3.2 Verify Mobile Focus Visibility — ✅ DONE
 
-Test focus rings on mobile viewport. Ensure:
-- Sidebar rail buttons show focus ring when tabbed to
-- Mobile column strips have visible focus state
-- Modal focus trap works with virtual keyboard
+`.sidebar__rail-btn` and `.sidebar__section-toggle` already had explicit
+`:focus-visible` outlines and were left alone. `.kanban-rail__strip` did
+**not**: it relied on the global `box-shadow` ring, which on a transparent
+background with a transparent border is effectively invisible against the
+dark rail. It now has an explicit `outline` with a positive offset.
 
-Add mobile-specific focus styles if needed in `responsive.css`:
-```css
-@media (max-width: 767px) {
-  .sidebar__rail-btn:focus-visible,
-  .kanban-rail__strip:focus-visible {
-    outline: none;
-    box-shadow: var(--focus-ring);
-    z-index: 10;
-  }
-}
-```
+`.app-content:focus` suppresses its own outline — otherwise activating the
+skip link outlines the entire viewport.
 
-### 3.3 Ensure Touch Targets Meet 44px
+### 3.3 Ensure Touch Targets Meet 44px — ✅ DONE
 
-Audit all interactive elements on mobile:
-- [ ] Sidebar rail buttons (56px ✅)
-- [ ] Column rail strips (min-height: 112px ✅)
-- [ ] Card tap targets (44px via role=button)
-- [ ] Modal close buttons
-- [ ] Form inputs (min-height: 36px, add padding if needed)
-- [ ] Dropdown menu items
+Audited every interactive element. Fixed, all scoped to `@media (pointer:
+coarse)` so the denser desktop layout is unchanged:
+
+| Control | Before | After |
+| --- | --- | --- |
+| `.btn` (all buttons, incl. modal close) | 36px | 44px |
+| `.input` / `.select` | ~36px | 44px |
+| `.kb-rte__tool-btn` (9 rich-text controls) | 30px | 44px |
+| `.sidebar__rail-btn` | 44px | already OK |
+| `.kanban-rail__strip` | 112px | already OK |
+
+The e2e tests skip the 44px assertions on non-touch projects, since the
+`pointer: coarse` scoping makes them inapplicable there by design.
 
 ---
 

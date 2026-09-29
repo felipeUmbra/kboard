@@ -213,18 +213,21 @@ export function DateField({
             padding: "4px 8px",
             borderRadius: "var(--radius-sm)",
             fontSize: "var(--text-xs)",
+            // Both levels come from token pairs. The previous literals mixed an
+            // undeclared amber with a raw rgba() tint, so neither followed the
+            // theme and neither was covered by the contrast gate.
             background:
               issue.level === "warning"
-                ? "rgba(242, 214, 0, 0.15)"
-                : "rgba(0, 121, 191, 0.10)",
+                ? "var(--color-warning-soft)"
+                : "var(--color-accent-soft)",
             color:
               issue.level === "warning"
-                ? "#8a6d00"
+                ? "var(--color-warning)"
                 : "var(--color-accent)",
             border: `1px solid ${
               issue.level === "warning"
-                ? "rgba(242, 214, 0, 0.4)"
-                : "rgba(0, 121, 191, 0.25)"
+                ? "var(--color-warning)"
+                : "var(--color-accent)"
             }`,
           }}
         >

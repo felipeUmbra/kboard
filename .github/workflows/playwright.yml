@@ -37,6 +37,30 @@ jobs:
 
       - run: npm run typecheck
 
+  # Accessibility gates that run without a browser. These are the checks
+  # that catch a contrast or hardcoded-colour regression in seconds rather
+  # than waiting on the E2E matrix:
+  #   - a11y:contrast  — every token in tokens.css must clear 4.5:1 (or 3:1
+  #     for non-text) against the worst-case background of its theme.
+  #   - lint:colors    — no hardcoded colour literals outside the token file,
+  #     which is how an unverified colour previously reached the UI.
+  a11y:
+    name: Accessibility gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+
+      - run: npm run a11y
+
+      - run: npm run test:unit
+
   e2e:
     name: E2E (Chromium, desktop + tablet + mobile + PWA)
     runs-on: ubuntu-latest

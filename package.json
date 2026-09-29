@@ -21,7 +21,9 @@
     "test:e2e:chromium": "playwright test --project=chromium-desktop",
     "test:e2e:subpath": "node scripts/test-subpath.mjs",
     "test:e2e:report": "playwright show-report",
-    "a11y:contrast": "node scripts/check-contrast.js"
+    "a11y:contrast": "node scripts/check-contrast.js",
+    "lint:colors": "node scripts/lint-color-literals.js",
+    "a11y": "npm run a11y:contrast && npm run lint:colors"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.1.0",

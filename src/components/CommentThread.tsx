@@ -200,7 +200,7 @@ function Avatar({
         height: dim,
         borderRadius: "50%",
         background: "var(--color-accent)",
-        color: "#fff",
+        color: "var(--color-on-accent)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",

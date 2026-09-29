@@ -7,13 +7,14 @@
  *      background for its theme (this is the regression guard — an edit to
  *      a token that breaks contrast must fail here).
  *   3. pickForeground(), which decides label text colour and previously
- *      chose unreadable foregrounds on mid-tone backgrounds.
+ *      existed as three divergent copies, two of which chose unreadable
+ *      foregrounds on mid-tone backgrounds.
  */
 
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { pickForeground } from "../../src/components/fields/LabelPill";
+import { pickForeground } from "../../src/models/colorContrast";
 import { CARD_TYPE_META } from "../../src/models/cardTypeMeta";
 import { COLOR_PALETTE } from "../../src/models/types";
 import { contrastRatio, worstCase, compositeOver } from "./helpers/contrast";

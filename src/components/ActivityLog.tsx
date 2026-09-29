@@ -165,7 +165,7 @@ function FilterPill({
         borderRadius: 999,
         border: "1px solid var(--color-border)",
         background: active ? "var(--color-accent)" : "var(--color-surface)",
-        color: active ? "#fff" : "var(--color-text)",
+        color: active ? "var(--color-on-accent)" : "var(--color-text)",
         cursor: "pointer",
       }}
     >

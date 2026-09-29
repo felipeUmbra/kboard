@@ -133,6 +133,37 @@ function check(themeName, tokens, backgrounds, threshold) {
   return ok;
 }
 
+// --- inverse ("on-X") tokens -------------------------------------------------
+// Text sitting ON a solid brand fill. These invert per theme: the light
+// accents are dark, so they take white, while the dark accents are light
+// pastels that white would fail on (white on the dark accent is 2.85:1).
+// Checking these is what stops a hardcoded `#fff` creeping back in.
+const ON_SURFACE_PAIRS = [
+  ["on-accent", "accent"],
+  ["on-success", "success"],
+  ["on-danger", "danger"],
+];
+
+function checkInverse(themeName, tokens) {
+  console.log(`\n=== ${themeName} inverse pairs (4.5:1 on solid fill) ===`);
+  let ok = true;
+  for (const [fgName, bgName] of ON_SURFACE_PAIRS) {
+    const fg = tokens[fgName];
+    const bg = tokens[bgName];
+    if (!fg || !bg) {
+      console.log(`  ${fgName.padEnd(12)} MISSING TOKEN - skipped`);
+      continue;
+    }
+    const ratio = worstCase(fg, [bg]);
+    const pass = ratio >= 4.5;
+    if (!pass) ok = false;
+    console.log(
+      `  ${fgName.padEnd(12)} ${fg} on ${bgName} ${bg}  ${ratio.toFixed(2)}:1  ${pass ? "PASS" : "FAIL"}`,
+    );
+  }
+  return ok;
+}
+
 // --- extra palettes that are NOT in tokens.css -----------------------------
 // Card-type colours render as text on their own softColor (TypeChip) AND on
 // --color-bg-elevated (Sidebar), so they are checked against both.
@@ -170,6 +201,8 @@ console.log(`Dark backgrounds:  ${darkBackgrounds.join(", ")}`);
 
 const lightOk = check("LIGHT THEME", light, lightBackgrounds, AA);
 const darkOk = check("DARK THEME", dark, darkBackgrounds, AA);
+const lightInvOk = checkInverse("LIGHT THEME", light);
+const darkInvOk = checkInverse("DARK THEME", dark);
 
 // --- card type meta ---------------------------------------------------------
 console.log("\n=== CARD TYPE META (4.5:1 on softColor AND on bg-elevated) ===");
@@ -209,7 +242,7 @@ if (dark.warning) {
   );
 }
 
-const allOk = lightOk && darkOk && typeOk && paletteOk;
+const allOk = lightOk && darkOk && lightInvOk && darkInvOk && typeOk && paletteOk;
 console.log(
   allOk
     ? "\nAll AA contrast checks passed."

@@ -28,6 +28,10 @@ A Trello-inspired Kanban board that signs you in with Google and stores your boa
 - ✅ **Dark mode** via `prefers-color-scheme`
 - ✅ **Accessibility** — keyboard navigation, focus rings, screen-reader announcements, reduced-motion support
 - ✅ **WCAG 2.1 AA colour contrast** — every foreground token verified ≥ 4.5:1 against *every* background it can appear on (light and dark), enforced by `npm run a11y:contrast` and by unit + E2E regression tests
+- ✅ **No hardcoded colours** — `npm run lint:colors` fails the build if a hex literal appears in `src/` outside the token file, which is how an unverified colour previously reached the UI
+- ✅ **Bypass blocks** — a "Skip to main content" link is the first focusable element (WCAG 2.4.1)
+- ✅ **Keyboard drag-and-drop** — cards are movable with Space + Arrow keys, documented in an in-app shortcuts panel
+- ✅ **Touch targets** — 44px minimum for buttons, inputs and rich-text controls on touch devices (WCAG 2.5.5)
 - ✅ **End-to-end tested** with Playwright across 3 viewports (desktop, tablet, mobile) against a fake Drive + fake Google Identity Services
 - ✅ **Zero backend** — pure static SPA, deploy anywhere
 - ✅ **Installable Progressive Web App** — manifest + service worker; "Add to Home Screen" on iOS / Android gives you a standalone app icon, splash screen, and full-screen launch
@@ -96,6 +100,8 @@ Open <http://localhost:5172/> and click **Sign in with Google**.
 | `npm run test:e2e:debug` | Run the e2e suite with the Playwright inspector attached |
 | `npm run test:e2e:report` | Open the last HTML report from a Playwright run |
 | `npm run a11y:contrast` | Verify every colour token meets WCAG AA contrast against all its backgrounds (exit 1 on failure) |
+| `npm run lint:colors` | Fail on hardcoded hex colours in `src/` outside the token file |
+| `npm run a11y` | Run both accessibility gates above |
 
 ## Where your data lives
 

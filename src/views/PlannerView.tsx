@@ -17,6 +17,7 @@ import {
 } from "./plannerHelpers";
 import { todayIso, formatIso, parseIso } from "../models/dateValidation";
 import { format, isSameMonth } from "date-fns";
+import { DndKeyboardHelp } from "../components/DndKeyboardHelp";
 
 export function PlannerView() {
   const ctx = useBoard();
@@ -81,6 +82,7 @@ export function PlannerView() {
               Hoje
             </button>
           </div>
+          <DndKeyboardHelp id="planner-dnd-keyboard-help" />
         </header>
         <div className="planner__week" data-testid="planner-week">
           {buckets.map((b) => (

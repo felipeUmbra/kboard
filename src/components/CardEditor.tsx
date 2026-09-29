@@ -16,6 +16,7 @@ import { ActivityLog } from "./ActivityLog";
 import { CommentThread } from "./CommentThread";
 import { ChecklistEditor } from "./fields/ChecklistEditor";
 import { cardDrafts, draftDiffersFromCard } from "../state/cardDrafts";
+import { pickForeground } from "../models/colorContrast";
 
 /** How often (ms) we mirror the local title/description drafts into
  *  localStorage. Short enough to survive an accidental reload; long
@@ -606,12 +607,3 @@ export function CardEditor({
   );
 }
 
-function pickForeground(hex: string): string {
-  const c = hex.replace("#", "");
-  if (c.length !== 6) return "#172b4d";
-  const r = parseInt(c.slice(0, 2), 16);
-  const g = parseInt(c.slice(2, 4), 16);
-  const b = parseInt(c.slice(4, 6), 16);
-  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return lum > 0.6 ? "#172b4d" : "#ffffff";
-}

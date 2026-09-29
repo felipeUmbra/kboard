@@ -47,8 +47,79 @@
   opacity: 1;
 }
 
-/* ===== Kanban scroll container ===== */
-.kanban-scroll {
+/* ===== DnD keyboard help (WCAG 3.2.1 / 3.3.1) =====
+   Collapsed by default so it costs no vertical space on a dense board. The
+   summary is a real button, so it gets the shared .btn focus treatment. */
+.dnd-help {
+  font-size: var(--text-sm);
+}
+
+.dnd-help__summary {
+  cursor: pointer;
+  color: var(--color-accent);
+  font-weight: 600;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-elevated);
+  /* 44px min target — see the Sprint 3.3 tap-target pass. */
+  min-height: var(--tap-target);
+  display: flex;
+  align-items: center;
+  list-style: none;
+}
+
+.dnd-help__summary::-webkit-details-marker {
+  display: none;
+}
+
+.dnd-help__summary::before {
+  content: "▸";
+  margin-right: var(--space-2);
+}
+
+.dnd-help[open] .dnd-help__summary::before {
+  content: "▾";
+}
+
+.dnd-help__list {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-elevated);
+  display: grid;
+  gap: var(--space-1);
+}
+
+.dnd-help__row {
+  display: flex;
+  gap: var(--space-3);
+  align-items: baseline;
+}
+
+.dnd-help__keys {
+  flex: 0 0 8rem;
+}
+
+.dnd-help__action {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.dnd-help kbd {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--text-xs);
+  padding: 2px 6px;
+  border: 1px solid var(--color-border-strong);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+/* ===== Kanban scroll container ===== */.kanban-scroll {
   flex: 1;
   min-height: 0;
   overflow-x: auto;
@@ -113,6 +184,15 @@
   min-height: var(--tap-target);
 }
 
+/* Sprint 3.2: the rail strip is a primary mobile control, and the global
+   :focus-visible box-shadow ring is drawn inside a 1px transparent border on
+   a transparent background — on the dark rail it was effectively invisible.
+   An explicit outline is offset outside the element, so it reads clearly. */
+.kanban-rail__strip:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
 .kanban-rail__strip[data-active="true"] {
   background: var(--color-accent-soft);
   color: var(--color-accent);
@@ -150,7 +230,7 @@
 
 .kanban-rail__strip[data-active="true"] .kanban-rail__count {
   background: var(--color-accent);
-  color: #fff;
+  color: var(--color-on-accent);
 }
 
 .kanban-rail__add {
@@ -269,7 +349,7 @@
 
 .mobile-move-target[data-over="true"] .mobile-move-target__count {
   background: var(--color-accent);
-  color: #fff;
+  color: var(--color-on-accent);
 }
 
 .mobile-move-target[data-current="true"] {
@@ -454,6 +534,15 @@
   justify-content: center;
   cursor: pointer;
   transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+/* Sprint 3.3: the RTE toolbar is a row of 9 controls used heavily on mobile
+   (the card description editor), and 30px was well under the target size. */
+@media (pointer: coarse) {
+  .kb-rte__tool-btn {
+    min-width: var(--tap-target);
+    min-height: var(--tap-target);
+  }
 }
 
 .kb-rte__tool-btn:hover {
