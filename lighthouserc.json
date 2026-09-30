@@ -1,0 +1,41 @@
+{
+  "ci": {
+    "collect": {
+      "url": [
+        "http://localhost:4173/",
+        "http://localhost:4173/manifest.webmanifest"
+      ],
+      "numberOfRuns": 3,
+      "settings": {
+        "preset": "desktop",
+        "onlyCategories": ["accessibility"],
+        "chromeFlags": "--no-sandbox --headless"
+      }
+    },
+    "assert": {
+      "assertions": {
+        "categories:accessibility": ["error", { "minScore": 1.0 }],
+        "color-contrast": "error",
+        "image-alt": "error",
+        "label": "error",
+        "button-name": "error",
+        "link-name": "error",
+        "aria-allowed-role": "error",
+        "aria-required-attr": "error",
+        "aria-valid-attr": "error",
+        "aria-hidden-focus": "error",
+        "nested-interactive": "error",
+        "heading-order": "error",
+        "region": "error",
+        "landmark-one-main": "error",
+        "frame-title": "error",
+        "html-has-lang": "error",
+        "document-title": "error",
+        "bypass": "error"
+      }
+    },
+    "upload": {
+      "target": "temporary-public-storage"
+    }
+  }
+}

@@ -348,6 +348,10 @@ export function CardEditor({
                   style={{
                     flex: 1,
                     background: active ? meta.softColor : "transparent",
+                    // `color` (not `colorToken`) on purpose: the background is
+                    // meta.softColor, a fixed LIGHT tint in both themes, so
+                    // the dark foreground hex is the readable pairing
+                    // regardless of the OS colour scheme.
                     color: active ? meta.color : "var(--color-text-muted)",
                     borderColor: active ? meta.color : "var(--color-border)",
                     fontWeight: active ? 600 : 500,

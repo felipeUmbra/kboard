@@ -49,6 +49,7 @@ export function PlannerView() {
   return (
     <PlannerDndProvider>
       <div className="planner">
+        <h1 className="planner__title">Planner</h1>
         <header className="planner__header">
           <div className="planner__nav">
             <button

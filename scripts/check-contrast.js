@@ -110,7 +110,10 @@ const FOREGROUND_TOKENS = [
 ];
 
 const lightBackgrounds = [light.surface, light.bg, light["bg-elevated"]];
-const darkBackgrounds = [dark.surface, dark.bg];
+// --color-bg-elevated is included for the DARK theme too. It is the sidebar
+// background in both themes, and leaving it out hid a real 4.49:1 failure:
+// the dark accent read as link text in the sidebar card-type panel.
+const darkBackgrounds = [dark.surface, dark.bg, dark["bg-elevated"]];
 
 function check(themeName, tokens, backgrounds, threshold) {
   console.log(
@@ -217,6 +220,58 @@ for (const [name, color, soft] of TYPE_META) {
   );
 }
 
+// --- theme-aware card-type tokens (Sprint 4.1) ------------------------------
+// The --color-type-* tokens are the ones actually used when a type name is
+// rendered as TEXT on a themed surface (the sidebar, the column add-type
+// menu, the card-editor picker when inactive). Before Sprint 4.1 both
+// themes used the light hex, which put Epic at 1.93:1 and Story at 2.08:1
+// on dark surfaces. Checking them here means that class of regression is
+// caught in seconds by `npm run a11y` rather than by a browser scan.
+console.log("\n=== TYPE TOKENS (4.5:1 as text on each theme's surfaces) ===");
+let typeTokenOk = true;
+for (const [themeName, tokens, backgrounds] of [
+  ["LIGHT", light, lightBackgrounds],
+  ["DARK", dark, darkBackgrounds],
+]) {
+  for (const name of ["type-epic", "type-story", "type-task"]) {
+    const fg = tokens[name];
+    if (!fg) {
+      console.log(`  ${themeName} ${name.padEnd(12)} MISSING TOKEN - skipped`);
+      continue;
+    }
+    const ratio = worstCase(fg, backgrounds);
+    const pass = ratio >= AA;
+    if (!pass) typeTokenOk = false;
+    console.log(
+      `  ${themeName} ${name.padEnd(12)} ${fg}  worst ${ratio.toFixed(2)}:1  ${pass ? "PASS" : "FAIL"}`,
+    );
+  }
+}
+
+// --- de-emphasised text on the accent bar -----------------------------------
+// --color-accent-muted replaced an `opacity: 0.7` span in TopBar. Opacity
+// composites toward the backdrop and is invisible to a token check, which
+// is exactly how the 4.39:1 regression shipped in the first place; asserting
+// the replacement token's ratio on --color-accent is the guard.
+console.log(
+  "\n=== ACCENT-MUTED (4.5:1 on the theme's accent fill) ===",
+);
+let accentMutedOk = true;
+for (const [themeName, tokens] of [["LIGHT", light], ["DARK", dark]]) {
+  const fg = tokens["accent-muted"];
+  const bg = tokens.accent;
+  if (!fg || !bg) {
+    console.log(`  ${themeName} MISSING TOKEN - skipped`);
+    continue;
+  }
+  const ratio = contrastRatio(fg, bg);
+  const pass = ratio >= AA;
+  if (!pass) accentMutedOk = false;
+  console.log(
+    `  ${themeName} ${fg} on ${bg}  ${ratio.toFixed(2)}:1  ${pass ? "PASS" : "FAIL"}`,
+  );
+}
+
 // --- label palette ----------------------------------------------------------
 console.log(
   `\n=== LABEL PALETTE (best of ${DARK_FG} / ${WHITE_FG} must reach 4.5:1) ===`,
@@ -242,7 +297,15 @@ if (dark.warning) {
   );
 }
 
-const allOk = lightOk && darkOk && lightInvOk && darkInvOk && typeOk && paletteOk;
+const allOk =
+  lightOk &&
+  darkOk &&
+  lightInvOk &&
+  darkInvOk &&
+  typeOk &&
+  typeTokenOk &&
+  accentMutedOk &&
+  paletteOk;
 console.log(
   allOk
     ? "\nAll AA contrast checks passed."

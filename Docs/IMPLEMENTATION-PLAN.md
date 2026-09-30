@@ -13,11 +13,13 @@ actionable: every item names its files and its verification.
 | **Status** | v1 feature-complete and verified |
 | **Commits** | 56 |
 | **Tracked files** | 140 |
-| **Unit/integration tests** | 155 passing, 11 files |
-| **E2E tests** | 325 passing, 4 projects |
+| **Unit/integration tests** | 185 passing, 12 files |
+| **E2E tests** | 356 collected, 4 Chromium projects (+94 cross-browser smoke) |
 | **Type errors** | 0 |
 | **Contrast failures** | 0 (all tokens, both themes) |
 | **Hardcoded colour literals** | 0 |
+| **axe-core violations** | 0 (6 surfaces, light + dark) |
+| **Coverage** | lines 51.65% / branches 76.53% / functions 62.16% |
 
 ---
 
@@ -137,16 +139,66 @@ both the build gate and the test suite would pass while the UI was unreadable.
 
 ## 4. Roadmap
 
-### Sprint 4 — Testing and validation (P3) · **partially done**
+### Sprint 4 — Testing and validation (P3) · **done, except 4.2 execution and 4.5 stability**
 
-| ID | Item | Effort | Priority |
-|---|---|---|---|
-| 4.1 | axe-core integration into the E2E suite | M | P1 |
-| 4.2 | Manual screen-reader walkthrough (NVDA + VoiceOver) | M | P1 |
-| 4.3 | Lighthouse CI budget for the accessibility score | S | P2 |
-| 4.4 | Visual-regression baselines for the three layouts | M | P2 |
-| 4.5 | Cross-browser run (Firefox, WebKit) | M | P2 |
-| 4.6 | Coverage thresholds in CI | S | P3 |
+| ID | Item | Effort | Priority | Status |
+|---|---|---|---|---|
+| 4.1 | axe-core integration into the E2E suite | M | P1 | ✅ done |
+| 4.2 | Manual screen-reader walkthrough (NVDA + VoiceOver) | M | P1 | ◐ protocol written, **not yet executed** |
+| 4.3 | Lighthouse CI budget for the accessibility score | S | P2 | ✅ done |
+| 4.4 | Visual-regression baselines for the three layouts | M | P2 | ✅ done (geometry assertions + capture) |
+| 4.5 | Cross-browser run (Firefox, WebKit) | M | P2 | ◐ Firefox green; WebKit flaky under parallel workers |
+| 4.6 | Coverage thresholds in CI | S | P3 | ✅ done |
+
+**4.1 — what axe-core found.** The scans (`tests/e2e/a11y-axe.spec.ts`)
+cover the login screen, boards list, board view, card editor, planner, and
+the board view in the dark colour scheme. The accepted-violation list is
+**empty**; all nine rules it reported were fixed rather than allowlisted:
+
+| Rule | Defect | Fix |
+|---|---|---|
+| `landmark-one-main`, `region` | Login screen had no `<main>` | `LoginScreen.tsx` now renders one |
+| `label` (critical) | 5 sidebar checkboxes unlabelled | `aria-label` on each |
+| `aria-prohibited-attr` | `aria-label` on a bare contenteditable div | `role="textbox"` + `aria-multiline` |
+| `nested-interactive` | dnd-kit wrapper button inside the card button | DnD wiring moved onto the card root |
+| `nested-interactive`, `aria-allowed-role`, `heading-order` | `<article role="button">` wrapping a delete button, with an `h3` after the page `h1` | Plain `<article>`, `h2` + stretched link, sibling delete button |
+| `page-has-heading-one` | Planner view had no `h1` | Visually-hidden `h1` |
+| `color-contrast` (×7) | Card-type colours unreadable in dark mode | New `--color-type-*` tokens, theme-aware |
+| `color-contrast` (×3) | `opacity` dimming text below 4.5:1 | Background-based de-emphasis instead |
+
+**4.2 — honestly incomplete.** The protocol exists in
+`ACCESSIBILITY-TESTING.md` with per-step expected announcements, but no
+screen-reader session has been run. The document says so explicitly and the
+results table is empty by design. Automated verification is the only claim
+kboard can currently make.
+
+**4.4 — a deliberate scope decision.** Rather than golden-image diffing,
+which needs a baseline commit per browser version and fails on font and
+platform changes for reasons unrelated to the code, the spec asserts
+*geometry* (real box dimensions, no horizontal overflow, side-by-side
+columns) and writes screenshots to `test-results/` for human review.
+
+**4.5 — engine findings, still open.** Firefox and WebKit surfaced no
+*product* defects. The failures are environmental, and one of them is not yet
+solved:
+
+- axe-core's in-page analysis is synchronous and cannot be given its own
+  deadline, so the 30s test timeout killed every Firefox scan with a
+  *timeout* error rather than a violation. **Fixed** with a per-project
+  `timeout: 90_000` on the two slow projects; the Chromium matrix keeps its
+  tighter bound.
+- WebKit's headless compositor crashes (`RenderCompositorSWGL failed mapping
+  default framebuffer`). The entire WebKit smoke set passes serially
+  (`--workers=1`) but degrades badly when run alongside Firefox, where the
+  two projects share one dev server. **Not yet fixed.** Until it is, treat
+  the WebKit job as advisory rather than a merge gate, and investigate
+  before wiring it into a required check.
+
+**4.6 — thresholds reflect a real asymmetry.** Lines 51.65%, branches
+76.53%, functions 62.16%. `src/models/*` is pure logic and well covered;
+`src/state/*actions.ts` is React context wiring with zero unit coverage,
+covered end-to-end instead. The thresholds are set just below the measured
+values and the gap is documented rather than papered over.
 
 **Landing already complete from earlier work:** the `a11y` CI job, the colour
 linter, 155 unit tests including a dedicated contrast suite, and E2E

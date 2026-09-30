@@ -11,6 +11,8 @@ git-test-results/
 .tmp-yaml-deps/
 playwright-report/
 trace*
+coverage/
+.lighthouseci/
 
 # Editor
 .vscode/*

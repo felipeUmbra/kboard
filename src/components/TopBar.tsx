@@ -45,7 +45,15 @@ export function TopBar({
           style={{ color: "var(--color-on-accent)", fontSize: "var(--text-sm)" }}
         >
           / {activeBoard.name}
-          {syncing && <span style={{ marginLeft: 8, opacity: 0.7 }}>· syncing…</span>}
+          {syncing && (
+            /* Not `opacity` — dimming white text on the accent bar that way
+               composites it to 4.39:1, under the 4.5:1 AA floor (found by
+               axe-core, Sprint 4.1). A solid lighter tint of the same hue
+               keeps the "de-emphasised but legible" intent. */
+            <span style={{ marginLeft: 8, color: "var(--color-accent-muted)" }}>
+              · syncing…
+            </span>
+          )}
         </span>
       )}
       <span className="topbar__spacer" />

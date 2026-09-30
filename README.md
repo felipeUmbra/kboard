@@ -5,7 +5,8 @@ A Trello-inspired Kanban board that signs you in with Google and stores your boa
 > **📄 Documentation** — full specs live in [`Docs/`](./Docs):
 > [PRD](./Docs/PRD.md) · [TRD](./Docs/TRD.md) · [App Flow](./Docs/APP-FLOW.md) ·
 > [UX/UI Design](./Docs/UX-UI-DESIGN.md) · [Data Model](./Docs/DATA-MODEL.md) ·
-> [Implementation Plan](./Docs/IMPLEMENTATION-PLAN.md).
+> [Implementation Plan](./Docs/IMPLEMENTATION-PLAN.md) ·
+> [Accessibility Testing](./Docs/ACCESSIBILITY-TESTING.md).
 > Accessibility audits are at [`WCAG_AA_AUDIT_REPORT.md`](./WCAG_AA_AUDIT_REPORT.md)
 > and [`WCAG_AA_ENHANCEMENT_PLAN.md`](./WCAG_AA_ENHANCEMENT_PLAN.md).
 
@@ -35,11 +36,14 @@ A Trello-inspired Kanban board that signs you in with Google and stores your boa
 - ✅ **Dark mode** via `prefers-color-scheme`
 - ✅ **Accessibility** — keyboard navigation, focus rings, screen-reader announcements, reduced-motion support
 - ✅ **WCAG 2.1 AA colour contrast** — every foreground token verified ≥ 4.5:1 against *every* background it can appear on (light and dark), enforced by `npm run a11y:contrast` and by unit + E2E regression tests
+- ✅ **axe-core scans** — six representative surfaces (login, boards list, board view, card editor, planner, and board view in dark mode) are scanned on every PR with **zero** violations and an **empty** allowlist. Anything new fails the build; see [`Docs/ACCESSIBILITY-TESTING.md`](./Docs/ACCESSIBILITY-TESTING.md)
 - ✅ **No hardcoded colours** — `npm run lint:colors` fails the build if a hex literal appears in `src/` outside the token file, which is how an unverified colour previously reached the UI
 - ✅ **Bypass blocks** — a "Skip to main content" link is the first focusable element (WCAG 2.4.1)
 - ✅ **Keyboard drag-and-drop** — cards are movable with Space + Arrow keys, documented in an in-app shortcuts panel
 - ✅ **Touch targets** — 44px minimum for buttons, inputs and rich-text controls on touch devices (WCAG 2.5.5)
-- ✅ **End-to-end tested** with Playwright across 3 viewports (desktop, tablet, mobile) plus a dedicated PWA project, against a fake Drive + fake Google Identity Services — 325 tests
+- ✅ **End-to-end tested** with Playwright across 3 viewports (desktop, tablet, mobile) plus a dedicated PWA project, against a fake Drive + fake Google Identity Services — 356 tests
+- ✅ **Cross-browser smoke** — a focused subset also runs in Firefox and WebKit, because dnd-kit, Tiptap and `contenteditable` all behave differently per engine
+- ✅ **Coverage gated in CI** — Vitest thresholds are enforced on every PR; the report is uploaded as an artifact
 - ✅ **Zero backend** — pure static SPA, deploy anywhere
 - ✅ **Installable Progressive Web App** — manifest + service worker; "Add to Home Screen" on iOS / Android gives you a standalone app icon, splash screen, and full-screen launch
 - ✅ **Offline app shell** — Workbox precaches the SPA shell, manifest, and icons so the boards list loads even with no network. Drive writes are deferred via the existing in-memory + localStorage draft path until you're back online
@@ -106,10 +110,14 @@ Open <http://localhost:5172/> and click **Sign in with Google**.
 | `npm run test:e2e:headed` | Run the e2e suite with a visible browser window |
 | `npm run test:e2e:debug` | Run the e2e suite with the Playwright inspector attached |
 | `npm run test:e2e:report` | Open the last HTML report from a Playwright run |
+| `npm run test:e2e:axe` | Run only the axe-core accessibility scans (Chromium) |
+| `npm run test:e2e:crossbrowser` | Run the Firefox + WebKit smoke projects (needs `npx playwright install firefox webkit`) |
 | `npm run a11y:contrast` | Verify every colour token meets WCAG AA contrast against all its backgrounds (exit 1 on failure) |
 | `npm run lint:colors` | Fail on hardcoded hex colours in `src/` outside the token file |
-| `npm run a11y` | Run both accessibility gates above |
-| `npm run test:unit` | Run the Vitest unit + integration suites (155 tests) |
+| `npm run a11y:axe` | Alias of `test:e2e:axe`; run as part of `test:e2e` |
+| `npm run a11y` | Run both browser-free accessibility gates (contrast + colour lint) |
+| `npm run test:unit` | Run the Vitest unit + integration suites (185 tests) |
+| `npm run test:unit:coverage` | Run the unit suites with V8 coverage and enforce the thresholds |
 
 ## Where your data lives
 

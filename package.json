@@ -15,6 +15,9 @@
     "test:regression": "playwright test tests/regression/",
     "test:regression:debug": "playwright test tests/regression/ --debug",
     "test:e2e": "playwright test --project=chromium-desktop --project=chromium-tablet --project=chromium-mobile --project=pwa",
+    "test:e2e:axe": "playwright test tests/e2e/a11y-axe.spec.ts --project=chromium-desktop",
+    "test:e2e:crossbrowser": "playwright test --project=firefox-smoke --project=webkit-smoke",
+    "test:unit:coverage:check": "vitest run --coverage",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:debug": "playwright test --debug",
@@ -23,7 +26,8 @@
     "test:e2e:report": "playwright show-report",
     "a11y:contrast": "node scripts/check-contrast.js",
     "lint:colors": "node scripts/lint-color-literals.js",
-    "a11y": "npm run a11y:contrast && npm run lint:colors"
+    "a11y": "npm run a11y:contrast && npm run lint:colors",
+    "a11y:axe": "playwright test tests/e2e/a11y-axe.spec.ts --project=chromium-desktop"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.1.0",
@@ -41,6 +45,7 @@
     "workbox-window": "^7.4.1"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "^1.62.1",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
@@ -49,6 +54,7 @@
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
+    "@vitest/coverage-v8": "^1.6.1",
     "jsdom": "^29.1.1",
     "sharp": "^0.33.5",
     "typescript": "^5.5.4",

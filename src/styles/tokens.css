@@ -57,8 +57,7 @@
   --color-on-accent: #ffffff;
   /* Trailing stop of the login screen gradient. Decorative only — the login
      card itself sits on --color-surface, so this needs no contrast check. */
-  --color-accent-gradient-end: #3d4fa8;
-  /* Was #eb5a46 (2.96:1 worst-case). */
+  --color-accent-gradient-end: #3d4fa8;  /* Was #eb5a46 (2.96:1 worst-case). */
   --color-danger: #c62828;
   --color-danger-hover: #a01f1f;
   --color-danger-soft: #fdeaea;
@@ -74,6 +73,30 @@
   --color-warning: #9c4f00;
   --color-warning-hover: #7d3f00;
   --color-warning-soft: #fff8e1;
+
+  /* Card-type accents (Epic / Story / Task) — Sprint 4.1.
+     These mirror CARD_TYPE_META.color in src/models/cardTypeMeta.ts, but
+     theme-aware: that registry holds ONE hex per type, so on dark surfaces
+     Epic (#7b3fb0) sat at 1.93:1 and Story (#15703f) at 2.08:1 — both well
+     under AA. The hexes stay for the TypeChip soft-tinted background (a
+     non-text element at 3:1) and the card stripe; wherever the colour is
+     used as TEXT on a themed surface, use these tokens instead.
+
+     Light values: verified against --color-surface, --color-bg and
+     --color-bg-elevated. Dark values: verified against --color-surface and
+     --color-bg-elevated. See tests/unit/a11y-axe-policy.test.ts. */
+  --color-type-epic: #7b3fb0;
+  --color-type-story: #15703f;
+  --color-type-task: #4a5769;
+
+  /* De-emphasised text that still sits ON the accent-filled top bar
+     (the "· syncing…" status). This is NOT --color-text-muted: that is a
+     mid-grey tuned for page backgrounds and would be unreadable on the bar.
+     It is also deliberately not `opacity`, which is what this token
+     replaces — opacity-composited white measured 4.39:1 on the light
+     accent, a real 1.4.3 failure found by axe-core in Sprint 4.1.
+     5.24:1 on --color-accent. */
+  --color-accent-muted: #cfdeea;
 
   /* Shadows */
   --shadow-sm: 0 1px 2px rgba(9, 30, 66, 0.08);
@@ -120,7 +143,12 @@
     --color-text-subtle: #8c9bab;
     --color-border: #3d444b;
     --color-border-strong: #4d555e;
-    --color-accent: #4c9aff;
+    /* Was #4c9aff — 4.49:1 on --color-bg-elevated (the sidebar), just under
+       the 4.5:1 floor. That is the binding constraint in the dark theme
+       exactly as --color-bg-elevated is in the light one; the check script
+       now includes the elevated background for the dark theme so this
+       cannot regress. */
+    --color-accent: #4da4ff;
     --color-accent-hover: #7aaeff;
     --color-accent-soft: rgba(76, 154, 255, 0.15);
     /* The dark accent is a LIGHT blue, so white on it is only 2.85:1 — a
@@ -142,6 +170,18 @@
     --color-warning: #ffd54f;
     --color-warning-hover: #ffe082;
     --color-warning-soft: rgba(255, 213, 79, 0.15);
+    /* Dark-theme card-type accents. The light-theme hexes are dark colours
+       and become unreadable on dark surfaces (Epic 1.93:1, Story 2.08:1 —
+       found by axe-core in Sprint 4.1). These are the lightened equivalents
+       and clear 4.5:1 on both --color-surface (#22272b) and
+       --color-bg-elevated (#2c333a). */
+    --color-type-epic: #c79bf0;
+    --color-type-story: #6fd894;
+    --color-type-task: #a9b6c8;
+    /* On the dark theme the accent is a LIGHT blue, so the de-emphasised
+       tone has to go DARKER, not lighter. #172b4d is --color-on-accent,
+       at 4.95:1 on the dark accent. */
+    --color-accent-muted: #172b4d;
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
     --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
     --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.5), 0 2px 4px rgba(0, 0, 0, 0.3);

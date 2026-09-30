@@ -102,7 +102,12 @@ export class BoardPage {
   async openBoard(name: string) {
     await this.gotoBoards();
     const card = this.page.locator(sel.boardCard).filter({ hasText: name }).first();
-    await card.click();
+    // Click the title link, not the <article>. The card's whole-surface hit
+    // area is a stretched ::after on this link, so clicking the link is
+    // equivalent for a user — and it is the element that actually carries
+    // the navigation handler since the Sprint 4.1 axe-core fixes removed
+    // the <article role="button">.
+    await card.locator(sel.boardCardLink).click();
     await this.page.waitForSelector(sel.boardTitle, { timeout: 5_000 });
   }
 

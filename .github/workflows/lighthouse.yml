@@ -1,0 +1,72 @@
+name: Lighthouse accessibility budget
+
+# Sprint 4.3 — a Lighthouse accessibility budget, run separately from the
+# Playwright matrix.
+#
+# Why a separate job:
+#   Lighthouse takes ~30s per run and is throttled, so folding it into the
+#   E2E job would slow the fast-feedback gate for everyone. As its own job
+#   it can also be non-blocking for pull requests if the team wants that
+#   while still reporting on merges to main.
+#
+# What it actually buys:
+#   axe-core (the `a11y:axe` script) already runs on every PR and is far
+#   more specific — it names the element and the rule. Lighthouse is a
+#   second, independent engine auditing the PRODUCTION bundle, which is the
+#   one users actually get. The two disagreeing is a signal; the two
+#   agreeing is confidence.
+#
+#   It also covers what axe-core structurally cannot: the served HTML is
+#   checked for <html lang> and <title> before React mounts.
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lighthouse-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lighthouse:
+    name: Lighthouse (accessibility)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: Build the app
+        # The budget must measure the production bundle, not the dev server.
+        # A placeholder Client ID is enough — this job never signs in.
+        env:
+          VITE_GOOGLE_CLIENT_ID: "placeholder.apps.googleusercontent.com"
+        run: npm run build
+
+      - name: Start the preview server
+        run: |
+          npx vite preview --port 4173 --strictPort &
+          npx wait-on http://localhost:4173 --timeout 60000
+
+      - name: Run Lighthouse
+        # `assert.assertions` in lighthouserc.json turns a failed assertion
+        # into a non-zero exit code, which fails the job.
+        run: npx --yes @lhci/cli@0.14.0 autorun
+
+      - name: Upload Lighthouse report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-report
+          path: .lighthouseci/
+          retention-days: 14

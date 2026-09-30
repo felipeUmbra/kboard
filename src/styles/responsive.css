@@ -44,6 +44,19 @@
   flex: 1;
 }
 
+/* Ghost buttons ON the accent-filled top bar.
+   The generic .btn--ghost hover paints `var(--color-border)` — a near-white
+   grey — behind text that is forced to `var(--color-on-accent)` (white in
+   the light theme). That is a 1.3:1 contrast failure on hover/focus, found
+   by axe-core in Sprint 4.1 while scanning the planner view. Use a
+   translucent white wash instead: it reads as a highlight on the blue
+   without ever putting a light background under light text. */
+.topbar .btn--ghost:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.18);
+  color: var(--color-on-accent);
+  border-color: transparent;
+}
+
 .topbar__user {
   display: flex;
   align-items: center;
@@ -494,12 +507,6 @@
   }
 
   .topbar__user .topbar__name {
-    display: none;
-  }
-
-  /* On very narrow screens the Planner button is icon-only so the
-     topbar fits without pushing the user block off the right edge. */
-  .topbar__planner-label {
     display: none;
   }
 

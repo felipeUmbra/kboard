@@ -61,6 +61,91 @@ jobs:
 
       - run: npm run test:unit
 
+  # Sprint 4.6 — coverage gate. Kept in its own job rather than folded into
+  # the a11y gates above so a coverage drop is reported as a coverage
+  # failure and does not read as an accessibility regression. The thresholds
+  # live in vitest.config.ts and are enforced by the runner's exit code.
+  coverage:
+    name: Coverage thresholds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+
+      - run: npm run test:unit:coverage
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 7
+
+  # Sprint 4.5 — cross-browser smoke. Separate from the E2E matrix so a
+  # WebKit-specific failure does not block the fast Chromium feedback, and
+  # so installing two extra browsers does not slow the main job. Runs a
+  # deliberately small spec set (see CROSS_BROWSER_SPECS in
+  # playwright.config.ts) rather than the full matrix.
+  #
+  # ADVISORY, NOT A MERGE GATE, while this is `continue-on-error`. WebKit's
+  # headless compositor crashes under sustained load on the shared CI runner
+  # and takes unrelated tests down with it. The whole WebKit set passes
+  # serially, so the failures are environmental rather than product
+  # defects — but an unreliable signal should report, not block. Remove this
+  # line once the WebKit job runs green repeatedly.
+  crossbrowser:
+    name: Cross-browser smoke (Firefox + WebKit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
+      - name: Install Firefox and WebKit
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps firefox webkit
+
+      - name: Build the app
+        env:
+          VITE_GOOGLE_CLIENT_ID: "placeholder.apps.googleusercontent.com"
+        run: npm run build
+
+      - name: Run cross-browser smoke tests
+        env:
+          CI: "true"
+        run: npm run test:e2e:crossbrowser
+
+      - name: Upload Playwright HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-crossbrowser
+          path: playwright-report/
+          retention-days: 14
+
   e2e:
     name: E2E (Chromium, desktop + tablet + mobile + PWA)
     runs-on: ubuntu-latest
