@@ -65,6 +65,29 @@ export default defineConfig({
     screenshot: "only-on-failure",
     video: "retain-on-failure",
     // No `actionTimeout` override — defaults are fine.
+    //
+    // Service workers are BLOCKED everywhere by default.
+    //
+    // CI serves the PRODUCTION bundle (`npm run preview`), and in that build
+    // `import.meta.env.DEV` is false, so `registerPwa()` actually calls
+    // `registerSW()`. Once the worker activates it CONTROLS the page, and a
+    // controlling worker's own `fetch` calls bypass Playwright's
+    // `page.route` interception entirely. The Google Drive requests then
+    // escape `tests/fixtures/fakeDrive.ts` and hit the real
+    // googleapis.com, which answers 401. The app surfaces that as
+    // "Couldn't create the board. Click 'Reconnect to Drive'". Symptom:
+    // every test calling `createBoard` failed in WebKit (5/8 on the axe
+    // spec) while Firefox passed — WebKit activates the worker fast enough
+    // to take control mid-test, Firefox does not.
+    //
+    // It looked like a test-isolation or flake problem, and burned a lot of
+    // time being investigated as one: the specs pass perfectly against the
+    // dev server, which has no service worker at all
+    // (`vite.config.ts -> devOptions.enabled: false`).
+    //
+    // The `pwa` / `pwa-subpath` projects override this back to "allow",
+    // since service-worker behaviour is precisely what they verify.
+    serviceWorkers: "block",
   },
   projects: [
     {
@@ -102,6 +125,10 @@ export default defineConfig({
         ...devices["Desktop Chrome"],
         viewport: { width: 1280, height: 800 },
         baseURL: "http://localhost:5173",
+        // The whole point of this project is to verify the service worker
+        // and the manifest, so it must opt back out of the global
+        // `serviceWorkers: "block"` set above.
+        serviceWorkers: "allow",
       },
       // NOTE: the production preview server this project needs lives in the
       // top-level `webServer` array, not here. Playwright ignores a
@@ -134,6 +161,10 @@ export default defineConfig({
         ...devices["Desktop Chrome"],
         viewport: { width: 1280, height: 800 },
         baseURL: "http://localhost:5174",
+        // Verifies manifest URLs resolve under the subpath deployment.
+        // No service-worker assertions here, but allowing SW keeps this
+        // project faithful to the deployed configuration.
+        serviceWorkers: "allow",
       },
     },
 
