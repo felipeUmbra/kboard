@@ -86,6 +86,13 @@ jobs:
       - name: Check Playwright browser cache keys
         run: python scripts/check-workflows.py
 
+      - name: Check every PR-triggered workflow gates Dev
+        # Guards the trigger filter itself. `pull_request.branches` matches
+        # the BASE branch, so a `[main]`-only filter silently leaves every
+        # Dev -> main PR ungated — which is how PR #9 came to have zero
+        # status checks and nothing ran at all.
+        run: python scripts/check-pr-triggers.py
+
   # Sprint 4.6 — coverage gate. Kept in its own job rather than folded into
   # the a11y gates above so a coverage drop is reported as a coverage
   # failure and does not read as an accessibility regression. The thresholds
@@ -277,7 +284,17 @@ jobs:
 # GitHub Actions requires the top-level trigger key to be `on:` (or the
 # quoted form `"on":`); we use the quoted form to avoid YAML 1.1 parsers
 # interpreting the bare `on` as a boolean true and flagging the file.
+#
+# BOTH `main` and `Dev` are listed deliberately. The working branch is `Dev`
+# and PRs are opened Dev -> main, so a filter of `branches: [main]` alone
+# matched nothing in practice: GitHub's `pull_request.branches` filter tests
+# the PR's BASE branch, so every Dev -> main PR was silently ungated and
+# reported zero status checks. That is exactly what happened to PR #9 --
+# `statusChecks` came back empty and nothing ran.
+#
+# Listing both means a PR is gated whichever of the two it targets, and an
+# empty status-check list can never again be mistaken for "still pending".
 "on":
   pull_request:
-    branches: [main]
+    branches: [main, Dev]
   workflow_dispatch:

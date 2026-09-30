@@ -18,10 +18,15 @@ name: Lighthouse accessibility budget
 #
 #   It also covers what axe-core structurally cannot: the served HTML is
 #   checked for <html lang> and <title> before React mounts.
+#
+# `Dev` is listed alongside `main` for the same reason as in playwright.yml:
+# the working branch is `Dev` and PRs are opened Dev -> main, and
+# `pull_request.branches` filters on the BASE branch -- so `[main]` alone
+# left every Dev -> main PR with no Lighthouse run at all.
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, Dev]
   workflow_dispatch:
 
 permissions:
