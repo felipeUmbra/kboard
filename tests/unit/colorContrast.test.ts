@@ -15,7 +15,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
-import { pickForeground } from "../../src/models/colorContrast";
+import { pickForeground, DARK_FG, LIGHT_FG } from "../../src/models/colorContrast";
 import { contrastRatio } from "./helpers/contrast";
 
 const SRC = join(__dirname, "..", "..", "src");
@@ -110,8 +110,8 @@ describe("pickForeground output is always readable", () => {
   });
 
   it("always picks the better of the two candidate foregrounds", () => {
-    const DARK = "#172b4d";
-    const LIGHT = "#ffffff";
+    const DARK = DARK_FG;
+    const LIGHT = LIGHT_FG;
     for (const bg of ["#61bd4f", "#00c2e0", "#f2d600", "#4a5769", "#7b3fb0"]) {
       const chosen = contrastRatio(pickForeground(bg), bg);
       const best = Math.max(
@@ -120,6 +120,30 @@ describe("pickForeground output is always readable", () => {
       );
       expect(chosen, `${bg}: chose ${chosen.toFixed(2)} but ${best.toFixed(2)} was available`)
         .toBeCloseTo(best, 5);
+    }
+  });
+
+  it("falls back to the dark foreground for anything unparseable", () => {
+    // pickForeground is called with palette values in production, but the
+    // call sites are not typed against the palette, so a malformed value
+    // must degrade to a readable foreground rather than throw.
+    for (const bad of ["", "#", "12345", "#12345g", "rgb(0,0,0)", "not a colour"]) {
+      expect(pickForeground(bad), bad).toBe("#172b4d");
+    }
+  });
+
+  it("accepts a hex value with or without the leading hash", () => {
+    // Same colour, both spellings: the hash is stripped before validation.
+    expect(pickForeground("ffffff")).toBe(pickForeground("#ffffff"));
+  });
+
+  it("handles the boundary luminance where neither foreground is great", () => {
+    // The mid-grey band is where the two candidates are closest. Whatever
+    // pickForeground chooses, the better ratio must be the one taken.
+    for (const bg of ["#767676", "#7a7a7a", "#808080", "#858585"]) {
+      const chosen = contrastRatio(pickForeground(bg), bg);
+      const best = Math.max(contrastRatio(DARK_FG, bg), contrastRatio(LIGHT_FG, bg));
+      expect(chosen, bg).toBeCloseTo(best, 5);
     }
   });
 });

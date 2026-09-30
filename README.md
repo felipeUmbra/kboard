@@ -42,8 +42,8 @@ A Trello-inspired Kanban board that signs you in with Google and stores your boa
 - ✅ **Keyboard drag-and-drop** — cards are movable with Space + Arrow keys, documented in an in-app shortcuts panel
 - ✅ **Touch targets** — 44px minimum for buttons, inputs and rich-text controls on touch devices (WCAG 2.5.5)
 - ✅ **End-to-end tested** with Playwright across 3 viewports (desktop, tablet, mobile) plus a dedicated PWA project, against a fake Drive + fake Google Identity Services — 356 tests
-- ✅ **Cross-browser smoke** — a focused subset also runs in Firefox and WebKit, because dnd-kit, Tiptap and `contenteditable` all behave differently per engine
-- ✅ **Coverage gated in CI** — Vitest thresholds are enforced on every PR; the report is uploaded as an artifact
+- ✅ **Cross-browser smoke** — a focused subset also runs in Firefox and WebKit, because dnd-kit, Tiptap and `contenteditable` all behave differently per engine. Advisory in CI (see [`Docs/ACCESSIBILITY-TESTING.md`](./Docs/ACCESSIBILITY-TESTING.md))
+- ✅ **100% unit coverage, gated in CI** — the pure logic layers (`src/models/`, `src/state/`) are at 100% statements, branches, functions and lines across 518 tests. Any new uncovered line fails the build; the report is uploaded as an artifact
 - ✅ **Zero backend** — pure static SPA, deploy anywhere
 - ✅ **Installable Progressive Web App** — manifest + service worker; "Add to Home Screen" on iOS / Android gives you a standalone app icon, splash screen, and full-screen launch
 - ✅ **Offline app shell** — Workbox precaches the SPA shell, manifest, and icons so the boards list loads even with no network. Drive writes are deferred via the existing in-memory + localStorage draft path until you're back online
@@ -116,7 +116,7 @@ Open <http://localhost:5172/> and click **Sign in with Google**.
 | `npm run lint:colors` | Fail on hardcoded hex colours in `src/` outside the token file |
 | `npm run a11y:axe` | Alias of `test:e2e:axe`; run as part of `test:e2e` |
 | `npm run a11y` | Run both browser-free accessibility gates (contrast + colour lint) |
-| `npm run test:unit` | Run the Vitest unit + integration suites (185 tests) |
+| `npm run test:unit` | Run the Vitest unit + integration suites (518 tests) |
 | `npm run test:unit:coverage` | Run the unit suites with V8 coverage and enforce the thresholds |
 
 ## Where your data lives
@@ -203,13 +203,37 @@ Every pull request runs four automated gates. Nothing merges on a manual
 | Gate | Command | What it prevents |
 |---|---|---|
 | Types | `npm run typecheck` | Type errors |
-| Unit | `npm run test:unit` | Domain-logic regressions |
+| Unit + coverage | `npm run test:unit:coverage` | Domain-logic regressions, and any new uncovered line (100% gate) |
 | Accessibility | `npm run a11y` | A contrast failure or a hardcoded colour reaching the UI |
 | E2E | `npm run test:e2e` | Broken user flows on desktop, tablet, mobile and PWA |
 
 The accessibility gates are the unusual part: they are **build failures, not
 review comments**. A colour that would fail WCAG AA cannot be merged, which is
 why the palette has stayed conformant as the UI has grown.
+
+The coverage gate is the second unusual one. It sits at 100% rather than the
+usual "good enough" floor, which is only sustainable because it is scoped to
+the pure logic layers — `src/models/` and `src/state/`. Components are covered
+by the Playwright matrix instead, since a jsdom render proves little that a
+real browser does not. Reaching 100% meant fixing real defects rather than
+writing tests around them: see the notes in `vitest.config.ts`.
+
+### Known limitations
+
+- **Cross-browser runs are advisory.** Firefox and WebKit smoke suites are
+  reported but do not block a merge. WebKit passes serially (47/47) but is
+  unreliable when run concurrently with Firefox, which points at shared-server
+  and compositor contention in CI rather than a product defect. Tracked, not
+  hidden.
+- **One quarantined E2E test.** `Adding a parent from a Task creates a Story
+  card pre-linked (bidirectional)` in `tests/e2e/hierarchy-progress.spec.ts` is
+  marked `test.fixme`. It depends on a debounced card-save roundtrip racing an
+  editor re-mount, which is unreliable on a loaded mobile project. The product
+  behaviour is covered by unit tests on `addCardWithParent`; the original
+  implementation is kept alongside the marker for the eventual rewrite.- **Manual screen-reader testing has not been run.** The NVDA and VoiceOver
+  protocol in [`Docs/ACCESSIBILITY-TESTING.md`](./Docs/ACCESSIBILITY-TESTING.md)
+  is written and ready, but it has not been executed. Automated conformance is
+  not a substitute, so no screen-reader conformance claim is made here.
 
 ## Deploying
 

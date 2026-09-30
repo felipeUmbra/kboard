@@ -48,6 +48,24 @@ describe("coerceFieldValue", () => {
     expect(coerceFieldValue(booleanField, false)).toBe(false);
     expect(coerceFieldValue(booleanField, "truthy")).toBe(false);
   });
+
+  it("coerces a date to a string, or empty for anything else", () => {
+    const dateField: CustomField = { id: "f5", name: "Date", type: "date" };
+    expect(coerceFieldValue(dateField, "2026-03-04")).toBe("2026-03-04");
+    expect(coerceFieldValue(dateField, 20260304)).toBe("");
+  });
+
+  it("coerces a preset selection to a string, or empty for anything else", () => {
+    const preset: CustomField = { id: "f6", name: "Status", type: "preset_list" };
+    expect(coerceFieldValue(preset, "opt-1")).toBe("opt-1");
+    expect(coerceFieldValue(preset, 1)).toBe("");
+  });
+
+  it("coerces a long_text value the same as short_text", () => {
+    const longText: CustomField = { id: "f7", name: "Body", type: "long_text" };
+    expect(coerceFieldValue(longText, "hello")).toBe("hello");
+    expect(coerceFieldValue(longText, 123)).toBe("");
+  });
 });
 
 describe("formatFieldValue", () => {
@@ -98,5 +116,43 @@ describe("formatFieldValue", () => {
   it("formats preset list options by name", () => {
     expect(formatFieldValue(presetField, "opt-1")).toBe("Active");
     expect(formatFieldValue(presetField, "unknown")).toBe("unknown");
+  });
+
+  it("falls back to the raw id when the field has no options at all", () => {
+    const bare: CustomField = { id: "f7", name: "Status", type: "preset_list" };
+    expect(formatFieldValue(bare, "opt-1")).toBe("opt-1");
+  });
+
+  it("formats a date as a human-readable day", () => {
+    const out = formatFieldValue(dateField, "2026-03-04");
+    expect(out).toMatch(/2026/);
+    expect(out).not.toBe("2026-03-04");
+  });
+
+  it("returns an unparseable date string verbatim", () => {
+    // The value is coerced to "" for a non-string, so a non-empty result
+    // here means Date could not read it — the chip must show the raw text
+    // rather than "Invalid Date".
+    expect(formatFieldValue(dateField, "not-a-date")).toBe("not-a-date");
+  });
+
+  it("formats a long_text value the same as short_text", () => {
+    const longText: CustomField = { id: "f10", name: "Body", type: "long_text" };
+    expect(formatFieldValue(longText, "hello")).toBe("hello");
+  });
+
+  it("defaults decimals to 0 for number and percentage", () => {
+    const noDecimals: CustomField = { id: "f8", name: "N", type: "number" };
+    expect(formatFieldValue(noDecimals, 3.7)).toBe("4");
+    const pctNoDecimals: CustomField = { id: "f9", name: "P", type: "percentage" };
+    expect(formatFieldValue(pctNoDecimals, 42.4)).toBe("42%");
+  });
+
+  it("omits the unit when the field has none", () => {
+    expect(formatFieldValue(numberField, 3.5)).toBe("4");
+  });
+
+  it("treats a null value as empty", () => {
+    expect(formatFieldValue(shortText, null as never)).toBe("");
   });
 });

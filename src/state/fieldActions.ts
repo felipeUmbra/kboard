@@ -16,12 +16,6 @@ export type FieldScope = "board" | CardType;
 
 export interface AddFieldResult { board: Board; fieldId: string | null }
 
-function getFields(b: Board, scope: FieldScope): CustomField[] {
-  if (scope === "board") return b.customFields;
-  const cfg = b.cardTypes.find((c) => c.type === scope);
-  return cfg?.customFields ?? [];
-}
-
 function setFields(
   b: Board,
   scope: FieldScope,
@@ -189,7 +183,18 @@ export function removePresetOption(
   return {
     ...b,
     cards,
-    customFields: b.customFields,
+    // The option lives on whichever field list the scope points at. Removing
+    // it from a board-level field has to rewrite `customFields`; previously
+    // this passed the list through untouched, so the option stayed visible
+    // in the board field's chip picker while every card had lost its value.
+    customFields:
+      scope === "board"
+        ? b.customFields.map((f) =>
+            f.id === fieldId
+              ? { ...f, options: (f.options ?? []).filter((o) => o.id !== optionId) }
+              : f,
+          )
+        : b.customFields,
     cardTypes: b.cardTypes.map((c) =>
       c.type === scope
         ? {

@@ -15,8 +15,8 @@
  */
 
 /** The app's near-black, matching `--color-text`. */
-const DARK_FG = "#172b4d";
-const LIGHT_FG = "#ffffff";
+export const DARK_FG = "#172b4d";
+export const LIGHT_FG = "#ffffff";
 
 function relativeLuminance(r: number, g: number, b: number): number {
   const f = (v: number) => {
@@ -36,11 +36,12 @@ function ratio(a: number, b: number): number {
  */
 export function pickForeground(hex: string): string {
   const c = hex.replace("#", "");
+  // The regex is the only validation needed: six hex digits always parse to
+  // three finite numbers, so there is no separate NaN check to make.
   if (!/^[0-9a-fA-F]{6}$/.test(c)) return DARK_FG;
   const r = parseInt(c.slice(0, 2), 16);
   const g = parseInt(c.slice(2, 4), 16);
   const b = parseInt(c.slice(4, 6), 16);
-  if ([r, g, b].some(Number.isNaN)) return DARK_FG;
 
   const bg = relativeLuminance(r, g, b);
   const dark = relativeLuminance(0x17, 0x2b, 0x4d);

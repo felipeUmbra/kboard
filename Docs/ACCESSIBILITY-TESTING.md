@@ -255,6 +255,24 @@ traced back to this document.
 - **The manual walkthrough is unexecuted.** Everything above the status note
   is a protocol, not a result. Treat conformance as *automated-verified* until
   a session has been run.
+- **Cross-browser runs are advisory, not gating.** The Firefox and WebKit
+  smoke projects are reported in CI but do not block a merge. Firefox is
+  green; WebKit passes serially (47/47) and fails when run concurrently with
+  Firefox, which points at shared dev-server and compositor contention rather
+  than a product defect. Until that is resolved the gap is reported rather
+  than papered over.
+- **One E2E test is quarantined.** `Adding a parent from a Task creates a Story
+  card pre-linked (bidirectional)` is marked `test.fixme` after flaking on
+  `chromium-mobile` only. It is unrelated to accessibility — it is recorded
+  here because the full test inventory should be accounted for, and the
+  behaviour it covers is verified by unit tests instead.
+- **The full E2E matrix is load-sensitive.** The most recent four-project run
+  was 337 passed / 18 skipped / 1 failed, and that one failure
+  (`Change card type from task to story`, `chromium-mobile`) passed in
+  isolation on both desktop and mobile, and 32/32 under `--repeat-each=2` on
+  mobile. It is contention in the 17-minute parallel run, not a defect — but
+  a full-matrix failure should always be re-verified against the spec alone
+  before being treated as one.
 
 ---
 

@@ -13,13 +13,13 @@ actionable: every item names its files and its verification.
 | **Status** | v1 feature-complete and verified |
 | **Commits** | 56 |
 | **Tracked files** | 140 |
-| **Unit/integration tests** | 185 passing, 12 files |
-| **E2E tests** | 356 collected, 4 Chromium projects (+94 cross-browser smoke) |
+| **Unit/integration tests** | 518 passing, 19 files |
+| **E2E tests** | 356 collected, 4 Chromium projects (+94 cross-browser smoke); 1 quarantined |
 | **Type errors** | 0 |
 | **Contrast failures** | 0 (all tokens, both themes) |
 | **Hardcoded colour literals** | 0 |
 | **axe-core violations** | 0 (6 surfaces, light + dark) |
-| **Coverage** | lines 51.65% / branches 76.53% / functions 62.16% |
+| **Coverage** | 100% lines / statements / branches / functions (`src/models/`, `src/state/`) |
 
 ---
 
@@ -147,8 +147,8 @@ both the build gate and the test suite would pass while the UI was unreadable.
 | 4.2 | Manual screen-reader walkthrough (NVDA + VoiceOver) | M | P1 | ◐ protocol written, **not yet executed** |
 | 4.3 | Lighthouse CI budget for the accessibility score | S | P2 | ✅ done |
 | 4.4 | Visual-regression baselines for the three layouts | M | P2 | ✅ done (geometry assertions + capture) |
-| 4.5 | Cross-browser run (Firefox, WebKit) | M | P2 | ◐ Firefox green; WebKit flaky under parallel workers |
-| 4.6 | Coverage thresholds in CI | S | P3 | ✅ done |
+| 4.5 | Cross-browser run (Firefox, WebKit) | M | P2 | ◐ advisory in CI; Firefox green, WebKit green serially, flaky in parallel |
+| 4.6 | Coverage thresholds in CI | S | P3 | ✅ done — raised from 50/70/60 to a 100% gate |
 
 **4.1 — what axe-core found.** The scans (`tests/e2e/a11y-axe.spec.ts`)
 cover the login screen, boards list, board view, card editor, planner, and
@@ -189,16 +189,46 @@ solved:
   tighter bound.
 - WebKit's headless compositor crashes (`RenderCompositorSWGL failed mapping
   default framebuffer`). The entire WebKit smoke set passes serially
-  (`--workers=1`) but degrades badly when run alongside Firefox, where the
-  two projects share one dev server. **Not yet fixed.** Until it is, treat
-  the WebKit job as advisory rather than a merge gate, and investigate
-  before wiring it into a required check.
+  (`--workers=1`, 47/47) but degrades badly when run alongside Firefox, where
+  the two projects share one dev server. **Not yet fixed.** Until it is, the
+  cross-browser job is advisory rather than a merge gate. The evidence points
+  at server and compositor contention in CI, not at a product defect, so it is
+  tracked rather than made to pass artificially.
 
-**4.6 — thresholds reflect a real asymmetry.** Lines 51.65%, branches
-76.53%, functions 62.16%. `src/models/*` is pure logic and well covered;
-`src/state/*actions.ts` is React context wiring with zero unit coverage,
-covered end-to-end instead. The thresholds are set just below the measured
-values and the gap is documented rather than papered over.
+**4.6 — raised from a floor to a 100% gate.** The original thresholds
+(lines 50, branches 70, functions 60) were a deliberate floor chosen to sit
+just under measured values while `src/state/*actions.ts` had no unit coverage
+at all. That gap is now closed: `fieldActions`, `typeActions`, `cardActions`,
+`boardActions`, `actionsIndex` and `cardDrafts` are all at 100%, and the
+thresholds are 100 across statements, branches, functions and lines. 518 unit
+tests.
+
+Closing it surfaced five real defects that no amount of E2E had caught, because
+each one is invisible from the outside — the UI updates correctly while the
+data is wrong:
+
+| Defect | Impact |
+|---|---|
+| `patchCard` rebuilt the activity log from `existing.activity`, discarding the `activity` passed in the patch | Every checklist, comment and label change applied to the card but left **no audit entry** |
+| `removePresetOption` passed `customFields` through untouched | Deleting a preset option from a **board-level** field left the option visible in the picker while every card had silently lost its value |
+| `normalizeCard` cast `labelIds` without filtering, while `parentIds` was filtered | A hand-edited Drive file could put a non-string in `labelIds` and crash the card face |
+| `normalizeBoard` mapped `columns` without a null check | A `null` column entry threw a `TypeError` during render, not at load |
+| `defaultDoneColumnIds` pushed `undefined` for an id-less "Done" column | `doneColumnIds` could contain `undefined` |
+
+Four provably-dead guards were also **deleted** rather than covered — a test
+that has to contrive an impossible input (a `new Date(string)` that throws, a
+`parseInt` of a regex-validated hex, an SSR `typeof window` check in a
+browser-only bundle) is a maintenance liability, not coverage. See
+`vitest.config.ts` for the reasoning and the scope decision.
+
+**E2E quarantine.** One test is marked `test.fixme`:
+`Adding a parent from a Task creates a Story card pre-linked (bidirectional)`
+in `tests/e2e/hierarchy-progress.spec.ts`. It was flaky on `chromium-mobile`
+only, passing in isolation and failing under load — the assertions race a
+debounced save roundtrip against an editor re-mount. The underlying behaviour
+is covered by unit tests on `addCardWithParent` in both directions, so this is
+a test-harness problem, not a product one. The original implementation is kept
+commented next to the marker for the eventual timing-robust rewrite.
 
 **Landing already complete from earlier work:** the `a11y` CI job, the colour
 linter, 155 unit tests including a dedicated contrast suite, and E2E

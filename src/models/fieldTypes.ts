@@ -114,19 +114,17 @@ export function formatFieldValue(
     }
     case "boolean":
       return value ? "Yes" : "No";
-    case "date":
-      // YYYY-MM-DD → human-readable
-      try {
-        const d = new Date(String(value) + "T00:00:00");
-        if (Number.isNaN(d.getTime())) return String(value);
-        return d.toLocaleDateString(undefined, {
-          year: "numeric",
-          month: "short",
-          day: "numeric",
-        });
-      } catch {
-        return String(value);
-      }
+    case "date": {
+      // YYYY-MM-DD → human-readable. `new Date(string)` returns an Invalid
+      // Date rather than throwing, so the NaN check is the only guard needed.
+      const d = new Date(String(value) + "T00:00:00");
+      if (Number.isNaN(d.getTime())) return String(value);
+      return d.toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+    }
     case "preset_list": {
       const opt = field.options?.find((o) => o.id === value);
       return opt?.name ?? String(value);

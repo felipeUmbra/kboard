@@ -4,7 +4,13 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "jsdom",
-    include: ["src/**/*.test.ts", "tests/unit/**/*.test.ts", "tests/integration/**/*.test.ts"],
+    include: [
+      "src/**/*.test.ts",
+      "src/**/*.test.tsx",
+      "tests/unit/**/*.test.ts",
+      "tests/unit/**/*.test.tsx",
+      "tests/integration/**/*.test.ts",
+    ],
     coverage: {
       provider: "v8",
       // Only the pure logic layers are instrumented. Components are covered
@@ -15,24 +21,22 @@ export default defineConfig({
       exclude: ["**/*.test.ts", "**/index.ts"],
       reporter: ["text-summary", "json-summary", "html"],
       reportsDirectory: "coverage",
-      // Sprint 4.6. These are a floor to catch untested NEW logic, not a
-      // target to chase — they are set just below the measured values so a
-      // regression fails but normal fluctuation does not.
+      // Sprint 4.6, then raised to a real gate once the state-action layer
+      // was covered. These are now measured, not aspirational: every branch
+      // in `src/models/**` and `src/state/**` is exercised, and anything
+      // added without a test now fails the build.
       //
-      // The current shape is lopsided and deliberately so. `src/models/*` is
-      // pure logic and is well covered (90%+). `src/state/*actions.ts` is
-      // React context wiring with zero unit coverage: those files bind pure
-      // action creators to the reducer but are exercised end-to-end instead,
-      // which is why lines sit near 50 while branches sit above 75. Closing
-      // that gap means testing the wiring, not more model tests.
-      //
-      // Raising these should be a deliberate, separate change with the
-      // state-action gap addressed first.
+      // Getting here meant fixing real defects rather than writing tests to
+      // match the code — see the activity-log loss in `patchCard`, the
+      // board-scope `removePresetOption` no-op, the `labelIds` cast, and the
+      // `normalizeBoard` crash on a null column. Four provably-dead guards
+      // were deleted instead of being covered, since a test that has to
+      // contrive an impossible input is not worth its maintenance.
       thresholds: {
-        lines: 50,
-        statements: 50,
-        functions: 60,
-        branches: 70,
+        lines: 100,
+        statements: 100,
+        functions: 100,
+        branches: 100,
       },
     },
   },

@@ -26,7 +26,16 @@ function defaultDoneColumnIds(board: Partial<Board>): string[] {
   if (!Array.isArray(board.columns)) return [];
   const out: string[] = [];
   for (const c of board.columns) {
-    if (c && typeof c.name === "string" && /^done$/i.test(c.name.trim())) {
+    // The id guard matches the column filter below: an entry without a
+    // string id is dropped, so it must not contribute an `undefined` to the
+    // done set either.
+    if (
+      c &&
+      typeof c === "object" &&
+      typeof c.id === "string" &&
+      typeof c.name === "string" &&
+      /^done$/i.test(c.name.trim())
+    ) {
       out.push(c.id);
     }
   }
@@ -76,12 +85,20 @@ export function normalizeBoard(raw: unknown): Board {
     ? (r.doneColumnIds as unknown[]).filter((x): x is string => typeof x === "string")
     : defaultDoneColumnIds(r);
 
+  // A null/scalar entry is dropped rather than mapped through: the column
+  // list is dereferenced by id on every render, so a half-written entry has
+  // to fail here rather than as a TypeError during render.
   const columns = Array.isArray(r.columns)
-    ? (r.columns as Board["columns"]).map((c) => ({
-        id: c.id,
-        name: c.name,
-        cardIds: Array.isArray(c.cardIds) ? c.cardIds : [],
-      }))
+    ? (r.columns as unknown[])
+        .filter(
+          (c): c is { id: string; name: string; cardIds?: unknown } =>
+            !!c && typeof c === "object" && typeof (c as { id?: unknown }).id === "string",
+        )
+        .map((c) => ({
+          id: c.id,
+          name: c.name,
+          cardIds: Array.isArray(c.cardIds) ? c.cardIds : [],
+        }))
     : [];
 
   const cards: Record<string, Card> = {};
@@ -110,7 +127,12 @@ export function normalizeBoard(raw: unknown): Board {
 function normalizeCard(id: string, raw: unknown): Card {
   const r = (raw ?? {}) as Partial<Card> & Record<string, unknown>;
   const now = Date.now();
-  const labelIds = Array.isArray(r.labelIds) ? (r.labelIds as string[]) : [];
+  // Filtered rather than cast: a hand-edited or partially-synced payload can
+  // put non-strings in here, and every consumer maps over labelIds to render
+  // a pill. parentIds already filtered; labelIds did not.
+  const labelIds = Array.isArray(r.labelIds)
+    ? (r.labelIds as unknown[]).filter((x): x is string => typeof x === "string")
+    : [];
 
   let boardFieldValues: CustomFieldValues = {};
   if (r.boardFieldValues && typeof r.boardFieldValues === "object") {

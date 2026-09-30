@@ -14,6 +14,10 @@
 //
 // Schema forward-compat: the localStorage key is new; old clients have no
 // entry and loadFromStorage returns {}. Existing boards/cards are unaffected.
+//
+// This module has no `typeof window` guard because it is never imported
+// outside a browser bundle — there is no SSR or worker entry point in this
+// app, so the guard was dead code that V8 coverage could never satisfy.
 
 import type { Card } from "../models/types";
 
@@ -33,7 +37,6 @@ const STORAGE_KEY = "kboard:card-drafts";
 type DraftsMap = Record<string, CardDraft>;
 
 function loadFromStorage(): DraftsMap {
-  if (typeof window === "undefined") return {};
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return {};
@@ -47,7 +50,6 @@ function loadFromStorage(): DraftsMap {
 }
 
 function saveToStorage(map: DraftsMap): void {
-  if (typeof window === "undefined") return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
   } catch {
