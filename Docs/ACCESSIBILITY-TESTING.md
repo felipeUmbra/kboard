@@ -256,11 +256,23 @@ traced back to this document.
   is a protocol, not a result. Treat conformance as *automated-verified* until
   a session has been run.
 - **Cross-browser runs are advisory, not gating.** The Firefox and WebKit
-  smoke projects are reported in CI but do not block a merge. Firefox is
-  green; WebKit passes serially (47/47) and fails when run concurrently with
-  Firefox, which points at shared dev-server and compositor contention rather
-  than a product defect. Until that is resolved the gap is reported rather
-  than papered over.
+  smoke projects are reported in CI but do not block a merge. Both are green
+  when run serially (94/94 verified locally); WebKit's headless compositor is
+  unreliable when Firefox runs alongside it on a shared CI runner, which points
+  at contention rather than a product defect. Until that is resolved the gap is
+  reported rather than papered over.
+- **A CI wiring bug once made the cross-browser signal meaningless.** All three
+  Playwright browser caches shared one key derived only from
+  `package-lock.json`, so whichever job saved first populated the cache and the
+  others saw `cache-hit=true`, skipped `npx playwright install`, and failed at
+  launch — 90 of 94 tests, every one with
+  `Executable doesn't exist at .../firefox-1538/firefox/firefox`. No test had
+  actually run. The keys are now scoped per browser set and the install is
+  unconditional; `scripts/check-workflows.py` fails the build if either
+  regresses. This is worth remembering because the report looked exactly like a
+  product regression, and the accessibility assertions in this document were
+  not actually being checked in CI at that time. See `IMPLEMENTATION-PLAN.md`
+  §4.5b.
 - **One E2E test is quarantined.** `Adding a parent from a Task creates a Story
   card pre-linked (bidirectional)` is marked `test.fixme` after flaking on
   `chromium-mobile` only. It is unrelated to accessibility — it is recorded

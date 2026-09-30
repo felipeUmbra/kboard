@@ -188,12 +188,16 @@ solved:
   `timeout: 90_000` on the two slow projects; the Chromium matrix keeps its
   tighter bound.
 - WebKit's headless compositor crashes (`RenderCompositorSWGL failed mapping
-  default framebuffer`). The entire WebKit smoke set passes serially
-  (`--workers=1`, 47/47) but degrades badly when run alongside Firefox, where
-  the two projects share one dev server. **Not yet fixed.** Until it is, the
-  cross-browser job is advisory rather than a merge gate. The evidence points
-  at server and compositor contention in CI, not at a product defect, so it is
-  tracked rather than made to pass artificially.
+  default framebuffer`) when run alongside Firefox on the shared CI runner.
+  **Not yet fixed.** Until it is, the cross-browser job is advisory rather than
+  a merge gate. The evidence points at server and compositor contention in CI,
+  not at a product defect, so it is tracked rather than made to pass
+  artificially.
+
+  Note this was, for a long time, *believed* to be a WebKit instability. It
+  was not the whole story — see 4.5b below, where the same job was found to
+  have been failing for a completely different reason, one that had nothing to
+  do with the compositor.
 
 **4.5b — the cross-browser job was failing for a non-product reason.** A CI
 report showed **90 of 94 tests failing** (45 Firefox, 45 WebKit). Every one
@@ -236,6 +240,12 @@ the workflows and fails the build if a browser install is ever re-guarded by a
 cache-hit condition or if the cache keys lose their browser scope. It runs in
 the new `ci-wiring` job. Verified against the pre-fix file: it flags both
 original conditional installs.
+
+**Verified locally after the fix:** `npm run test:e2e:crossbrowser
+-- --workers=1` is **94/94 passed** in 12.1 minutes. The cross-browser specs
+were never broken; they had simply never launched a browser in CI. The
+advisory status remains (see the WebKit compositor note above), but the job now
+produces a real signal instead of 90 launch failures.
 
 **4.6 — raised from a floor to a 100% gate.** The original thresholds
 (lines 50, branches 70, functions 60) were a deliberate floor chosen to sit

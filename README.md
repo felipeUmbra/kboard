@@ -222,10 +222,10 @@ writing tests around them: see the notes in `vitest.config.ts`.
 ### Known limitations
 
 - **Cross-browser runs are advisory.** Firefox and WebKit smoke suites are
-  reported but do not block a merge. WebKit passes serially (47/47) but is
-  unreliable when run concurrently with Firefox, which points at shared-server
-  and compositor contention in CI rather than a product defect. Tracked, not
-  hidden.
+  reported but do not block a merge. Both are green when run serially
+  (94/94 verified locally); WebKit's headless compositor is unreliable when
+  Firefox runs alongside it on a shared CI runner, which points at contention
+  rather than a product defect. Tracked, not hidden.
 - **One quarantined E2E test.** `Adding a parent from a Task creates a Story
   card pre-linked (bidirectional)` in `tests/e2e/hierarchy-progress.spec.ts` is
   marked `test.fixme`. It depends on a debounced card-save roundtrip racing an
