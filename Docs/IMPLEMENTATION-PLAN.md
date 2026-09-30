@@ -247,6 +247,33 @@ were never broken; they had simply never launched a browser in CI. The
 advisory status remains (see the WebKit compositor note above), but the job now
 produces a real signal instead of 90 launch failures.
 
+**4.5d — fixing 4.5c made the job exceed its own timeout.** Run 36725258569
+reported the cross-browser job **cancelled at 25m22s** — `timeout-minutes: 25`
+exactly. Not a test failure and not a regression: it is the direct consequence
+of the 4.5c fix, and the arithmetic closes exactly.
+
+The 25m ceiling had been calibrated against a suite that was *artificially
+fast*. In run 36717935031, 28 tests were aborting 5 seconds in on the
+hardcoded `waitForSelector` timeout, so the job finished in **14m57s** having
+skipped most of its own work. Removing those literals made every one of those
+tests run to completion for the first time. CI measured the affected WebKit
+board specs at ~24s each, so ~28 of them added roughly **11 minutes** of real
+runtime:
+
+```
+13.6m (old test phase, mostly fast-failing) + 11.2m = ~24.8m  ->  25m22s, cancelled
+```
+
+A harness fix that makes tests actually run is *supposed* to increase runtime;
+the timeout was the thing that was wrong. `timeout-minutes` is now **40**,
+covering the 12.9m serial test phase plus ~5m of setup, with headroom for
+slower GitHub runners.
+
+The general trap, worth keeping: **a timeout budget that has been observed to
+"fit" is only meaningful if the job was doing its full work while it fit.**
+This one fit comfortably against a run that was quietly skipping 28 tests, so
+it was calibrated to a lie.
+
 **4.5c — run 36717935031: two defects the local runs could not see.** With the
 browsers actually launching, the cross-browser job reported **28 failed / 65
 passed**, which is what a real regression looks like. Neither failure was one.

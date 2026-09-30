@@ -128,7 +128,22 @@ jobs:
   crossbrowser:
     name: Cross-browser smoke (Firefox + WebKit)
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # 40 minutes, up from 25. The 25m ceiling was calibrated when the
+    # suite was artificially FAST: 28 tests were aborting 5 seconds in on a
+    # hardcoded `waitForSelector` timeout in boardPage.ts, so the job
+    # finished in 14m57s having skipped most of its own work. Removing those
+    # literals (commit 49fa7a5) made every one of those tests run to
+    # completion for the first time -- CI measured those WebKit board specs
+    # at ~24s each, so ~28 of them added roughly 11 minutes of real runtime
+    # and the job hit 25m22s and was CANCELLED by this very limit (run
+    # 36725258569).
+    #
+    # 40 gives real headroom: the suite measures 12.9m serially on a local
+    # machine, plus ~5m of setup, and GitHub runners are slower per test
+    # than that. Do not lower this back toward the test phase alone -- the
+    # budget has to cover checkout, npm ci, the browser install and the
+    # build as well.
+    timeout-minutes: 40
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
