@@ -22,7 +22,11 @@ import { contrastRatio, worstCase, compositeOver } from "./helpers/contrast";
 const AA = 4.5;
 
 const LIGHT_BGS = ["#ffffff", "#f4f5f7", "#ebecf0"];
-const DARK_BGS = ["#22272b", "#1d2125"];
+// #2c333a is --color-bg-elevated, the .kanban-column surface. It belongs here:
+// it is the *lightest* dark surface and therefore the binding constraint for
+// muted foregrounds. Leaving it out let --color-text-muted ship at 4.5024:1
+// against it and fail WCAG 1.4.3 on the composited column (CI run 36717935031).
+const DARK_BGS = ["#22272b", "#1d2125", "#2c333a"];
 const DARK_FG = "#172b4d";
 const WHITE_FG = "#ffffff";
 

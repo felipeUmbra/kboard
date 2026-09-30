@@ -278,6 +278,29 @@ traced back to this document.
   `chromium-mobile` only. It is unrelated to accessibility — it is recorded
   here because the full test inventory should be accounted for, and the
   behaviour it covers is verified by unit tests instead.
+- **The contrast audit's background list was incomplete until CI run
+  36717935031.** `a11y-contrast.test.ts` audited dark foregrounds against
+  `--color-surface` (#22272b) and `--color-bg` (#1d2125) but not
+  `--color-bg-elevated` (#2c333a), which is the `.kanban-column` surface and
+  the *lightest* background in the dark theme — so it is the binding
+  constraint for muted text. `--color-text-muted: #8c9bab` measured
+  **4.5024:1** on #2c333a: passing by 0.0024. axe-core then found the column
+  composited to #2f363d and #373e45 and measured **4.3:1** and **3.81:1** on
+  `.kanban-column__count` and `.kanban-column__add-btn` — a real WCAG 1.4.3
+  failure that passed in Chromium and Firefox locally and only surfaced on the
+  CI runner. Fixed by lifting the token to `#9dabba` (4.63:1 worst case) and
+  adding #2c333a to both audit lists. A regression test now requires strict
+  headroom, so a value sitting on the 4.5 threshold fails again by design.
+- **The cross-browser failures in run 36717935031 were a test-harness defect,
+  not a product regression.** 27 of 28 failures died on one wall:
+  `boardPage.createBoard()` hardcoded `{ timeout: 5_000 }` on its final
+  `waitForSelector`. That per-call option *overrides* the project's
+  `expect.timeout`, so it also cancelled out the 15s that firefox-smoke and
+  webkit-smoke deliberately grant. WebKit board specs took ~24s each on the
+  loaded runner. The 15 literals have been removed so each helper inherits its
+  project's budget. The lesson generalises: **a per-call timeout in a shared
+  page object silently defeats project-level timeout configuration** — see the
+  NOTE ON WAIT TIMEOUTS comment in `tests/helpers/boardPage.ts`.
 - **The full E2E matrix is load-sensitive.** The most recent four-project run
   was 337 passed / 18 skipped / 1 failed, and that one failure
   (`Change card type from task to story`, `chromium-mobile`) passed in

@@ -130,17 +130,28 @@
 @media (prefers-color-scheme: dark) {
   :root {
     /* Colors — dark theme
-       Foreground tokens verified >= 4.5:1 against both dark backgrounds
-       (--color-surface #22272b, --color-bg #1d2125). */
+       Foreground tokens verified >= 4.5:1 against every dark background a
+       foreground can actually land on: --color-surface (#22272b), --color-bg
+       (#1d2125) and --color-bg-elevated (#2c333a, the .kanban-column
+       surface). The elevated surface is the binding one for muted text and
+       MUST stay in the audit lists — omitting it is what let #8c9bab ship at
+       4.5024:1 and fail WCAG 1.4.3 in production. */
     --color-bg: #1d2125;
     --color-bg-elevated: #2c333a;
     --color-surface: #22272b;
     --color-surface-hover: #2c333a;
     --color-text: #b6c2cf;
-    --color-text-muted: #8c9bab;
+    /* Was #8c9bab. That value cleared 4.5:1 on --color-surface and --color-bg
+       but sat at 4.5024:1 on --color-bg-elevated (#2c333a) — the .kanban-column
+       surface — i.e. exactly on the threshold. axe-core then measured 4.3:1
+       and 3.81:1 on the composited column surfaces #2f363d / #373e45 for
+       .kanban-column__count and .kanban-column__add-btn (CI run 36717935031).
+       Lifted to clear 4.5:1 on the *worst* observed surface with headroom, so
+       it can no longer fall under the line when the column is composited. */
+    --color-text-muted: #9dabba;
     /* Was #6b778c — carried over from the light theme, where it is a mid-grey.
        On dark surfaces it was only 3.33:1, a real AA failure. */
-    --color-text-subtle: #8c9bab;
+    --color-text-subtle: #9dabba;
     --color-border: #3d444b;
     --color-border-strong: #4d555e;
     /* Was #4c9aff — 4.49:1 on --color-bg-elevated (the sidebar), just under

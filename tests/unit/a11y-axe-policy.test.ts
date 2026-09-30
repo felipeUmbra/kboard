@@ -233,6 +233,60 @@ describe("dark accent against the elevated background", () => {
   });
 });
 
+describe("muted text on the column surface (CI 36717935031 regression)", () => {
+  // The column body is the LIGHTEST surface in the dark theme, so it is the
+  // binding constraint for --color-text-muted. Two bugs hid here:
+  //
+  //  1. This file audited the column surface; a11y-contrast.test.ts did not.
+  //  2. #8c9bab measured 4.5024:1 on #2c333a — clearing the bar by 0.0024.
+  //     axe-core then composited the column to #2f363d / #373e45 and measured
+  //     4.3:1 and 3.81:1 on .kanban-column__count and .kanban-column__add-btn.
+  //
+  // The composited values are asserted too, so a future "lift it a bit" edit
+  // that lands back on the threshold fails here rather than in CI.
+  const COMPOSITED_COLUMN_BGS = ["#2c333a", "#2f363d", "#373e45"];
+
+  it.each(["text-muted", "text-subtle"])(
+    "dark --color-%s keeps headroom on the column surface",
+    (token) => {
+      for (const bg of COMPOSITED_COLUMN_BGS) {
+        const ratio = worstCase(dark[token], [bg]);
+        expect(
+          ratio,
+          `dark --color-${token} (${dark[token]}) is only ${ratio.toFixed(2)}:1 ` +
+            `on the column surface ${bg}; it must keep headroom above ${AA}:1`,
+        ).toBeGreaterThanOrEqual(AA);
+      }
+    },
+  );
+
+  it("does not sit on the threshold", () => {
+    // The original defect was a value that passed by 0.0024. Require real
+    // headroom so rounding or a slightly lighter surface cannot flip it.
+    for (const token of ["text-muted", "text-subtle"]) {
+      const worst = worstCase(dark[token], COMPOSITED_COLUMN_BGS);
+      expect(
+        worst,
+        `dark --color-${token} is ${worst.toFixed(3)}:1 at worst — that is ` +
+          `within rounding distance of the ${AA}:1 floor`,
+      ).toBeGreaterThan(AA);
+    }
+  });
+
+  it("keeps the column surface in both audit background lists", () => {
+    // The gap was a DARK_BGS list missing #2c333a, so pin both files to it.
+    for (const file of ["a11y-contrast.test.ts", "a11y-axe-policy.test.ts"]) {
+      const src = readFileSync(join(__dirname, file), "utf8");
+      const list = /DARK_BGS\s*=\s*\[([^\]]*)\]/.exec(src);
+      expect(list, `DARK_BGS not found in ${file}`).not.toBeNull();
+      expect(
+        list![1],
+        `${file} DARK_BGS must include the column surface #2c333a`,
+      ).toContain("#2c333a");
+    }
+  });
+});
+
 describe("opacity is not used to de-emphasise text", () => {
   // Every opacity-dimming regression found in Sprint 4.1 shares this shape:
   // the visual intent is fine, but opacity composites the TEXT toward the

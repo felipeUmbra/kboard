@@ -247,6 +247,31 @@ were never broken; they had simply never launched a browser in CI. The
 advisory status remains (see the WebKit compositor note above), but the job now
 produces a real signal instead of 90 launch failures.
 
+**4.5c — run 36717935031: two defects the local runs could not see.** With the
+browsers actually launching, the cross-browser job reported **28 failed / 65
+passed**, which is what a real regression looks like. Neither failure was one.
+
+*A genuine WCAG 1.4.3 bug.* `a11y-contrast.test.ts` audited dark foregrounds
+against `--color-surface` (#22272b) and `--color-bg` (#1d2125) but **omitted
+`--color-bg-elevated` (#2c333a)** — the `.kanban-column` surface, and the
+*lightest* background in the dark theme, so the binding constraint for muted
+text. `--color-text-muted: #8c9bab` measured **4.5024:1** there: passing by
+0.0024. axe-core found the column composited to #2f363d and #373e45 and
+measured **4.3:1** and **3.81:1** on `.kanban-column__count` and
+`.kanban-column__add-btn`. Fixed by lifting the token to `#9dabba` (4.63:1
+worst case) and adding #2c333a to both audit lists. The lesson: a contrast
+gate is only as good as the set of backgrounds it is asserted against, and a
+value clearing the bar by 0.0024 is a latent failure, not a pass.
+
+*A harness defect, not a product one.* The other 27 failures all died on one
+line: `boardPage.createBoard()` hardcoded `{ timeout: 5_000 }`. A per-call
+timeout **overrides** the project setting, so it silently cancelled the 15s that
+firefox-smoke and webkit-smoke deliberately grant; WebKit board specs took ~24s
+each on the loaded runner. All 15 literals in the page object were removed so
+each helper inherits its project's budget. Lesson recorded in the NOTE ON WAIT
+TIMEOUTS comment in `tests/helpers/boardPage.ts`: a per-call timeout in a shared
+page object defeats project-level timeout configuration.
+
 **4.6 — raised from a floor to a 100% gate.** The original thresholds
 (lines 50, branches 70, functions 60) were a deliberate floor chosen to sit
 just under measured values while `src/state/*actions.ts` had no unit coverage

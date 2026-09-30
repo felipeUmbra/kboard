@@ -2,6 +2,21 @@ import { expect, type Page, type Locator } from "@playwright/test";
 import { loginAs } from "./login";
 import { sel } from "./selectors";
 
+// NOTE ON WAIT TIMEOUTS
+// ----------------------
+// These helpers deliberately pass NO `{ timeout }` option. Playwright's
+// `waitForSelector` and `waitFor` already inherit the running project's
+// `expect.timeout` — 5s on the Chromium projects, 15s on firefox-smoke and
+// webkit-smoke — and a per-call `{ timeout: 5_000 }` OVERRIDES that, which
+// silently cancelled out the 15s the cross-browser projects had granted.
+//
+// That hardcoded 5s was the cause of CI run 36717935031, where 27 of 28
+// cross-browser failures died on the same wall at boardPage.ts:99
+// ("waiting for h1[title=\"Click to rename\"]") while the WebKit board specs
+// took ~24s each on a loaded runner. Omitting the option makes each helper
+// follow whichever budget its project configured: tight where the engine is
+// fast, roomy where it is not. Do not reintroduce a literal here.
+
 /**
  * High-level page object for kboard. Specs call these instead of raw
  * selectors so tests read like user stories.
@@ -27,7 +42,7 @@ export class BoardPage {
       });
       await this.page.reload();
     }
-    await this.page.waitForSelector(sel.loginButton, { timeout: 5_000 });
+    await this.page.waitForSelector(sel.loginButton);
   }
 
   // ── Boards list ───────────────────────────────────────────────────
@@ -38,7 +53,7 @@ export class BoardPage {
     } else {
       await this.page.goto("/");
     }
-    await this.page.waitForSelector(sel.boardCard + "," + sel.emptyState, { timeout: 5_000 });
+    await this.page.waitForSelector(sel.boardCard + "," + sel.emptyState);
   }
 
   /**
@@ -96,7 +111,7 @@ export class BoardPage {
     await this.clickButtonFallback(
       this.page.getByRole("button", { name: /^Create$/ }),
     );
-    await this.page.waitForSelector(sel.boardTitle, { timeout: 5_000 });
+    await this.page.waitForSelector(sel.boardTitle);
   }
 
   async openBoard(name: string) {
@@ -108,7 +123,7 @@ export class BoardPage {
     // the navigation handler since the Sprint 4.1 axe-core fixes removed
     // the <article role="button">.
     await card.locator(sel.boardCardLink).click();
-    await this.page.waitForSelector(sel.boardTitle, { timeout: 5_000 });
+    await this.page.waitForSelector(sel.boardTitle);
   }
 
   async deleteBoardFromList(name: string) {
@@ -117,7 +132,7 @@ export class BoardPage {
     const card = this.page.locator(sel.boardCard).filter({ hasText: name }).first();
     await card.locator(sel.boardCardDelete).click();
     // Wait for the card to disappear from the DOM (DELETE round-trip).
-    await expect(card).toHaveCount(0, { timeout: 5_000 });
+    await expect(card).toHaveCount(0);
   }
 
   // ── Board view ────────────────────────────────────────────────────
@@ -141,7 +156,7 @@ export class BoardPage {
       else d.accept();
     });
     await this.page.click(sel.addColumnButton);
-    await this.page.waitForSelector(`.kanban-column:has-text("${name}")`, { timeout: 5_000 });
+    await this.page.waitForSelector(`.kanban-column:has-text("${name}")`);
   }
 
   async getColumn(name: string): Promise<Locator> {
@@ -207,7 +222,6 @@ export class BoardPage {
     // The new column should appear as a strip in the rail.
     await this.page.waitForSelector(
       `${sel.mobileColumnTab}:has-text("${name}")`,
-      { timeout: 5_000 },
     );
   }
 
@@ -282,24 +296,24 @@ export class BoardPage {
     }
     // The draft input is a TEXTAREA with className="textarea".
     const draftInput = col.locator('textarea.textarea').last();
-    await draftInput.waitFor({ state: "visible", timeout: 5_000 });
+    await draftInput.waitFor({ state: "visible" });
     await draftInput.fill(title);
     await draftInput.press("Enter");
-    await this.page.waitForSelector(`${sel.card}:has-text("${title}")`, { timeout: 5_000 });
+    await this.page.waitForSelector(`${sel.card}:has-text("${title}")`);
   }
 
   async openCard(title: string) {
     const cardLocator = this.page.locator(sel.card).filter({ hasText: title }).first();
-    await cardLocator.waitFor({ state: "visible", timeout: 5_000 });
+    await cardLocator.waitFor({ state: "visible" });
     await cardLocator.click();
-    await this.page.waitForSelector(sel.cardTitleInput, { timeout: 5_000 });
+    await this.page.waitForSelector(sel.cardTitleInput);
   }
 
   async closeCardEditor() {
     const saveBtn = this.page.locator(sel.cardSave);
     await this.clickButtonFallback(saveBtn);
     // Wait for the editor modal to be removed from the DOM.
-    await this.page.waitForSelector(sel.cardTitleInput, { state: "detached", timeout: 5_000 });
+    await this.page.waitForSelector(sel.cardTitleInput, { state: "detached" });
     // A small wait lets React flush the state update to the card before
     // the next assertion looks at it.
     await this.page.waitForTimeout(100);
@@ -321,7 +335,7 @@ export class BoardPage {
     // Playwright's auto-waiting gives the React microtask queue a chance
     // to flush before the call returns.
     const input = this.page.locator(sel.cardTitleInput);
-    await input.waitFor({ state: "visible", timeout: 5_000 });
+    await input.waitFor({ state: "visible" });
     await input.fill(newTitle);
     // Sanity check: the DOM value should now reflect the new title.
     await expect(input).toHaveValue(newTitle, { timeout: 3_000 });
@@ -344,7 +358,7 @@ export class BoardPage {
    */
   async setCardColumn(columnName: string) {
     const select = this.page.locator("#card-col-select");
-    await select.waitFor({ state: "visible", timeout: 5_000 });
+    await select.waitFor({ state: "visible" });
     // The option text is "N. <name>" — match by the column name portion.
     const option = select
       .locator("option")
@@ -359,7 +373,7 @@ export class BoardPage {
   /** Read the currently-selected column name from the editor combobox. */
   async getCardColumn(): Promise<string> {
     const select = this.page.locator("#card-col-select");
-    await select.waitFor({ state: "visible", timeout: 5_000 });
+    await select.waitFor({ state: "visible" });
     const value = await select.inputValue();
     return (
       (await select
