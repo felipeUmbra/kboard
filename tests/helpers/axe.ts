@@ -171,6 +171,41 @@ export async function expectNoAxeViolations(page: Page, opts: AxeOptions = {}) {
     );
   }
 
+  // Wait for entry animations to finish before scanning.
+  //
+  // Same class of bug as the column transition above, different mechanism.
+  // `.modal` runs `animation: slide-up var(--motion-base)` (200ms) whose
+  // keyframes start at `opacity: 0`, so a modal the test just opened is
+  // still FADING IN when the scan starts. Every descendant is composited
+  // toward whatever shows through, and axe samples those painted pixels.
+  //
+  // Measured in Firefox on CI run 36767195869: the Column label inside the
+  // card editor is `rgb(82, 96, 117)` (#526075) at opacity 1 on a
+  // pure-white modal -- a compliant 6.39:1. Scanned mid-animation at
+  // `.modal { opacity: 0.669909 }`, that same text composited down to
+  // 3.42:1 against the #f0f0f0 axe reported, and the test failed as a
+  // "serious" WCAG 1.4.3 violation. It was flaky, not wrong: the retry
+  // landed after the animation and passed.
+  //
+  // Waiting on `getAnimations()` is exact and engine-agnostic — it resolves
+  // when nothing is animating rather than guessing a duration. The cap is a
+  // safety net so a stuck animation fails the scan loudly instead of
+  // hanging until the test timeout.
+  await page
+    .waitForFunction(
+      () =>
+        document
+          .getAnimations()
+          .every((a) => a.playState === "finished" || a.playState === "idle"),
+      undefined,
+      { timeout: 3_000 },
+    )
+    .catch(() => {
+      // Non-fatal: proceed and let axe report what it sees. A permanently
+      // running animation is worth noticing, but it should not mask every
+      // other violation in the scan.
+    });
+
   const builder = new AxeBuilder({ page }).withTags([...AXE_TAGS]);
   if (include) builder.include(include);
 
