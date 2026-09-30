@@ -197,7 +197,7 @@ tests/
 
 ## Quality gates
 
-Every pull request runs four automated gates. Nothing merges on a manual
+Every pull request runs five automated gates. Nothing merges on a manual
 "looks right" check.
 
 | Gate | Command | What it prevents |
@@ -205,6 +205,7 @@ Every pull request runs four automated gates. Nothing merges on a manual
 | Types | `npm run typecheck` | Type errors |
 | Unit + coverage | `npm run test:unit:coverage` | Domain-logic regressions, and any new uncovered line (100% gate) |
 | Accessibility | `npm run a11y` | A contrast failure or a hardcoded colour reaching the UI |
+| CI wiring | `python scripts/check-workflows.py` | A Playwright browser cache collision that silently disables the browser install |
 | E2E | `npm run test:e2e` | Broken user flows on desktop, tablet, mobile and PWA |
 
 The accessibility gates are the unusual part: they are **build failures, not
@@ -230,7 +231,8 @@ writing tests around them: see the notes in `vitest.config.ts`.
   marked `test.fixme`. It depends on a debounced card-save roundtrip racing an
   editor re-mount, which is unreliable on a loaded mobile project. The product
   behaviour is covered by unit tests on `addCardWithParent`; the original
-  implementation is kept alongside the marker for the eventual rewrite.- **Manual screen-reader testing has not been run.** The NVDA and VoiceOver
+  implementation is kept alongside the marker for the eventual rewrite.
+- **Manual screen-reader testing has not been run.** The NVDA and VoiceOver
   protocol in [`Docs/ACCESSIBILITY-TESTING.md`](./Docs/ACCESSIBILITY-TESTING.md)
   is written and ready, but it has not been executed. Automated conformance is
   not a substitute, so no screen-reader conformance claim is made here.

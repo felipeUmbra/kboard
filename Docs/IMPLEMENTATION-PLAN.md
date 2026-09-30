@@ -195,6 +195,48 @@ solved:
   at server and compositor contention in CI, not at a product defect, so it is
   tracked rather than made to pass artificially.
 
+**4.5b — the cross-browser job was failing for a non-product reason.** A CI
+report showed **90 of 94 tests failing** (45 Firefox, 45 WebKit). Every one
+carried the same error:
+
+```
+browserType.launch: Executable doesn't exist at
+  /home/runner/.cache/ms-playwright/firefox-1538/firefox/firefox
+```
+
+Not a single test had run. The cause was in the workflow, not the suite: all
+three Playwright browser caches across `playwright.yml` and `deploy.yml` used
+**one key** derived only from `package-lock.json`.
+
+```yaml
+key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+```
+
+Whichever job saved first populated the cache with *its* browser set. Every
+other job then saw `cache-hit=true`, **skipped `playwright install`**, and
+tried to launch a browser it had never downloaded. The Chromium job saved a
+Chromium-only cache; the cross-browser job restored it and looked for Firefox.
+
+The `if: cache-hit != 'true'` guard is what turns a stale cache into a
+permanent failure — it disables the one step that would have repaired it.
+
+**Fixed** two ways, because either alone is incomplete:
+
+1. The browser set is now part of the cache key
+   (`-playwright-chromium-` vs `-playwright-ff-wk-`), so a cache hit can only
+   ever satisfy a job that wants the same browsers.
+2. `npx playwright install` is now **unconditional**. It is a no-op when the
+   browsers are already present, and it self-heals a cache that is truncated,
+   partially restored, or from a different Playwright version — none of which a
+   cache-hit guard can do.
+
+The failure was invisible to the test suite by construction: the cause was CI
+wiring, so no test could have caught it. `scripts/check-workflows.py` now parses
+the workflows and fails the build if a browser install is ever re-guarded by a
+cache-hit condition or if the cache keys lose their browser scope. It runs in
+the new `ci-wiring` job. Verified against the pre-fix file: it flags both
+original conditional installs.
+
 **4.6 — raised from a floor to a 100% gate.** The original thresholds
 (lines 50, branches 70, functions 60) were a deliberate floor chosen to sit
 just under measured values while `src/state/*actions.ts` had no unit coverage

@@ -36,16 +36,18 @@ jobs:
         run: npm ci --no-audit --no-fund
 
       - name: Cache Playwright browsers
-        id: playwright-cache
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+          # Chromium-only and distinct from the firefox/webkit key in
+          # playwright.yml. A shared key let one job's browser set satisfy
+          # another's cache-hit, skipping the install and failing at launch.
+          key: ${{ runner.os }}-playwright-chromium-${{ hashFiles('package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-playwright-
+            ${{ runner.os }}-playwright-chromium-
 
       - name: Install Playwright browsers
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        # Unconditional on purpose — see playwright.yml for the rationale.
         run: npx playwright install --with-deps chromium
 
       - name: Build the app

@@ -61,6 +61,31 @@ jobs:
 
       - run: npm run test:unit
 
+  # Guards the CI wiring itself. The cross-browser job failed 90/94 tests in
+  # CI because all three Playwright browser caches shared one key derived only
+  # from package-lock.json, so the first job to save populated the cache and
+  # the others saw cache-hit=true, skipped `playwright install`, and failed at
+  # browser launch with "Executable doesn't exist". The failure looked like a
+  # product regression in the report, and nothing in the suite could catch it
+  # because the cause was in the workflow, not the tests.
+  #
+  # This parses the workflows and fails if a browser install is ever guarded by
+  # a cache-hit condition again, or if the cache keys lose their browser scope.
+  ci-wiring:
+    name: CI wiring
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install pyyaml
+
+      - name: Check Playwright browser cache keys
+        run: python scripts/check-workflows.py
+
   # Sprint 4.6 — coverage gate. Kept in its own job rather than folded into
   # the a11y gates above so a coverage drop is reported as a coverage
   # failure and does not read as an accessibility regression. The thresholds
@@ -116,16 +141,27 @@ jobs:
       - run: npm ci --no-audit --no-fund
 
       - name: Cache Playwright browsers
-        id: playwright-cache
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+          # The browser set is part of the key on purpose. All three cache
+          # blocks used to share one key derived only from package-lock.json,
+          # so whichever job saved first won and every other job saw
+          # cache-hit=true, skipped the install step, and then tried to launch
+          # a browser it did not have:
+          #   "Executable doesn't exist at .../firefox-1538/firefox/firefox"
+          # That is what failed all 90 cross-browser tests. A cache hit now
+          # only skips the install when the cached entry holds the same
+          # browsers this job asked for.
+          key: ${{ runner.os }}-playwright-ff-wk-${{ hashFiles('package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-playwright-
+            ${{ runner.os }}-playwright-ff-wk-
 
       - name: Install Firefox and WebKit
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        # Not conditional on the cache. `npx playwright install` is a no-op
+        # when the browsers are already present, and it self-heals a cache
+        # that was saved truncated or from a different Playwright version —
+        # which a cache-hit guard cannot do.
         run: npx playwright install --with-deps firefox webkit
 
       - name: Build the app
@@ -162,16 +198,19 @@ jobs:
         run: npm ci --no-audit --no-fund
 
       - name: Cache Playwright browsers
-        id: playwright-cache
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+          # Chromium-only, deliberately distinct from the firefox/webkit key
+          # above. See that comment for why the browser set belongs in the key.
+          key: ${{ runner.os }}-playwright-chromium-${{ hashFiles('package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-playwright-
+            ${{ runner.os }}-playwright-chromium-
 
       - name: Install Playwright browsers
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        # Unconditional: installing an already-present browser is a no-op, and
+        # it repairs a cache restored from a partial or older entry. A
+        # cache-hit guard would leave a stale cache permanently unusable.
         run: npx playwright install --with-deps chromium
 
       - name: Build the app
