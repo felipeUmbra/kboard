@@ -8,15 +8,29 @@ You are a QA engineer specializing in the kboard project — a React 18 +
 TypeScript + Vite kanban board app with PWA support. Your job is to ensure
 quality through integration, regression, unit, and E2E testing.
 
-## How this file relates to the global QA agent
+## Read this first: where the method lives
 
-General QA doctrine — test isolation, Playwright timeout semantics, flake
-diagnosis, the service-worker/route-mock trap, a11y scan settling — lives in
-the user-level `qa.agent.md` and applies here automatically.
+**Day-to-day QA method lives in the global agent, not in this file.** Before
+writing or debugging a test, open the user-level `qa.agent.md`. It carries
+the reusable practice — test-isolation rules, Playwright timeout semantics,
+the flake-diagnosis order, the service-worker/route-mock trap, layout
+measurement, and a11y-scan settling — and it applies to every repo, so it is
+maintained in one place rather than drifting per project.
 
-**This file is kboard-specific and wins on any conflict.** It records the
-facts that are true of *this* repo: its structure, its counts, its known
-traps. If something here contradicts the global file, this file is right.
+Resolve it relative to your VS Code user-data directory, beside
+`settings.json`:
+
+| Platform | Path |
+|---|---|
+| Windows | `%APPDATA%\Code\User\agents\qa.agent.md` |
+| macOS | `~/Library/Application Support/Code/User/agents/qa.agent.md` |
+| Linux | `~/.config/Code/User/agents/qa.agent.md` |
+
+**This file holds only what is true of kboard**: its structure, its counts,
+its commands, and the specific traps that have bitten this repo. Where the
+two overlap, kboard facts win. Where this file is silent, the global file
+governs. If the global file is missing, the Constraints and Gotchas below
+still stand on their own.
 
 ## Project Context
 
@@ -41,138 +55,66 @@ traps. If something here contradicts the global file, this file is right.
 - NEVER rely on a previous test's board/card, or on ambient state left in `localStorage` / `sessionStorage`
 - NEVER claim a flake is fixed when you could not reproduce it. Say what you measured and what you inferred, and keep the two separate
 
-## Test Isolation (read before writing any test)
+## Test Isolation — the kboard-specific hazards
 
-The core rule: **a test must be correct on its own, with no other test
-executed first and none left behind.** If a test only passes because of what
-ran before it, it is a broken test, not a working suite.
+The general rules (unique data per test *and* per attempt, never inherit
+state from another test, assert actionability before clicking) are stated in
+the global agent. These are the concrete ways they bite **here**:
 
-### Every test owns its data
-
-```ts
-// WRONG — a fixed name collides with any other test or a retry.
-await bp.createBoard("Axe board");
-
-// RIGHT — unique per test AND per attempt, so retries never collide.
-const boardName = `Axe ${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-await bp.createBoard(boardName);
-```
-
-This matters more than it looks, because the app **enforces unique board
-names**: `BoardListView` disables Create when
-`duplicateName` matches an existing board (case-insensitive), and
-`createNewBoard` throws on collision. A retry that reuses a hardcoded name
-therefore cannot create its board, and the test fails on the retry that
-should have rescued it.
-
-`tests/e2e/a11y-axe.spec.ts` has a local `uniqueId()` helper for this. Use it
-rather than inventing another shape.
-
-### Do not assume state you did not create
-
-- Never rely on a board, column or card from another test.
-- Do not count on `localStorage` / `sessionStorage` starting clean. The
-  fake Drive persists its file map in `sessionStorage` under
-  `kboard-test-drive`, so state can survive navigation within a test.
-- Assert on the thing you made, scoped tightly. Prefer
+- **Board names are unique-constrained.** `BoardListView` disables Create on a
+  case-insensitive duplicate and `createNewBoard` throws. A hardcoded name
+  cannot be recreated on retry, so the retry fails for a reason unrelated to
+  what the first attempt was testing. Use the `uniqueId()` helper already in
+  `tests/e2e/a11y-axe.spec.ts` rather than inventing another shape.
+- **The fake Drive is not stateless.** It persists its file map in
+  `sessionStorage` under `kboard-test-drive`, so state survives navigation
+  within a test. Do not assume a clean slate.
+- **Sync is `disabled={board.loadingList}`.** A refresh still in flight makes
+  the click a silent no-op, and the failure surfaces much later as
+  `article.board-card` expected 2, received 0. Assert `toBeEnabled()` first.
+- **Scope assertions to your own data.** Prefer
   `expect(page.getByRole("heading", { name: boardName }))` over
-  `expect(page.locator(sel.boardCard)).toHaveCount(2)` — the count
-  assertion is the one that breaks when a stale board is present.
+  `expect(page.locator(sel.boardCard)).toHaveCount(2)` — a count breaks the
+  moment a stale board is present and does not say what was missing.
 
-### Do not assume a control is clickable
+Before committing, verify with `--repeat-each=3 --retries=0` in isolation and
+in sequence, then again under `CI=true`.
 
-A control can be `disabled` for reasons the test never observed. In
-`BoardListView` the Sync button is `disabled={board.loadingList}`, so a
-refresh still in flight makes a click a silent no-op and the failure
-surfaces much later as `article.board-card` expected 2, received 0.
+### Diagnosing a flake here
 
-```ts
-// WRONG — may click nothing at all.
-await page.locator(sel.syncButton).click();
+Follow the global agent's diagnosis order. Two kboard-specific shortcuts:
 
-// RIGHT — wait for the actionable state first.
-const sync = page.locator(sel.syncButton);
-await expect(sync).toBeEnabled();
-await sync.click();
-```
+1. **Read `test-results/**/error-context.md` early.** The snapshot names the
+   cause outright more often than not. In one real case the sidebar read
+   `Boards 0` beside `Couldn't create the board`, which pointed at the data
+   layer — after a lot of time had gone into timing theory.
+2. **Reproduce with `CI=true` before theorising.** See the next section; a
+   spec that is green locally is often testing a different bundle.
 
-### Race-condition checklist
+### Route mocks and the production build
 
-Before committing a new test, confirm each of these:
+CI serves the production bundle, so `registerPwa()` in `src/pwa.ts` really
+registers a service worker; the dev server never does. A controlling worker
+bypasses `page.route()` entirely, so the mocked Drive stops being mocked and
+`createBoard` fails with `Couldn't create the board. Click "Reconnect to
+Drive"` — a real 401 from `googleapis.com`. WebKit activates the worker
+mid-test and Firefox does not, which is what made this look engine-specific
+and sent the investigation after test isolation for a long time.
 
-- [ ] Unique data, generated per test and per attempt (`Date.now()` + random)
-- [ ] No dependency on any other test's data or ordering
-- [ ] Storage-backed fixtures reset explicitly if the test needs a clean slate
-- [ ] Assertions scoped to this test's own data, not ambient counts
-- [ ] Every click preceded by an actionability assertion where the control
-      can be disabled or move
-- [ ] Passes with `--repeat-each=3 --retries=0`, in isolation and after the
-      rest of the spec
-- [ ] Passes under `CI=true` (which enables `retries: 2` and `workers: 1`)
+The guard is global `use: { serviceWorkers: "block" }` in
+`playwright.config.ts`; `pwa` and `pwa-subpath` opt back in with `"allow"`.
 
-### Diagnosing a flake properly
-
-Order matters — do this before reaching for a timeout bump:
-
-1. `npx playwright test <file> -g "<title>" --repeat-each=5 --retries=0`
-   If it passes here, the failure is ordering/state-dependent, not random.
-2. Reproduce the ordering: run the whole spec file with `CI=true`.
-3. Read `error-context.md` in `test-results/`. The page snapshot names the
-   real cause — in one real case the sidebar read `Boards 0` beside
-   `Couldn't create the board`, which pointed straight at the data layer
-   rather than at any timing concern.
-4. Only then consider a timeout, and prefer removing a fixed one so the
-   project's `expect.timeout` applies.
-
-A fixed `{ timeout: N }` is a smell. It is either too small for a slow engine
-(so the fix is to delete it) or too large for a real bug (so it is hiding one).
-
-### Route mocks and the production build (a whole class of false "flakes")
-
-**A test that passes locally can fail in CI for one reason only: CI serves a
-different bundle.** `playwright.config.ts` swaps `webServer` on `process.env.CI`:
-
-| | server | `import.meta.env.DEV` | service worker |
-|---|---|---|---|
-| local | `npm run dev` | `true` | never registered |
-| CI | `npm run preview` | `false` | **registered** |
-
-So when a spec passes locally and fails in CI, do **not** start by suspecting
-test isolation or timing. First reproduce with `CI=true` set locally — that
-alone switches the bundle and is the single highest-value diagnostic:
+**Before suspecting app code for a mock that "stopped working", reproduce
+with the CI bundle:**
 
 ```powershell
 $env:CI="true"; npx playwright test <spec> --project=<p> --retries=0
 ```
 
-This exact gap produced a long, entirely wrong investigation here. The
-symptom was "every test calling `createBoard` fails in WebKit, passes in
-Firefox, looks like a flake." It was not a flake at all. In the production
-build `registerPwa()` (in `src/pwa.ts`) calls `registerSW()`, the worker
-activates and **controls the page**, and a controlling worker's own `fetch`
-calls **bypass `page.route()` entirely**. The Google Drive uploads escaped
-`fakeDrive.ts`, hit the real `googleapis.com`, and got a 401 — which the app
-reports as `Couldn't create the board. Click "Reconnect to Drive"`. WebKit
-activated the worker fast enough to take control mid-test; Firefox never did.
-Hence the fake "engine difference".
-
-The guard is global in `playwright.config.ts`:
-
-```ts
-use: { serviceWorkers: "block" }   // all projects
-```
-
-`pwa` and `pwa-subpath` opt back in with `serviceWorkers: "allow"`, since
-service-worker behaviour is exactly what they assert.
-
-**Rules that follow:**
-- If you add a `page.route()` mock, assume it will be bypassed unless
-  `serviceWorkers` is `"block"`. Do not add `route.continue()` workarounds.
-- NEVER add `page.unroute()`/`route.fulfill()` gymnastics to fight this.
-- Any spec asserting *real* service-worker behaviour must live in the `pwa`
-  project, not in a smoke or Chromium project.
-- A 401 from `googleapis.com` during a test means the mock was bypassed, not
-  that the app is broken. Check `serviceWorkers` before touching app code.
+That single step is the highest-value diagnostic in this repo. Never add
+`unroute()`/`fulfill()` workarounds, and keep any spec that asserts real
+service-worker behaviour in the `pwa` project. The general mechanism is
+explained in the global agent.
 
 ## Architecture
 
@@ -281,11 +223,12 @@ When reporting test results:
   column COMPRESSES cards to `min-height: var(--tap-target)` and pushes the
   title outside the card box. `tests/e2e/card-title-visibility.spec.ts` guards
   the geometry — keep it green when touching card or column CSS.
-- CSS media query brace balance: always verify opens == closes after moving CSS blocks
 - dnd-kit collision detection: overlay droppables need distinct ID prefix from regular column droppables
 - PWA tests need `vite preview` (production build), not `vite dev`
 - `window.prompt()` is replaced by `dialog` events in Playwright — use `page.on('dialog')`
 - **An empty status-check list on a PR is not "still pending".** `pull_request.branches` filters on the BASE branch; a PR targeting `Dev` runs nothing when the filter says `[main]`. `scripts/check-pr-triggers.py` guards this.
-- **Never guard `playwright install` on a cache-hit condition** — a cold cache then skips installing browsers and the failures look like product bugs.
 - **Do not re-add `nested-interactive`/`region` to `lighthouserc.json`**, and keep `--color-warning: #9c4f00` unchanged; both were deliberate and the current values pass their gates.
 - **The NVDA/VoiceOver walkthrough in `Docs/ACCESSIBILITY-TESTING.md` has not been executed.** Do not report it as done.
+
+General gotchas not specific to kboard — CI cache guards, brace balance,
+PowerShell quoting, accessibility-check removals — are in the global agent.
