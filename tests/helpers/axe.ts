@@ -137,7 +137,38 @@ export async function expectNoAxeViolations(page: Page, opts: AxeOptions = {}) {
     // The app has no in-app theme toggle; dark mode is driven purely by the
     // OS setting (`@media (prefers-color-scheme: dark)` in tokens.css), so
     // emulating the media feature is the only way to scan the dark palette.
+    //
+    // CRITICAL: the page is already loaded here, so switching the media
+    // feature repaints every themed surface THROUGH its CSS transition --
+    // `.kanban-column` carries `transition: background var(--motion-fast)`
+    // (120ms). Scanning during that repaint measures a colour part-way
+    // between the light and dark palettes rather than either real palette.
+    //
+    // That is not hypothetical. CI run 36717935031 reported the column at
+    // #2f363d and #373e45 -- both are exact points on the #ebecf0 -> #2c333a
+    // interpolation (t=0.985 and t=0.940) -- and axe declared a WCAG 1.4.3
+    // failure on a palette that is compliant once settled. The race only
+    // bites when the scan starts inside the 120ms window, which is why it
+    // reproduced on a loaded CI runner and not on an idle local one.
+    //
+    // `prefers-reduced-motion` would only mask this rather than fix it, so
+    // instead poll until the computed background stops changing.
     await page.emulateMedia({ colorScheme });
+    await page.waitForFunction(
+      () =>
+        new Promise<boolean>((resolve) => {
+          const el = document.querySelector(".kanban-column");
+          if (!el) return resolve(true);
+          const seen = getComputedStyle(el).backgroundColor;
+          // 200ms is longer than --motion-fast (120ms), so a single settled
+          // read means the transition is done.
+          setTimeout(() => {
+            resolve(getComputedStyle(el).backgroundColor === seen);
+          }, 200);
+        }),
+      undefined,
+      { timeout: 5_000 },
+    );
   }
 
   const builder = new AxeBuilder({ page }).withTags([...AXE_TAGS]);

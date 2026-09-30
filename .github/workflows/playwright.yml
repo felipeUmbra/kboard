@@ -119,12 +119,27 @@ jobs:
   # deliberately small spec set (see CROSS_BROWSER_SPECS in
   # playwright.config.ts) rather than the full matrix.
   #
-  # ADVISORY, NOT A MERGE GATE, while this is `continue-on-error`. WebKit's
-  # headless compositor crashes under sustained load on the shared CI runner
-  # and takes unrelated tests down with it. The whole WebKit set passes
-  # serially, so the failures are environmental rather than product
-  # defects — but an unreliable signal should report, not block. Remove this
-  # line once the WebKit job runs green repeatedly.
+  # ADVISORY, NOT A MERGE GATE, while this is `continue-on-error`.
+  #
+  # This is NO LONGER because of a WebKit defect. There never was one. The
+  # reason is resource contention, and it is now understood precisely:
+  #
+  #  - CI already runs this job SERIALLY. playwright.config.ts sets
+  #    `workers: process.env.CI ? 1 : undefined`, `CI` is always set on a
+  #    GitHub runner, and this job passes no `--workers` flag. So the
+  #    "WebKit crashes in parallel" note below describes a configuration CI
+  #    does not use.
+  #  - Reproduced deliberately: `--workers=6 --retries=0` across both engines
+  #    gives 3 failures with the signature
+  #    `RenderCompositorSWGL failed mapping default framebuffer` plus
+  #    `browserContext.close: Test timeout exceeded`. All three are
+  #    resource starvation on a loaded machine, not product defects.
+  #  - The same suite passes 94/94 at `--workers=1`, which is what CI does.
+  #
+  # The gate stays advisory only so a future runner-level WebKit regression
+  # reports instead of blocking. The evidence for that is now thin rather
+  # than strong, so this should be re-evaluated on the next few green runs
+  # rather than treated as a permanent exemption.
   crossbrowser:
     name: Cross-browser smoke (Firefox + WebKit)
     runs-on: ubuntu-latest

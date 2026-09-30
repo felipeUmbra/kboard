@@ -189,10 +189,19 @@ solved:
   tighter bound.
 - WebKit's headless compositor crashes (`RenderCompositorSWGL failed mapping
   default framebuffer`) when run alongside Firefox on the shared CI runner.
-  **Not yet fixed.** Until it is, the cross-browser job is advisory rather than
-  a merge gate. The evidence points at server and compositor contention in CI,
-  not at a product defect, so it is tracked rather than made to pass
-  artificially.
+  **Reproduced and now correctly attributed.** The signature was re-created
+  exactly with `--workers=6 --retries=0` across both engines: 3 failures, 4
+  compositor errors, all of them resource starvation (two Firefox tests hit
+  `browserContext.close: Test timeout exceeded`; one WebKit poll timed out).
+  There is no product defect here.
+
+  What this note previously got wrong, and has been corrected: it described
+  the failure as something that happens "in parallel", but **CI already runs
+  this job serially.** `playwright.config.ts` sets
+  `workers: process.env.CI ? 1 : undefined`, `CI` is always set on a GitHub
+  runner, and the job passes no `--workers` flag. Parallelism only appears if
+  someone passes it locally. See the corrected comment in
+  `.github/workflows/playwright.yml` and §4.5c.
 
   Note this was, for a long time, *believed* to be a WebKit instability. It
   was not the whole story — see 4.5b below, where the same job was found to
@@ -247,6 +256,39 @@ were never broken; they had simply never launched a browser in CI. The
 advisory status remains (see the WebKit compositor note above), but the job now
 produces a real signal instead of 90 launch failures.
 
+**4.5c — run 36717935031: two defects, one of them not where it looked.**
+With the browsers actually launching, the cross-browser job reported **28
+failed / 65 passed**. Both causes turned out to be *in the tests*, not the
+product — with one partial exception that is worth reading.
+
+*The contrast "failure" was a measurement race, not a palette defect.* axe
+reported the column background as #2f363d and #373e45. Neither hex exists in
+the source. Both are exact points on the `#ebecf0 → #2c333a` interpolation
+(t=0.985 and t=0.940) — i.e. the page was **mid-transition** when it was
+scanned. `expectNoAxeViolations` calls `page.emulateMedia({ colorScheme })`
+on an *already-loaded* page, and `.kanban-column` carries
+`transition: background var(--motion-fast)` (120ms), so switching the media
+feature repaints every themed surface through its transition. A scan landing
+inside that 120ms window measures a colour belonging to neither palette.
+
+The original `--color-text-muted: #8c9bab` was **not** the culprit, but it
+was a real latent risk: it measured 4.5024:1 on `#2c333a`, clearing the bar by
+0.0024, so any compositing would drop it under 4.5:1. It is now `#9dabba`
+(4.63:1 worst case) and `#2c333a` is in both audit lists, so the token has
+genuine headroom rather than passing by a rounding artefact. The helper now
+waits for the transition to settle before scanning; verified 24/24 axe tests
+green across Chromium, Firefox and WebKit. `.planner-day` has the same
+transition and the same exposure.
+
+*A harness defect, not a product one.* The other 27 failures all died on one
+line: `boardPage.createBoard()` hardcoded `{ timeout: 5_000 }`. A per-call
+timeout **overrides** the project setting, so it silently cancelled the 15s
+that firefox-smoke and webkit-smoke deliberately grant; WebKit board specs took
+~24s each on the loaded runner. All 15 literals in the page object were removed
+so each helper inherits its project's budget. Recorded in the NOTE ON WAIT
+TIMEOUTS comment in `tests/helpers/boardPage.ts`: a per-call timeout in a
+shared page object defeats project-level timeout configuration.
+
 **4.5d — fixing 4.5c made the job exceed its own timeout.** Run 36725258569
 reported the cross-browser job **cancelled at 25m22s** — `timeout-minutes: 25`
 exactly. Not a test failure and not a regression: it is the direct consequence
@@ -273,31 +315,6 @@ The general trap, worth keeping: **a timeout budget that has been observed to
 "fit" is only meaningful if the job was doing its full work while it fit.**
 This one fit comfortably against a run that was quietly skipping 28 tests, so
 it was calibrated to a lie.
-
-**4.5c — run 36717935031: two defects the local runs could not see.** With the
-browsers actually launching, the cross-browser job reported **28 failed / 65
-passed**, which is what a real regression looks like. Neither failure was one.
-
-*A genuine WCAG 1.4.3 bug.* `a11y-contrast.test.ts` audited dark foregrounds
-against `--color-surface` (#22272b) and `--color-bg` (#1d2125) but **omitted
-`--color-bg-elevated` (#2c333a)** — the `.kanban-column` surface, and the
-*lightest* background in the dark theme, so the binding constraint for muted
-text. `--color-text-muted: #8c9bab` measured **4.5024:1** there: passing by
-0.0024. axe-core found the column composited to #2f363d and #373e45 and
-measured **4.3:1** and **3.81:1** on `.kanban-column__count` and
-`.kanban-column__add-btn`. Fixed by lifting the token to `#9dabba` (4.63:1
-worst case) and adding #2c333a to both audit lists. The lesson: a contrast
-gate is only as good as the set of backgrounds it is asserted against, and a
-value clearing the bar by 0.0024 is a latent failure, not a pass.
-
-*A harness defect, not a product one.* The other 27 failures all died on one
-line: `boardPage.createBoard()` hardcoded `{ timeout: 5_000 }`. A per-call
-timeout **overrides** the project setting, so it silently cancelled the 15s that
-firefox-smoke and webkit-smoke deliberately grant; WebKit board specs took ~24s
-each on the loaded runner. All 15 literals in the page object were removed so
-each helper inherits its project's budget. Lesson recorded in the NOTE ON WAIT
-TIMEOUTS comment in `tests/helpers/boardPage.ts`: a per-call timeout in a shared
-page object defeats project-level timeout configuration.
 
 **4.6 — raised from a floor to a 100% gate.** The original thresholds
 (lines 50, branches 70, functions 60) were a deliberate floor chosen to sit
