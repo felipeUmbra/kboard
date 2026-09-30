@@ -26,6 +26,18 @@ import {
  * responsive-a11y.spec.ts, which run in every project.
  */
 
+/**
+ * A per-test, per-attempt unique suffix.
+ *
+ * Board names are unique-constrained in the app: `BoardListView` disables
+ * Create on a case-insensitive duplicate and `createNewBoard` throws. So a
+ * hardcoded name makes a RETRY fail for a reason unrelated to what the first
+ * attempt was testing. Each call is evaluated once per test run, giving every
+ * attempt its own namespace.
+ */
+const uniqueId = (): string =>
+  `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
 test.describe("axe-core (Sprint 4.1)", () => {
   test("login screen has no violations", async ({ page }) => {
     await page.goto("/");
@@ -48,12 +60,34 @@ test.describe("axe-core (Sprint 4.1)", () => {
     // seeds from its local cache rather than Drive, so a freshly created
     // board does not appear in the list until Sync is pressed. See the
     // "Open existing board from list" test in boards.spec.ts.
-    await bp.createBoard("Axe board A");
+    //
+    // Names are unique per attempt on purpose. The app refuses duplicate
+    // board names (BoardListView disables Create, createNewBoard throws), so
+    // a fixed name would make the RETRY fail for a reason unrelated to
+    // whatever the first attempt was actually testing.
+    const uid = uniqueId();
+    const boardA = `Axe A ${uid}`;
+    const boardB = `Axe B ${uid}`;
+    await bp.createBoard(boardA);
     await bp.gotoBoards();
-    await bp.createBoard("Axe board B");
+    await bp.createBoard(boardB);
     await bp.gotoBoards();
-    await page.locator(sel.syncButton).click();
-    await expect(page.locator(sel.boardCard)).toHaveCount(2, { timeout: 10_000 });
+    // The Sync button is `disabled={board.loadingList}`, and gotoBoards() has
+    // only just re-entered the list, so a refresh can still be in flight.
+    // Clicking a disabled button is a silent no-op, which leaves the test
+    // waiting on a list that will never repopulate. Assert the actionable
+    // state before clicking.
+    const sync = page.locator(sel.syncButton);
+    await expect(sync).toBeEnabled();
+    await sync.click();
+    // Assert on THIS test's two boards rather than a bare count. A count
+    // assertion is the one that breaks the moment any other board is
+    // present — including one left by a previous attempt — and it reports
+    // "expected 2, received 0" without saying what was actually missing.
+    // No explicit `{ timeout }`: omitting it lets the assertion use the
+    // project's `expect.timeout` (15s on the smoke projects, 5s on Chromium).
+    await expect(page.locator(sel.boardCard).filter({ hasText: boardA })).toHaveCount(1);
+    await expect(page.locator(sel.boardCard).filter({ hasText: boardB })).toHaveCount(1);
 
     const results = await expectNoAxeViolations(page, { label: "boards list" });
     test.info().annotations.push({ type: "axe", description: summariseAxeResults(results) });
@@ -63,7 +97,7 @@ test.describe("axe-core (Sprint 4.1)", () => {
     await installFakesOnPage(page);
     const bp = new BoardPage(page);
     await bp.login();
-    await bp.createBoard("Axe board view");
+    await bp.createBoard(`Axe board view ${uniqueId()}`);
     await bp.addColumn("To Do");
     await bp.addColumn("Done");
     await bp.addCard("To Do", "Axe card one");
@@ -85,7 +119,7 @@ test.describe("axe-core (Sprint 4.1)", () => {
     await installFakesOnPage(page);
     const bp = new BoardPage(page);
     await bp.login();
-    await bp.createBoard("Axe modal board");
+    await bp.createBoard(`Axe modal board ${uniqueId()}`);
     await bp.addColumn("To Do");
     await bp.addCard("To Do", "Axe modal card");
     await bp.openCard("Axe modal card");
@@ -104,7 +138,7 @@ test.describe("axe-core (Sprint 4.1)", () => {
     await installFakesOnPage(page);
     const bp = new BoardPage(page);
     await bp.login();
-    await bp.createBoard("Axe planner board");
+    await bp.createBoard(`Axe planner board ${uniqueId()}`);
     await bp.addColumn("To Do");
     await bp.addCard("To Do", "Axe planned card");
     const plannerToggle = page.getByTestId("topbar-planner");
@@ -120,7 +154,7 @@ test.describe("axe-core (Sprint 4.1)", () => {
     await installFakesOnPage(page);
     const bp = new BoardPage(page);
     await bp.login();
-    await bp.createBoard("Axe dark board");
+    await bp.createBoard(`Axe dark board ${uniqueId()}`);
     await bp.addColumn("To Do");
     await bp.addCard("To Do", "Axe dark card");
 

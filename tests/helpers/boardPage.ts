@@ -4,18 +4,26 @@ import { sel } from "./selectors";
 
 // NOTE ON WAIT TIMEOUTS
 // ----------------------
-// These helpers deliberately pass NO `{ timeout }` option. Playwright's
-// `waitForSelector` and `waitFor` already inherit the running project's
-// `expect.timeout` — 5s on the Chromium projects, 15s on firefox-smoke and
-// webkit-smoke — and a per-call `{ timeout: 5_000 }` OVERRIDES that, which
-// silently cancelled out the 15s the cross-browser projects had granted.
+// These helpers use `expect(locator).toBeVisible()` rather than
+// `page.waitForSelector()`. The distinction matters and an earlier version of
+// this file got it backwards:
 //
-// That hardcoded 5s was the cause of CI run 36717935031, where 27 of 28
-// cross-browser failures died on the same wall at boardPage.ts:99
-// ("waiting for h1[title=\"Click to rename\"]") while the WebKit board specs
-// took ~24s each on a loaded runner. Omitting the option makes each helper
-// follow whichever budget its project configured: tight where the engine is
-// fast, roomy where it is not. Do not reintroduce a literal here.
+//   - `expect(...).toBeVisible()` honours the project's `expect.timeout`
+//     (5s on the Chromium projects, 15s on firefox-smoke / webkit-smoke).
+//     That is the budget we WANT: it scales with the engine.
+//   - `page.waitForSelector(sel)` with NO option is effectively UNBOUNDED.
+//     Playwright's `actionTimeout` default is 0, so the call only stops when
+//     the whole test times out. CI run 36732681213 hit exactly that:
+//     `waitForSelector(sel.boardTitle)` hung for the full 90s test timeout on
+//     three WebKit axe tests, three attempts each (retries: 2), and the job
+//     was killed at its 40m ceiling.
+//   - `page.waitForSelector(sel, { timeout: 5_000 })` is bounded but FIXED,
+//     which is what caused run 36717935031: 27 of 28 cross-browser failures
+//     died on that 5s wall while WebKit board specs needed ~24s each.
+//
+// So: never reintroduce a literal timeout here, and do not go back to bare
+// `waitForSelector` either. `expect(...).toBeVisible()` is the only form that
+// is both bounded AND project-aware.
 
 /**
  * High-level page object for kboard. Specs call these instead of raw
@@ -24,11 +32,26 @@ import { sel } from "./selectors";
 export class BoardPage {
   constructor(public readonly page: Page) {}
 
+  /**
+   * Wait for a selector to become visible, bounded by the project's
+   * `expect.timeout` and retrying like an assertion.
+   *
+   * Prefer this over `page.waitForSelector()`: that call is UNBOUNDED by
+   * default (Playwright's `actionTimeout` default is 0) and therefore hangs
+   * until the whole test times out, which is how three WebKit axe tests
+   * burned 90s each in run 36732681213.
+   */
+  private async visible(selector: string): Promise<Locator> {
+    const locator = this.page.locator(selector).first();
+    await expect(locator).toBeVisible();
+    return locator;
+  }
+
   // ── Auth ──────────────────────────────────────────────────────────
   async login() {
     await this.page.goto("/");
     await loginAs(this.page);
-    await this.page.waitForSelector(sel.boardCard + "," + sel.emptyState, { timeout: 10_000 });
+    await this.visible(sel.boardCard + "," + sel.emptyState);
   }
 
   async logout() {
@@ -42,7 +65,7 @@ export class BoardPage {
       });
       await this.page.reload();
     }
-    await this.page.waitForSelector(sel.loginButton);
+    await this.visible(sel.loginButton);
   }
 
   // ── Boards list ───────────────────────────────────────────────────
@@ -53,7 +76,7 @@ export class BoardPage {
     } else {
       await this.page.goto("/");
     }
-    await this.page.waitForSelector(sel.boardCard + "," + sel.emptyState);
+    await this.visible(sel.boardCard + "," + sel.emptyState);
   }
 
   /**
@@ -102,7 +125,7 @@ export class BoardPage {
     await this.gotoBoards();
     const btn = this.page.locator(sel.newBoardButton).or(this.page.locator(sel.emptyStateCreate));
     await btn.first().click();
-    await this.page.waitForSelector(sel.createBoardModal);
+    await this.visible(sel.createBoardModal);
     // The bottom-sheet modal animates in (`sheet-up` keyframe, 200ms) on
     // mobile. Wait for it to settle before interacting so the input and
     // footer buttons are at their final positions.
@@ -111,7 +134,24 @@ export class BoardPage {
     await this.clickButtonFallback(
       this.page.getByRole("button", { name: /^Create$/ }),
     );
-    await this.page.waitForSelector(sel.boardTitle);
+    // The click helper can "succeed" at the protocol level while the app
+    // rejects the save — the page snapshot in run 36732681213 showed the
+    // boards list still at "Boards 0" with a `Couldn't create the board`
+    // error, i.e. the modal had closed but nothing had been persisted. A
+    // bare `waitForSelector` then spun until the test timed out. Assert on
+    // the outcome so that state fails fast with a useful message.
+    const title = this.page.locator(sel.boardTitle).first();
+    await expect
+      .poll(
+        async () => {
+          if (await title.isVisible().catch(() => false)) return "board-open";
+          const err = this.page.locator('[role="alert"]');
+          if (await err.count()) return "error: " + (await err.first().innerText());
+          return "waiting";
+        },
+        { message: "board was not created and no error surfaced" },
+      )
+      .not.toBe("waiting");
   }
 
   async openBoard(name: string) {
@@ -123,7 +163,7 @@ export class BoardPage {
     // the navigation handler since the Sprint 4.1 axe-core fixes removed
     // the <article role="button">.
     await card.locator(sel.boardCardLink).click();
-    await this.page.waitForSelector(sel.boardTitle);
+    await this.visible(sel.boardTitle);
   }
 
   async deleteBoardFromList(name: string) {
@@ -156,7 +196,7 @@ export class BoardPage {
       else d.accept();
     });
     await this.page.click(sel.addColumnButton);
-    await this.page.waitForSelector(`.kanban-column:has-text("${name}")`);
+    await this.visible(`.kanban-column:has-text("${name}")`);
   }
 
   async getColumn(name: string): Promise<Locator> {
@@ -296,17 +336,17 @@ export class BoardPage {
     }
     // The draft input is a TEXTAREA with className="textarea".
     const draftInput = col.locator('textarea.textarea').last();
-    await draftInput.waitFor({ state: "visible" });
+    await expect(draftInput).toBeVisible();
     await draftInput.fill(title);
     await draftInput.press("Enter");
-    await this.page.waitForSelector(`${sel.card}:has-text("${title}")`);
+    await this.visible(`${sel.card}:has-text("${title}")`);
   }
 
   async openCard(title: string) {
     const cardLocator = this.page.locator(sel.card).filter({ hasText: title }).first();
-    await cardLocator.waitFor({ state: "visible" });
+    await expect(cardLocator).toBeVisible();
     await cardLocator.click();
-    await this.page.waitForSelector(sel.cardTitleInput);
+    await this.visible(sel.cardTitleInput);
   }
 
   async closeCardEditor() {
@@ -335,7 +375,7 @@ export class BoardPage {
     // Playwright's auto-waiting gives the React microtask queue a chance
     // to flush before the call returns.
     const input = this.page.locator(sel.cardTitleInput);
-    await input.waitFor({ state: "visible" });
+    await expect(input).toBeVisible();
     await input.fill(newTitle);
     // Sanity check: the DOM value should now reflect the new title.
     await expect(input).toHaveValue(newTitle, { timeout: 3_000 });
@@ -347,7 +387,6 @@ export class BoardPage {
     await this.page
       .getByRole("radio", { name: new RegExp(type, "i") })
       .first()
-      .waitFor({ state: "visible" });
   }
 
   /**
@@ -358,7 +397,7 @@ export class BoardPage {
    */
   async setCardColumn(columnName: string) {
     const select = this.page.locator("#card-col-select");
-    await select.waitFor({ state: "visible" });
+    await expect(select).toBeVisible();
     // The option text is "N. <name>" — match by the column name portion.
     const option = select
       .locator("option")
@@ -373,7 +412,7 @@ export class BoardPage {
   /** Read the currently-selected column name from the editor combobox. */
   async getCardColumn(): Promise<string> {
     const select = this.page.locator("#card-col-select");
-    await select.waitFor({ state: "visible" });
+    await expect(select).toBeVisible();
     const value = await select.inputValue();
     return (
       (await select

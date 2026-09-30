@@ -444,6 +444,36 @@
   min-height: 60px;
   overflow-y: auto;
   flex: 1;
+  /* This is the fix for the card-squash bug.
+     The list is a column flex container, so its children default to
+     `flex-shrink: 1`. When the column is height-constrained (which is
+     always — `.kanban-column` is `max-height: 100%` of a fixed-height
+     board area) the browser shrinks the cards to fit rather than
+     overflowing. They bottom out at `.kanban-card { min-height:
+     var(--tap-target) }` (44px), and because the card's own children
+     (type chip row, label row, title, ...) are laid out top-down, the
+     title is pushed BELOW the card's 44px box and painted over the
+     next card or clipped by `overflow-y: auto`.
+
+     Measured with 9 cards of 38-char titles in one column: every card
+     was 44px tall while its title needed 21px starting at offset 31 —
+     i.e. 52px of content in a 44px box, fully outside the visible area.
+     `scrollHeight === clientHeight` on the list, so it was compressing,
+     not scrolling — which is why the overflow was invisible.
+
+     `flex-shrink: 0` makes the cards keep their content height and the
+     list overflows and scrolls instead. The column's height is a
+     property of the layout, not of the content. */
+  min-height: 0;
+}
+
+/* The cards themselves. A separate rule (rather than a flex utility on
+   each card) so it applies to every card regardless of component. */
+.kanban-column__cards > .kanban-card {
+  flex-shrink: 0;
+  /* The title is the card's primary content. It wraps rather than
+     ellipsises, so every character up to the truncation limit stays
+     readable — see `.kanban-card__title` below. */
 }
 
 .kanban-column__cards[data-empty="true"] {
@@ -673,6 +703,22 @@
   color: var(--color-text);
   word-wrap: break-word;
   overflow-wrap: break-word;
+  /* The title is the card's primary content and must never be clipped.
+     It wraps onto as many lines as it needs and the card grows to
+     match (see the `flex-shrink: 0` on the card above). An earlier
+     `overflow: hidden` here truncated the title without any ellipsis,
+     so a long title simply vanished mid-word.
+
+     The card is a 300px column with --space-3 (0.75rem) padding each
+     side, leaving ~276px. At --text-sm (0.875rem / 14px) a ~50-char
+     title wraps to at most 3 lines in the worst case of long
+     unbreakable tokens, which is the practical ceiling the product
+     asked for. */
+  line-height: 1.35;
+  /* Belt-and-braces against any ancestor reintroducing a clamp. */
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+  display: block;
 }
 
 .kanban-card__description {
