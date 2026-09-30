@@ -376,7 +376,11 @@ test.describe("Board view (columns, cards, DnD)", () => {
     // 5) Open the board. openBoard serves the cache immediately, then
     //    kicks off reconcileBoard in the background. The remote-only
     //    card should appear once reconcile completes.
-    await page.locator(sel.boardCard).filter({ hasText: "Work Board" }).click();
+    await page
+      .locator(sel.boardCard)
+      .filter({ hasText: "Work Board" })
+      .locator(sel.boardCardLink)
+      .click();
     await expect(page.locator(sel.boardTitle)).toBeVisible();
     // Sanity: confirm the fake Drive really has the new card before we
     // wait on the UI — that isolates the failure to the reconcile path.

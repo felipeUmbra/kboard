@@ -1,4 +1,6 @@
 import { useMemo } from "react";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import type { Board, Card as CardModel, CardType } from "../models/types";
 import { LabelPill } from "./fields/LabelPill";
 import { sanitizeRichHtml } from "./fields/sanitize";
@@ -81,13 +83,41 @@ export function Card({
   // Use a <div role="button"> with tabIndex so the card is keyboard-focusable
   // and announces as a button to screen readers. A native <button> would
   // swallow pointer events that dnd-kit needs.
+  //
+  // dnd-kit's attributes and listeners are spread onto THIS element rather
+  // than a wrapper div. They were previously on a wrapper, which dnd-kit
+  // renders with its own `role="button"` — producing a button inside a
+  // button. axe-core's `nested-interactive` rule caught it (Sprint 4.1), and
+  // it was not merely theoretical: a screen reader announcing two nested
+  // buttons, and Tab reaching an extra stop per card.
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: card.id });
+
   return (
     <div
-      role="button"
-      tabIndex={0}
+      ref={setNodeRef}
       className="kanban-card"
       data-card-id={card.id}
       data-card-type={card.type}
+      {...attributes}
+      {...listeners}
+      // After the dnd spread on purpose: `attributes` also supplies
+      // role="button" and tabIndex={0}, and we want OUR explicit values to
+      // win (TS would otherwise reject the duplicate props outright).
+      role="button"
+      tabIndex={0}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.5 : 1,
+        borderLeft: `3px solid ${meta.color}`,
+      }}
       onClick={(e) => {
         // dnd-kit's PointerSensor sets defaultPrevented on the originating
         // event when a drag has started. If we just finished a drag, skip
@@ -100,9 +130,6 @@ export function Card({
           e.preventDefault();
           onOpen(card);
         }
-      }}
-      style={{
-        borderLeft: `3px solid ${meta.color}`,
       }}
     >
       <div className="kanban-card__top">

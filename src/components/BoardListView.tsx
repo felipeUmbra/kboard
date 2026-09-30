@@ -94,20 +94,37 @@ export function BoardListView({
           }}
         >
           {board.boards.map((b) => (
-            <article
-              key={b.id}
-              className="board-card"
-              onClick={() => void board.openBoard(b.id)}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  void board.openBoard(b.id);
-                }
-              }}
-            >
-              <h3 className="board-card__title">{b.name}</h3>
+            /* Sprint 4.1 (axe-core): this used to be
+               <article role="button" tabIndex={0}> wrapping a delete
+               <button>. That is three defects at once —
+                 - `role="button"` is not permitted on <article>
+                   (aria-allowed-role),
+                 - the delete button was focusably nested inside a button
+                   (nested-interactive), and
+                 - the card title was an <h3> directly after the page's
+                   <h1>, skipping <h2> (heading-order).
+               The card is now a plain <article>; the title is an <h2>
+               containing a real link (the primary action, and what a
+               screen reader should announce as "link"), and Delete is a
+               sibling button rather than a descendant. The whole-card
+               click target is preserved via the stretched-link pattern
+               in CSS, so no interaction was lost. */
+            <article key={b.id} className="board-card">
+              <h2 className="board-card__title">
+                <a
+                  className="board-card__link"
+                  href={`/board/${b.id}`}
+                  onClick={(e) => {
+                    // The app is a single-page view with no router; the
+                    // href is a progressive-enhancement fallback and a
+                    // better announcement, but navigation stays in JS.
+                    e.preventDefault();
+                    void board.openBoard(b.id);
+                  }}
+                >
+                  {b.name}
+                </a>
+              </h2>
               <p className="board-card__meta">
                 {b.columns.length} columns ·{" "}
                 {Object.keys(b.cards).length} cards
@@ -119,8 +136,7 @@ export function BoardListView({
                 <button
                   type="button"
                   className="btn btn--ghost"
-                  onClick={(e) => {
-                    e.stopPropagation();
+                  onClick={() => {
                     if (confirm(`Delete board "${b.name}"? This cannot be undone.`)) {
                       void board.deleteBoard(b);
                     }
@@ -187,7 +203,7 @@ export function BoardListView({
               style={{
                 marginTop: "var(--space-2)",
                 fontSize: "var(--text-sm)",
-                color: "var(--color-danger, #eb5a46)",
+                color: "var(--color-danger)",
               }}
             >
               A board named “{duplicateName.name}” already exists. Choose a

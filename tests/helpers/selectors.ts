@@ -25,6 +25,9 @@ export const sel = {
   syncButton: 'button:has-text("Sync")',
   boardCard: "article.board-card",
   boardCardTitle: ".board-card__title",
+  // The title anchor inside a board card — the card's actual click target
+  // (a stretched link). See BoardListView.tsx.
+  boardCardLink: ".board-card__link",
   boardCardDelete: 'button[aria-label^="Delete board "]',
 
   // Create-board modal

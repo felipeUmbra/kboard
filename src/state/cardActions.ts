@@ -204,7 +204,12 @@ export function patchCard(b: Board, cardId: string, patch: Partial<Card>): Board
       ...b.cards,
       [cardId]: {
         ...merged,
-        activity: [...existing.activity, ...entries],
+        // `merged.activity`, not `existing.activity`: callers that append
+        // their own entry (checklists, comments, labels) pass it in the
+        // patch. Reading `existing` here silently discarded every one of
+        // those entries, so the card face showed the change but the history
+        // did not.
+        activity: [...merged.activity, ...entries],
         updatedAt: Date.now(),
       },
     },
@@ -294,12 +299,16 @@ export function validateAddParent(
   if (card.parentIds.includes(parentId)) return null; // duplicate is OK
   const meta = getMeta(card.type);
   if (!meta.parentType || meta.parentType !== parent.type) return "wrong_type";
-  // cycle check: walking up parent's ancestors, see if we hit cardId
+  // Cycle check: walk up the parent's ancestors looking for cardId.
+  //
+  // The only dedupe needed is on the way *in*: a node is enqueued only when
+  // it has not been seen, and it is marked seen the moment it is popped. That
+  // makes a duplicate pop impossible, so there is no second guard on the pop.
+  // `cardId` is seeded into `visited` so it can never be re-enqueued either.
   const visited = new Set<string>([cardId]);
   const stack = [parentId];
   while (stack.length) {
     const cur = stack.pop()!;
-    if (visited.has(cur)) continue;
     visited.add(cur);
     const c = b.cards[cur];
     if (!c) continue;
@@ -312,10 +321,12 @@ export function validateAddParent(
 }
 
 export function addParent(b: Board, cardId: string, parentId: string): Board {
+  // validateAddParent returns "not_found" for a missing card or parent, so
+  // passing it is proof both exist. The old second lookup re-checked what the
+  // guard had just established.
   if (validateAddParent(b, cardId, parentId) !== null) return b;
   const existing = b.cards[cardId];
   const parent = b.cards[parentId];
-  if (!existing || !parent) return b;
   return {
     ...b,
     cards: {
@@ -473,6 +484,11 @@ export function addChecklistItem(
 ): Board {
   const card = b.cards[cardId];
   if (!card) return b;
+  const cl = card.checklists.find((c) => c.id === checklistId);
+  // Without this guard the item is written into an `updated` list that
+  // matches no checklist, so nothing appears on the card but the log gains a
+  // misleading "Added item" entry.
+  if (!cl) return b;
   const trimmed = text.trim();
   if (!trimmed) return b;
   const now = Date.now();

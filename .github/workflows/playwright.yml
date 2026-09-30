@@ -37,6 +37,166 @@ jobs:
 
       - run: npm run typecheck
 
+  # Accessibility gates that run without a browser. These are the checks
+  # that catch a contrast or hardcoded-colour regression in seconds rather
+  # than waiting on the E2E matrix:
+  #   - a11y:contrast  — every token in tokens.css must clear 4.5:1 (or 3:1
+  #     for non-text) against the worst-case background of its theme.
+  #   - lint:colors    — no hardcoded colour literals outside the token file,
+  #     which is how an unverified colour previously reached the UI.
+  a11y:
+    name: Accessibility gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+
+      - run: npm run a11y
+
+      - run: npm run test:unit
+
+  # Guards the CI wiring itself. The cross-browser job failed 90/94 tests in
+  # CI because all three Playwright browser caches shared one key derived only
+  # from package-lock.json, so the first job to save populated the cache and
+  # the others saw cache-hit=true, skipped `playwright install`, and failed at
+  # browser launch with "Executable doesn't exist". The failure looked like a
+  # product regression in the report, and nothing in the suite could catch it
+  # because the cause was in the workflow, not the tests.
+  #
+  # This parses the workflows and fails if a browser install is ever guarded by
+  # a cache-hit condition again, or if the cache keys lose their browser scope.
+  ci-wiring:
+    name: CI wiring
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install pyyaml
+
+      - name: Check Playwright browser cache keys
+        run: python scripts/check-workflows.py
+
+  # Sprint 4.6 — coverage gate. Kept in its own job rather than folded into
+  # the a11y gates above so a coverage drop is reported as a coverage
+  # failure and does not read as an accessibility regression. The thresholds
+  # live in vitest.config.ts and are enforced by the runner's exit code.
+  coverage:
+    name: Coverage thresholds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+
+      - run: npm run test:unit:coverage
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 7
+
+  # Sprint 4.5 — cross-browser smoke. Separate from the E2E matrix so a
+  # WebKit-specific failure does not block the fast Chromium feedback, and
+  # so installing two extra browsers does not slow the main job. Runs a
+  # deliberately small spec set (see CROSS_BROWSER_SPECS in
+  # playwright.config.ts) rather than the full matrix.
+  #
+  # ADVISORY, NOT A MERGE GATE, while this is `continue-on-error`. WebKit's
+  # headless compositor crashes under sustained load on the shared CI runner
+  # and takes unrelated tests down with it. The whole WebKit set passes
+  # serially, so the failures are environmental rather than product
+  # defects — but an unreliable signal should report, not block. Remove this
+  # line once the WebKit job runs green repeatedly.
+  crossbrowser:
+    name: Cross-browser smoke (Firefox + WebKit)
+    runs-on: ubuntu-latest
+    # 40 minutes, up from 25. The 25m ceiling was calibrated when the
+    # suite was artificially FAST: 28 tests were aborting 5 seconds in on a
+    # hardcoded `waitForSelector` timeout in boardPage.ts, so the job
+    # finished in 14m57s having skipped most of its own work. Removing those
+    # literals (commit 49fa7a5) made every one of those tests run to
+    # completion for the first time -- CI measured those WebKit board specs
+    # at ~24s each, so ~28 of them added roughly 11 minutes of real runtime
+    # and the job hit 25m22s and was CANCELLED by this very limit (run
+    # 36725258569).
+    #
+    # 40 gives real headroom: the suite measures 12.9m serially on a local
+    # machine, plus ~5m of setup, and GitHub runners are slower per test
+    # than that. Do not lower this back toward the test phase alone -- the
+    # budget has to cover checkout, npm ci, the browser install and the
+    # build as well.
+    timeout-minutes: 40
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          # The browser set is part of the key on purpose. All three cache
+          # blocks used to share one key derived only from package-lock.json,
+          # so whichever job saved first won and every other job saw
+          # cache-hit=true, skipped the install step, and then tried to launch
+          # a browser it did not have:
+          #   "Executable doesn't exist at .../firefox-1538/firefox/firefox"
+          # That is what failed all 90 cross-browser tests. A cache hit now
+          # only skips the install when the cached entry holds the same
+          # browsers this job asked for.
+          key: ${{ runner.os }}-playwright-ff-wk-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-ff-wk-
+
+      - name: Install Firefox and WebKit
+        # Not conditional on the cache. `npx playwright install` is a no-op
+        # when the browsers are already present, and it self-heals a cache
+        # that was saved truncated or from a different Playwright version —
+        # which a cache-hit guard cannot do.
+        run: npx playwright install --with-deps firefox webkit
+
+      - name: Build the app
+        env:
+          VITE_GOOGLE_CLIENT_ID: "placeholder.apps.googleusercontent.com"
+        run: npm run build
+
+      - name: Run cross-browser smoke tests
+        env:
+          CI: "true"
+        run: npm run test:e2e:crossbrowser
+
+      - name: Upload Playwright HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-crossbrowser
+          path: playwright-report/
+          retention-days: 14
+
   e2e:
     name: E2E (Chromium, desktop + tablet + mobile + PWA)
     runs-on: ubuntu-latest
@@ -53,16 +213,19 @@ jobs:
         run: npm ci --no-audit --no-fund
 
       - name: Cache Playwright browsers
-        id: playwright-cache
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+          # Chromium-only, deliberately distinct from the firefox/webkit key
+          # above. See that comment for why the browser set belongs in the key.
+          key: ${{ runner.os }}-playwright-chromium-${{ hashFiles('package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-playwright-
+            ${{ runner.os }}-playwright-chromium-
 
       - name: Install Playwright browsers
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        # Unconditional: installing an already-present browser is a no-op, and
+        # it repairs a cache restored from a partial or older entry. A
+        # cache-hit guard would leave a stale cache permanently unusable.
         run: npx playwright install --with-deps chromium
 
       - name: Build the app

@@ -1,11 +1,6 @@
 import { useState } from "react";
-import {
-  SortableContext,
-  useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
+import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { useDroppable } from "@dnd-kit/core";
-import { CSS } from "@dnd-kit/utilities";
 import type {
   Board,
   Card as CardModel,
@@ -130,7 +125,7 @@ export function Column({ column, board, onOpenCard }: Props) {
                   setColMenuOpen(false);
                 }}
                 className="btn btn--ghost"
-                style={{ width: "100%", justifyContent: "flex-start", color: "var(--color-danger, #eb5a46)" }}
+                style={{ width: "100%", justifyContent: "flex-start", color: "var(--color-danger)" }}
               >
                 Delete column
               </button>
@@ -172,7 +167,7 @@ export function Column({ column, board, onOpenCard }: Props) {
             }}
           >
             Adding:{" "}
-            <strong style={{ color: CARD_TYPE_META[adding].color }}>
+            <strong style={{ color: CARD_TYPE_META[adding].colorToken }}>
               {CARD_TYPE_META[adding].icon} {CARD_TYPE_META[adding].defaultLabel}
             </strong>
           </div>
@@ -278,7 +273,7 @@ export function Column({ column, board, onOpenCard }: Props) {
                       style={{
                         width: "100%",
                         justifyContent: "flex-start",
-                        color: CARD_TYPE_META[cfg.type].color,
+                        color: CARD_TYPE_META[cfg.type].colorToken,
                       }}
                     >
                       <span aria-hidden="true">{CARD_TYPE_META[cfg.type].icon}</span>{" "}
@@ -304,16 +299,8 @@ function CardItem({
   board: Board;
   onOpen: (c: CardModel) => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: card.id });
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-  };
-  return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-      <Card card={card} board={board} onOpen={onOpen} />
-    </div>
-  );
+  // dnd-kit wiring lives on the Card itself (see Card.tsx) so that the
+  // sortable wrapper and the card do not end up as two nested role="button"
+  // elements. This component exists only to hand the card its data.
+  return <Card card={card} board={board} onOpen={onOpen} />;
 }

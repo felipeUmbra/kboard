@@ -110,4 +110,28 @@ describe("validateDates", () => {
     const result = validateDates("2025-06-10", null, { isNewCard: false });
     expect(result.startIssue).toBeNull();
   });
+
+  it("no start issue for a past start date when isNewCard is omitted", () => {
+    // The option defaults to falsy, so a past start on a card the caller did
+    // not flag as new produces no info — only the due date can warn.
+    const result = validateDates("2020-01-01", null);
+    expect(result.startIssue).toBeNull();
+  });
+
+  it("compares equal dates as neither before nor after", () => {
+    // The same day for start and due is a valid one-day task, so the
+    // comparison has to return "equal" rather than "before".
+    const result = validateDates("2099-06-20", "2099-06-20");
+    expect(result.dueIssue).toBeNull();
+  });
+
+  it("lets a past due date win over a later start date", () => {
+    // Both rules could apply; the past-due warning is the one that matters,
+    // so it takes precedence over the ordering check.
+    const result = validateDates("2099-01-01", "2020-01-01");
+    expect(result.dueIssue).toEqual({
+      level: "warning",
+      message: "Due date is in the past",
+    });
+  });
 });

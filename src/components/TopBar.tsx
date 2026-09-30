@@ -23,14 +23,18 @@ export function TopBar({
         onClick={onOpenMenu}
         aria-label={menuLabel}
         title={menuLabel}
-        style={{ color: "#fff" }}
+        style={{ color: "var(--color-on-accent)" }}
       >
         <MenuIcon />
       </button>
       <button
         type="button"
         onClick={onNavigateList}
-        style={{ color: "#fff", fontWeight: 600, fontSize: "var(--text-lg)" }}
+        style={{
+          color: "var(--color-on-accent)",
+          fontWeight: 600,
+          fontSize: "var(--text-lg)",
+        }}
         className="btn btn--ghost"
       >
         📋 Kboard
@@ -38,10 +42,18 @@ export function TopBar({
       {activeBoard && (
         <span
           className="topbar__board"
-          style={{ color: "rgba(255,255,255,0.85)", fontSize: "var(--text-sm)" }}
+          style={{ color: "var(--color-on-accent)", fontSize: "var(--text-sm)" }}
         >
           / {activeBoard.name}
-          {syncing && <span style={{ marginLeft: 8, opacity: 0.7 }}>· syncing…</span>}
+          {syncing && (
+            /* Not `opacity` — dimming white text on the accent bar that way
+               composites it to 4.39:1, under the 4.5:1 AA floor (found by
+               axe-core, Sprint 4.1). A solid lighter tint of the same hue
+               keeps the "de-emphasised but legible" intent. */
+            <span style={{ marginLeft: 8, color: "var(--color-accent-muted)" }}>
+              · syncing…
+            </span>
+          )}
         </span>
       )}
       <span className="topbar__spacer" />
@@ -50,7 +62,7 @@ export function TopBar({
           type="button"
           onClick={onNavigatePlanner}
           className="btn btn--ghost"
-          style={{ color: "#fff" }}
+          style={{ color: "var(--color-on-accent)" }}
           data-testid="topbar-planner"
         >
           📅<span className="topbar__planner-label"> Planner</span>
@@ -71,7 +83,7 @@ export function TopBar({
             className="btn btn--ghost"
             onClick={logout}
             aria-label="Sign out"
-            style={{ color: "#fff" }}
+            style={{ color: "var(--color-on-accent)" }}
           >
             Sign out
           </button>

@@ -7,9 +7,14 @@ export function LoginScreen({
 }: AuthState & { login: () => void }) {
   return (
     <div className="login">
-      <div className="login__card">
+      {/* <main> for the single main landmark (WCAG 1.3.1) and a labelled
+          <header> so the h1 sits in a banner rather than loose in the body
+          (axe-core's `region` rule, Sprint 4.1). The login screen is
+          pre-auth, so AppShell — which normally supplies both — is not
+          mounted here. */}
+      <main className="login__card" aria-labelledby="login-title">
         <div className="login__logo" aria-hidden>📋</div>
-        <h1 className="login__title">Kboard</h1>
+        <h1 id="login-title" className="login__title">Kboard</h1>
         <p className="login__msg">
           A Trello-inspired Kanban board. Sign in with Google to keep your boards safe
           inside your own Google Drive.
@@ -25,7 +30,7 @@ export function LoginScreen({
           <span>{loading ? "Signing in…" : "Sign in with Google"}</span>
         </button>
         {error && <div className="login__error" role="alert">{error}</div>}
-      </div>
+      </main>
     </div>
   );
 }

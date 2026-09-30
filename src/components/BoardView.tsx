@@ -7,6 +7,7 @@ import { MobileColumnTargets } from "./MobileColumnTargets";
 import { useViewport } from "../hooks/useViewport";
 import type { AddCardDirection } from "../state/cardActions";
 import type { Card } from "../models/types";
+import { DndKeyboardHelp, DND_HELP_ID } from "./DndKeyboardHelp";
 
 export function BoardView({ onBackToList }: { onBackToList: () => void }) {
   const board = useBoard();
@@ -172,6 +173,7 @@ export function BoardView({ onBackToList }: { onBackToList: () => void }) {
         >
           Delete board
         </button>
+        <DndKeyboardHelp id={DND_HELP_ID} />
       </div>
 
       {viewport.isMobile ? (

@@ -1,6 +1,32 @@
 import { defineConfig, devices } from "@playwright/test";
 
 /**
+ * Sprint 4.5 — the specs the Firefox and WebKit smoke projects run.
+ *
+ * Chosen to cover the engine differences that actually matter for this app,
+ * rather than breadth:
+ *   - `a11y-axe`    — axe-core injects differently per engine; a violation
+ *                     that only appears in one engine is a real one.
+ *   - `auth`        — popup/token plumbing and the initial render.
+ *   - `boards`      — the core CRUD path everything else depends on.
+ *   - `board`       — drag and drop, which has the most engine-specific
+ *                     pointer behaviour of anything in the app.
+ *   - `planner`     — a second, differently-structured view.
+ *
+ * Deliberately excluded: the PWA projects (service-worker and manifest
+ * behaviour is Chromium-specific enough that a WebKit result would be
+ * noise), the subpath deployment checks, and the axe contrast spec, which
+ * duplicates checks the a11y spec already covers here.
+ */
+const CROSS_BROWSER_SPECS = [
+  "**/a11y-axe.spec.ts",
+  "**/auth.spec.ts",
+  "**/boards.spec.ts",
+  "**/board.spec.ts",
+  "**/planner.spec.ts",
+];
+
+/**
  * Playwright config for kboard E2E suite.
  *
  * Strategy:
@@ -55,7 +81,12 @@ export default defineConfig({
     },
     {
       name: "chromium-tablet",
-      testIgnore: "**/pwa*.spec.ts",
+      // Sprint 4.1: the axe-core scans are desktop-only. axe-core is not
+      // viewport-sensitive and the tablet/mobile projects render the same
+      // DOM, so re-scanning there costs minutes per run to re-detect the
+      // same semantics. Layout-dependent checks stay in the specs that do
+      // run everywhere (a11y-sprint2-3, responsive-a11y).
+      testIgnore: ["**/pwa*.spec.ts", "**/a11y-axe.spec.ts"],
       use: {
         ...devices["Desktop Chrome"],
         viewport: { width: 768, height: 1024 },
@@ -70,33 +101,16 @@ export default defineConfig({
       use: {
         ...devices["Desktop Chrome"],
         viewport: { width: 1280, height: 800 },
-        baseURL: process.env.CI ? "http://localhost:5172" : "http://localhost:5173",
+        baseURL: "http://localhost:5173",
       },
-      // PWA project uses its own webServer (production preview). This is a
-      // supported runtime feature, but `@playwright/test` 1.62's shipped
-      // types don't declare `webServer` on a project entry — only on the
-      // top-level `TestConfig`. Cast through `unknown` to keep `tsc`
-      // (the GH deploy `typecheck` job) green without changing behavior.
-      ...({
-        webServer: {
-          command: process.env.CI
-            ? "npm run preview -- --port 5172 --strictPort"
-            : "npm run build && npm run preview -- --port 5173 --strictPort",
-          url: process.env.CI ? "http://localhost:5172" : "http://localhost:5173",
-          reuseExistingServer: !process.env.CI,
-          timeout: 180_000,
-          env: {
-            VITE_GOOGLE_CLIENT_ID: "fake-client-id.apps.googleusercontent.com",
-            BASE_PATH: "/",
-          },
-          stdout: "pipe",
-          stderr: "pipe",
-        },
-      } as object),
+      // NOTE: the production preview server this project needs lives in the
+      // top-level `webServer` array, not here. Playwright ignores a
+      // project-level `webServer`, which is why this used to be cast through
+      // `unknown` and silently did nothing.
     },
     {
       name: "chromium-mobile",
-      testIgnore: "**/pwa*.spec.ts",
+      testIgnore: ["**/pwa*.spec.ts", "**/a11y-axe.spec.ts"],
       use: {
         // A real mobile device descriptor gives consistent emulation
         // (viewport, deviceScaleFactor, isMobile, hasTouch, userAgent).
@@ -122,20 +136,90 @@ export default defineConfig({
         baseURL: "http://localhost:5174",
       },
     },
-  ],
-  webServer: {
-    // Main web server for dev/preview — used by chromium-desktop and chromium-tablet.
-    // In CI: serves the pre-built production bundle via `vite preview`.
-    // Locally: uses `vite dev` for fast iteration (no build step).
-    command: process.env.CI ? "npm run preview -- --port 5172 --strictPort" : "npm run dev",
-    url: "http://localhost:5172",
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-    env: {
-      VITE_GOOGLE_CLIENT_ID: "fake-client-id.apps.googleusercontent.com",
-      BASE_PATH: "/",
+
+    // ── Cross-browser (Sprint 4.5) ─────────────────────────────────────
+    // These two exist to catch engine differences, not to re-run the
+    // Chromium matrix. They therefore run a deliberately small smoke set —
+    // see CROSS_BROWSER_SPECS below — rather than all 333 tests, which
+    // would multiply CI time for very little extra signal.
+    //
+    // Both are excluded from `npm run test:e2e` and run via
+    // `npm run test:e2e:crossbrowser` and the dedicated CI job, so the
+    // fast-feedback PR gate stays Chromium-only.
+    {
+      name: "firefox-smoke",
+      testMatch: CROSS_BROWSER_SPECS,
+      // Firefox and WebKit are markedly slower than Chromium here, and the
+      // axe-core scan is the single slowest step in the suite. A project-level
+      // timeout gives them room without loosening the bound for the
+      // fast-feedback Chromium matrix, where a 30s timeout is a genuine
+      // signal that something has hung.
+      timeout: 90_000,
+      expect: { timeout: 15_000 },
+      use: {
+        ...devices["Desktop Firefox"],
+        viewport: { width: 1280, height: 800 },
+      },
     },
-    stdout: "pipe",
-    stderr: "pipe",
-  },
+    {
+      name: "webkit-smoke",
+      testMatch: CROSS_BROWSER_SPECS,
+      timeout: 90_000,
+      expect: { timeout: 15_000 },
+      use: {
+        ...devices["Desktop Safari"],
+        viewport: { width: 1280, height: 800 },
+      },
+    },
+  ],
+  webServer: [
+    {
+      // Main web server for dev/preview — used by chromium-desktop,
+      // chromium-tablet and chromium-mobile.
+      // In CI: serves the pre-built production bundle via `vite preview`.
+      // Locally: uses `vite dev` for fast iteration (no build step).
+      command: process.env.CI
+        ? "npm run preview -- --port 5172 --strictPort"
+        : "npm run dev",
+      url: "http://localhost:5172",
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+      env: {
+        VITE_GOOGLE_CLIENT_ID: "fake-client-id.apps.googleusercontent.com",
+        BASE_PATH: "/",
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+    {
+      // PWA project needs a *production* preview of the built bundle (the
+      // service worker and manifest only exist there — vite dev never emits
+      // them, since devOptions.enabled is false).
+      //
+      // This used to live as a `webServer` key inside the `pwa` project entry,
+      // cast through `unknown` to satisfy tsc. That was wrong: Playwright
+      // 1.62 only reads `webServer` from the TOP-LEVEL TestConfig, and
+      // silently ignores it on a project. The preview server therefore never
+      // started and all six pwa.spec.ts tests failed with
+      // ERR_CONNECTION_REFUSED on :5173.
+      //
+      // As an array, every entry boots regardless of which project is
+      // selected, so the preview build now actually runs. Playwright requires
+      // baseURL to be set explicitly when webServer is an array — the `pwa`
+      // project already sets its own baseURL, so the top-level one only
+      // applies to the other projects.
+      command: process.env.CI
+        ? "npm run preview -- --port 5173 --strictPort"
+        : "npm run build && npm run preview -- --port 5173 --strictPort",
+      url: "http://localhost:5173",
+      reuseExistingServer: !process.env.CI,
+      timeout: 180_000,
+      env: {
+        VITE_GOOGLE_CLIENT_ID: "fake-client-id.apps.googleusercontent.com",
+        BASE_PATH: "/",
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  ],
 });

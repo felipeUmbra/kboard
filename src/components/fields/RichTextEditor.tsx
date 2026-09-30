@@ -22,7 +22,14 @@ export function RichTextEditor({
       attributes: {
         class: "kb-rte__content",
         "data-placeholder": placeholder ?? "",
+        // `role="textbox"` is required, not decorative: Tiptap renders the
+        // editor as a bare contenteditable <div>, and aria-label is a
+        // prohibited attribute on a div with no role — axe-core's
+        // `aria-prohibited-attr` rule failed on exactly this (Sprint 4.1).
+        // role="textbox" is the correct role for a rich-text editing host.
+        role: "textbox",
         "aria-label": "Description",
+        "aria-multiline": "true",
       },
     },
   });

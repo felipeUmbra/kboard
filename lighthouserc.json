@@ -1,0 +1,80 @@
+{
+  "ci": {
+    "collect": {
+      "//": [
+        "Only real HTML documents can be audited. This config previously also",
+        "collected /manifest.webmanifest, which is served as",
+        "application/manifest+json, so Lighthouse aborted that run with",
+        "NOT_HTML and failed the entire job.",
+        "",
+        "There is only one HTML document worth auditing: the SPA entry at /.",
+        "The PWA share-capture.html is deliberately NOT listed - it reads its",
+        "query string and immediately location.replace()s to /?share=<id>, so",
+        "auditing it would measure the SPA root a second time. Verified:",
+        "requested=/share-capture.html, finalUrl=/?share=<generated-id>.",
+        "",
+        "The manifest is data, not a page. It is validated by the browser when",
+        "the PWA is installed; Lighthouse has nothing to audit in a JSON file."
+      ],
+      "url": [
+        "http://localhost:4173/"
+      ],
+      "numberOfRuns": 3,
+      "settings": {
+        "preset": "desktop",
+        "onlyCategories": ["accessibility"],
+        "chromeFlags": "--no-sandbox --headless"
+      }
+    },
+    "assert": {
+      "//": [
+        "Audit IDs must exist in the Lighthouse version this repo pins",
+        "(@lhci/cli 0.14.0 -> Lighthouse 12). An unknown ID is not ignored -",
+        "it fails the job with '\"<id>\" is not a known audit', which is how a",
+        "typo or a removed audit becomes a confusing red build.",
+        "",
+        "Two axe-derived IDs that Lighthouse does NOT have were removed:",
+        "  nested-interactive  -> dropped; see below",
+        "  region              -> landmark-one-main (already listed)",
+        "",
+        "Do NOT substitute focusable-controls, interactive-element-affordance or",
+        "use-landmarks for them. They exist, but all three are",
+        "scoreDisplayMode 'manual' - Lighthouse cannot pass or fail them",
+        "automatically, so they return no score and asserting on them fails the",
+        "job with 'Audit did not produce a value at all'. A manual audit is a",
+        "prompt for a human reading the report, not a gate.",
+        "",
+        "The nested-interactive and region rules are still enforced, by the",
+        "engine that can actually assert them: `npm run a11y:axe` runs axe-core,",
+        "where both are real rules and a violation fails the build. See",
+        "tests/helpers/axe.ts and tests/e2e/a11y-axe.spec.ts.",
+        "",
+        "Every remaining ID either returns a score (binary/numeric) or is",
+        "notApplicable because the page has no such element. Both are fine for",
+        "an 'error' assertion. The only disqualifying mode is 'manual', which",
+        "is why none of the three manual audits above are listed."
+      ],
+      "assertions": {
+        "categories:accessibility": ["error", { "minScore": 1.0 }],
+        "color-contrast": "error",
+        "image-alt": "error",
+        "label": "error",
+        "button-name": "error",
+        "link-name": "error",
+        "aria-allowed-role": "error",
+        "aria-required-attr": "error",
+        "aria-valid-attr": "error",
+        "aria-hidden-focus": "error",
+        "heading-order": "error",
+        "landmark-one-main": "error",
+        "frame-title": "error",
+        "html-has-lang": "error",
+        "document-title": "error",
+        "bypass": "error"
+      }
+    },
+    "upload": {
+      "target": "temporary-public-storage"
+    }
+  }
+}

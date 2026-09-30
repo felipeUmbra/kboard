@@ -268,7 +268,7 @@ export function Sidebar({
                       }}
                     >
                       <span aria-hidden="true">{meta.icon}</span>
-                      <strong style={{ color: meta.color }}>{cfg.label}</strong>
+                      <strong style={{ color: meta.colorToken }}>{cfg.label}</strong>
                       <span style={{ color: "var(--color-text-muted)", fontSize: "var(--text-xs)" }}>
                         ({count})
                       </span>
@@ -289,6 +289,7 @@ export function Sidebar({
                           onChange={(e) =>
                             board.setCardTypeEnabled(cfg.type, e.target.checked)
                           }
+                          aria-label={`Enable the ${cfg.label} card type`}
                         />
                         enabled
                       </label>
@@ -448,6 +449,7 @@ export function Sidebar({
                     type="checkbox"
                     checked={isDone}
                     onChange={(e) => board.setDoneColumn(c.id, e.target.checked)}
+                    aria-label={`Treat the ${c.name} column as done`}
                   />
                   <span>{c.name}</span>
                 </li>
