@@ -1,0 +1,204 @@
+name: Defect hunt (QA agent)
+
+# Runs the QA agent in DEFECT DISCOVERY mode and lets it file Medium/High
+# product defects in the tracker.
+#
+# WHY THIS FILE EXISTS
+# The QA agent documents a rule to file every confirmed Medium/High defect, but
+# until now nothing ever invoked it. The rule was inert: a stylesheet-import
+# defect that made every `@media (max-width)` override in the app inert sat in
+# the first commit, survived ~49 commits, and was only found incidentally by a
+# test written for an unrelated feature. Nobody had reported it, so nobody had
+# filed it. This workflow is what makes the rule reachable.
+#
+# TRIGGERS
+#   workflow_dispatch - the main path. Run after unit tests are green and
+#                      BEFORE writing E2E automation for a new feature, so
+#                      what the hunt learns can shape the automation.
+#   schedule         - a nightly backstop so defects found by nobody still land.
+#   workflow_run     - after the Playwright suite finishes, to triage CI
+#                      failures (your 2.1 second scenario). Gated to completed
+#                      runs only.
+#
+# PERMISSIONS
+# issues: write is required - the agent files issues. Nothing else is granted:
+# no contents write, so this job cannot push code or modify the repository.
+
+on:
+  workflow_dispatch:
+    inputs:
+      focus:
+        description: "What to hunt (blank = full sweep of the risky areas)"
+        required: false
+        type: string
+      base_ref:
+        description: "Compare against this ref to find what is new"
+        required: false
+        type: string
+  schedule:
+    # 03:17 UTC nightly. Off the hour on purpose - scheduled workflows at
+    # :00 queue behind everyone else's.
+    - cron: "17 3 * * *"
+  workflow_run:
+    workflows: ["Playwright E2E (PR)"]
+    types: [completed]
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: defect-hunt-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  hunt:
+    name: Exploratory defect hunt
+    # Only the two manual/scheduled paths run the agent. The workflow_run path
+    # is triage, handled by the job below, because on CI failure the useful
+    # question is "is this a product defect or a harness problem?", not "go
+    # explore the app".
+    if: github.event_name != 'workflow_run'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # The agent must not try to close or reopen anything on this pass; the
+      # retest job below owns that.
+      QA_MODE: discovery
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # The build MUST be current. A stale dist/ is this repo's most common
+      # false bug, and a hunt that measures an old bundle reports fiction.
+      - name: Build the app the hunt will measure
+        run: npx vite build
+
+      - name: Confirm gh is authenticated
+        run: gh auth status
+
+      - name: Run the QA agent in defect-discovery mode
+        env:
+          COPILOT_ALLOW_ALL: "true"
+        run: |
+          FOCUS="${{ inputs.focus }}"
+          BASE="${{ inputs.base_ref }}"
+
+          # Scope the hunt. Comparing against a base ref is the highest-signal
+          # mode: it concentrates on what actually changed instead of
+          # re-proving that the whole app still works.
+          #
+          # Single-line assignments on purpose: a multi-line double-quoted
+          # scalar breaks the YAML block parser, and this is already inside a
+          # block scalar.
+          if [ -n "$BASE" ]; then
+            SCOPE="Hunt for product defects introduced by the diff $BASE...HEAD. Focus on what changed, and on what that change broke indirectly. Read Docs/PRD.md and the relevant spec for the intended behaviour before judging anything."
+          elif [ -n "$FOCUS" ]; then
+            SCOPE="Hunt for product defects in: $FOCUS Read the relevant spec first, then probe the risky paths for this area."
+          else
+            SCOPE="Full exploratory sweep. Work through the risky areas in the agent's Defect discovery table: responsive layout at 360/768/1280, popovers and sheets, drag and drop (pointer/touch/keyboard, and under an active filter), debounced persistence, offline and sync, and CSS cascade."
+          fi
+
+          cat > prompt.md <<PROMPT_EOF
+          $SCOPE
+
+          Rules for this run:
+
+          1. This is DISCOVERY. You are looking for Medium/High product defects,
+             not writing tests. Measure before judging: a finding you cannot
+             state as "expected X, measured Y" is not confirmed - keep probing
+             or report it as unconfirmed.
+
+          2. Do NOT edit product code and do NOT fix anything on this run.
+             Discovery and fixing are separate acts, and this run is discovery.
+
+          3. File every confirmed Medium/High defect with gh. Impact and Devices
+             are separate required fields. Ask "which devices?" BEFORE "how
+             bad?" - the device scope is what separates Medium from High.
+
+          4. Check for an existing issue before filing. If the defect is already
+             tracked, add your evidence as a comment instead of duplicating it.
+
+          5. Do not close or reopen anything on this run.
+
+          6. If you find nothing, that is a real result. Say so explicitly and
+             list what you probed. Silence is not an acceptable report.
+
+          7. Before reporting, run `npx vite build` if you have not already, so
+             you are measuring the current bundle rather than a stale dist/.
+
+          Report in the agent's Output Format, including the Bugs table.
+          PROMPT_EOF
+
+          npx --yes @github/copilot@latest \
+            -p "$(cat prompt.md)" \
+            --agent qa \
+            --allow-all-tools \
+            --silent
+
+      - name: File findings as a workflow artifact
+        if: always()
+        run: echo "Hunt finished. Findings are in the job log and the tracker." >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------
+  # CI triage: the agent only runs when the E2E suite actually FAILED.
+  # On a green run there is nothing to triage, so this job no-ops.
+  # ---------------------------------------------------------------------
+  triage-ci-failure:
+    name: Triage CI failure
+    needs: []
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run the QA agent to triage the failure
+        env:
+          COPILOT_ALLOW_ALL: "true"
+        run: |
+          cat > prompt.md <<PROMPT_EOF
+          A CI run of the Playwright E2E suite FAILED. Triage it.
+
+          Run: ${{ github.event.workflow_run.html_url }}
+
+          Decide which of these it is, and say which:
+
+          (a) A PRODUCT defect - the app behaves wrongly. File it as a GitHub
+              issue, Medium or High per the agent's impact bands.
+
+          (b) A HARNESS problem - a stale dist/, an unbuilt bundle, a route-mock
+              bypassed by CI mode, the 600ms debounce, cross-browser compositor
+              contention, or a genuinely flaky test. Do NOT file these; they are
+              documented in the agent's Test Isolation section.
+
+          This repo has a documented history of mistaking (b) for (a): a contrast
+          "failure" that was really a CSS transition race, and a cross-browser
+          failure that was really resource contention. Check the harness causes
+          FIRST and show the evidence for ruling them out.
+
+          Do not fix anything. Do not close anything. Report which case it is,
+          the evidence, and file only if it is (a).
+          PROMPT_EOF
+
+          npx --yes @github/copilot@latest \
+            -p "$(cat prompt.md)" \
+            --agent qa \
+            --allow-all-tools \
+            --silent
