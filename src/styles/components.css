@@ -1254,10 +1254,23 @@
 /* ─── Filter menu ─── */
 
 .filter-menu {
-  position: absolute;
+  /* `fixed`, not `absolute` — the menu is anchored to the viewport rather
+     than to .filter-bar.
+
+     This is a bug fix, not a preference. .filter-bar is a flex row whose
+     height grows when the active-filter chips appear below the trigger. With
+     `absolute`, the popover is positioned against that container, so it was
+     dragged downward by exactly the height the chips added (measured: 56px on
+     a 768px tablet). The menu visibly jumped away from under the pointer
+     mid-interaction, and because the transparent backdrop covers the viewport,
+     the relocated checkbox ended up under the backdrop and unclickable —
+     applying one filter silently blocked the next. `fixed` is unaffected by
+     the container's size.
+
+     Positioning is computed from the trigger's viewport rect in FilterBar, so
+     the menu stays visually anchored to the button while the chips wrap. */
+  position: fixed;
   z-index: var(--z-modal);
-  top: calc(100% + var(--space-2));
-  right: 0;
   display: flex;
   flex-direction: column;
   width: min(360px, calc(100vw - 32px));

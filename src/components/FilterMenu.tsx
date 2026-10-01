@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useLayoutEffect, useMemo, useState } from "react";
 import { filterSummary } from "../models/filters";
 import { todayIso } from "../models/dateValidation";
 import type {
@@ -42,12 +42,54 @@ export function FilterMenu({
   filter,
   onChange,
   onClose,
+  anchorRef,
 }: {
   board: Board;
   filter: FilterState;
   onChange: (updater: (prev: FilterState) => FilterState) => void;
   onClose: () => void;
+  /** The trigger button. The menu is `position: fixed` and positioned from
+   *  this rect, so it stays put when the chip row below the trigger grows. */
+  anchorRef?: React.RefObject<HTMLElement | null>;
 }) {
+  // The menu is `position: fixed` (see components.css) so its position is not
+  // affected by .filter-bar's height changing when chips appear. Position it
+  // from the trigger's viewport rect instead.
+  //
+  // The mobile bottom sheet overrides top/left/right/bottom in CSS, so those
+  // inline offsets are applied only above the mobile breakpoint. A media query
+  // is the honest check here: we need the CSS's own decision, and duplicating
+  // its 640px threshold in JS would let the two drift apart silently.
+  const [style, setStyle] = useState<React.CSSProperties>({});
+
+  useLayoutEffect(() => {
+    const place = () => {
+      if (window.matchMedia("(max-width: 640px)").matches) {
+        // Bottom sheet: let the stylesheet own the position.
+        setStyle({});
+        return;
+      }
+      const el = anchorRef?.current;
+      if (!el) {
+        setStyle({});
+        return;
+      }
+      const rect = el.getBoundingClientRect();
+      // Clamp to the viewport so the menu can never be pushed off-screen by a
+      // trigger near the right edge on a narrow desktop window.
+      const width = Math.min(360, window.innerWidth - 32);
+      const right = Math.max(16, window.innerWidth - rect.right);
+      setStyle({ top: rect.bottom + 8, right, width });
+    };
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [anchorRef]);
+
   const enabledTypes = board.cardTypes.filter((c) => c.enabled);
 
   // Board-level plus per-type fields. A field id is unique board-wide, so
@@ -91,6 +133,7 @@ export function FilterMenu({
   return (
     <div
       className="filter-menu"
+      style={style}
       role="dialog"
       aria-label="Filter cards"
       data-testid="filter-menu"

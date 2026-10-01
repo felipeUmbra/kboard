@@ -88,6 +88,7 @@ export function FilterBar({ board }: { board: Board }) {
               setOpen(false);
               triggerRef.current?.focus();
             }}
+            anchorRef={triggerRef}
           />
         </>
       )}

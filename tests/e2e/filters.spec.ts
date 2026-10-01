@@ -328,6 +328,45 @@ test.describe("Filters", () => {
     await expect(page.locator(menu)).toHaveCount(0);
   });
 
+  test("the menu does not move when a filter is applied", async ({ page }) => {
+    const bp = new BoardPage(page);
+    await installFakesOnPage(page);
+    await bp.login();
+    await bp.createBoard("Menu stability");
+    await bp.addCard("", "A task card", "task");
+    await bp.addCard("", "An epic card", "epic");
+
+    await openMenu(page);
+    const menuLocator = page.locator(menu);
+    const firstOption = page.locator('[data-testid="filter-type-task"]');
+    const secondOption = page.locator('[data-testid="filter-type-epic"]');
+
+    const menuBefore = await menuLocator.boundingBox();
+    const optionBefore = await secondOption.boundingBox();
+
+    await firstOption.check();
+    // The active-filter chips appear below the trigger once a filter is set.
+    // The menu is `position: fixed` and positioned from the trigger's viewport
+    // rect, so it must NOT be dragged down by the growing container.
+    //
+    // Regression guard: with `position: absolute` it moved 56px on a 768px
+    // tablet, which relocated the next checkbox under the click-away backdrop
+    // and made it unclickable — applying one filter silently blocked the next.
+    await expect(page.locator(chips)).toBeVisible();
+    const menuAfter = await menuLocator.boundingBox();
+    const optionAfter = await secondOption.boundingBox();
+    expect(menuAfter?.y).toBe(menuBefore?.y);
+    expect(optionAfter?.y).toBe(optionBefore?.y);
+
+    // And the second filter must still be reachable — the practical assertion
+    // that the click-away backdrop is no longer swallowing menu clicks.
+    // Both card types are selected, which is ONE chip ("Type: Task, Epic"):
+    // the badge counts active chips, not active dimensions.
+    await secondOption.check();
+    await expect(page.locator(badge)).toHaveText("1");
+    await expect(page.locator(chips)).toContainText("Task, Epic");
+  });
+
   test("a column with no matches still renders with a zero count", async ({
     page,
   }) => {
