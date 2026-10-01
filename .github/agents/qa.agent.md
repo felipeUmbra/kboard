@@ -47,7 +47,7 @@ still stand on their own.
 - **App**: Kanban board with Google Drive sync, rich text editor, drag-and-drop, PWA
 - **Stack**: React 18, TypeScript, Vite, @dnd-kit, @tiptap, Workbox (PWA)
 - **Test framework**: Playwright for E2E (`tests/e2e/`), Vitest for unit tests (`tests/unit/`, colocated `src/**/*.test.ts`)
-- **Test count**: 522 unit tests; 94 cross-browser smoke tests across 2 engines; Chromium matrix of 338 passing / 18 skipped
+- **Test count**: ~778 unit tests (Vitest, 25 files); ~502 Chromium tests across 5 projects (desktop 172, tablet 161, mobile 161, pwa 6, pwa-subpath 2); 50 smoke tests per engine on firefox and webkit. **Re-derive these before quoting them** — `npx vitest run` and `npx playwright test --list --project=<p>` — because a stale count is worse than no count.
 - **Projects**: `chromium-desktop`, `chromium-tablet`, `chromium-mobile`, `pwa` (production preview) plus `firefox-smoke` and `webkit-smoke`
 - **CI**: `workers: process.env.CI ? 1 : undefined`, `retries: process.env.CI ? 2 : 0`
 
@@ -125,10 +125,11 @@ without error:
 
 ```powershell
 gh label list
-gh label create "impact:high" --color B60205 --description "All devices, or a feature is unreachable"
-gh label create "impact:medium" --color FBCA04 --description "One device / form factor only"
-gh label create "area:filter-search" --color 1D76DB --description "Search, filter, saved views"
 ```
+
+Labels are already provisioned in this repository — list before creating. If a
+label is genuinely missing, see the global agent for the full set and the
+`gh label create` commands.
 
 Use `--body-file`, not an inline body. Multi-line strings are easily mangled in
 PowerShell.
@@ -165,8 +166,10 @@ Two ways in. Neither is optional.
 
 ### Mode A — opportunistic (while writing or debugging tests)
 
-Any time a test fails and the cause is **not the test**, you have found a
-product defect. Do not just fix it and move on — see the escalation rule above.
+Follow the global agent's Mode A. The kboard-specific detail is *when* it
+fires most often here: any test that fails for a reason other than the test
+itself is almost always one of the Drive/PWA faults described above, not a
+timing problem.
 
 ### Mode B — exploratory hunt (no known behaviour under test)
 
@@ -411,11 +414,10 @@ the fix was verified.
 
 ## Gotchas
 
-- **`page.waitForSelector(sel)` with no options is UNBOUNDED.** Playwright's
-  `actionTimeout` defaults to `0`, so the call only ends when the whole test
-  times out. Use `expect(locator).toBeVisible()`, which honours the project's
-  `expect.timeout` (5s Chromium, 15s smoke projects). In `boardPage.ts` use the
-  private `visible()` helper; see the NOTE ON WAIT TIMEOUTS comment there.
+- **`page.waitForSelector()` with no options is unbounded** — see the global
+  agent's timeout semantics. Here, prefer the private `visible()` helper in
+  `boardPage.ts`; see the NOTE ON WAIT TIMEOUTS comment there. The project
+  budgets are 5s Chromium and 15s for the smoke projects.
 - **`boundingBox()` returns `{x, y, width, height}|null`** — derive `.right`/`.bottom` yourself, and pass an explicit timeout so a failed click does not exhaust the test budget
 - Mobile modal clicks may need `clickButtonFallback()` (pointer interception false positive)
 - **`publishChange` in BoardContext must apply updaters ONCE** — duplicated updates cause ID divergence
