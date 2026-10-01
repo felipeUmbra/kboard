@@ -114,8 +114,7 @@ erDiagram
   "labels": [ /* Label */ ],
   "customFields": [ /* CustomField */ ],   // board-level
   "cardTypes": [ /* CardTypeConfig */ ],
-  "doneColumnIds": ["col-done"],   // drives progress rollup
-  "columns": [ /* Column */ ],
+  "doneColumnIds": ["col-done"],   // drives progress rollup  "savedViews": [ /* SavedView */ ],  // optional; [] when absent  "columns": [ /* Column */ ],
   "cards": { "card-id": { /* Card */ } },
   "createdAt": 1727000000000,      // epoch ms
   "updatedAt": 1727500000000,
@@ -267,7 +266,60 @@ Append-only, system-generated. The 16 kinds: `created`,
 **One nesting level by design.** Items have no children in v1; nested
 sub-items are an explicit non-goal.
 
-### 4.10 `UserProfile`
+### 4.10 `SavedView`
+
+A named filter preset, scoped to ONE board.
+
+```jsonc
+{
+  "id": "view-1",
+  "name": "Urgent bugs",       // unique per board, case-insensitive, trimmed
+  "filter": { /* FilterState */ },
+  "createdAt": 1727000000000,
+  "updatedAt": 1727500000000
+}
+```
+
+**Board-scoped by design — there are no global views.** Every id inside
+`filter` (`labelIds`, `columnIds`, `fieldId`, `optionIds`) refers to an entity
+owned by the same board, so nothing needs cross-board id resolution. A
+global-view design would require a migration plus remapping every stored
+filter.
+
+Note there is **no `searchQuery`** on a view: a view stores a filter only.
+Persisting a search term would make a recalled view silently hide most of the
+board.
+
+### 4.11 `FilterState`
+
+A structured, persistable board filter. **Every property is optional and every
+array defaults to empty, so an empty `FilterState` means "no filtering"** —
+that invariant is what makes "Clear all" a single assignment.
+
+| Property | Type | Semantics |
+|---|---|---|
+| `cardTypes` | `CardType[]` | OR within |
+| `labelIds` | `string[]` | OR within |
+| `columnIds` | `string[]` | OR within |
+| `fieldFilters` | `FieldFilter[]` | OR within, AND across |
+| `startDate` | `DateFilter` | AND with `dueDate` |
+| `dueDate` | `DateFilter` | |
+| `done` | `"done" \| "not-done"` | tri-state; absent = any |
+
+Predicates AND across properties. A label filter uses **AND** semantics: a card
+must carry *every* selected label.
+
+**Deliberately absent: title, description, comments.** Those are searchable
+but not filterable, and omitting the keys makes that structurally impossible
+rather than a rule to remember. Text custom fields are likewise not filterable;
+`preset_list` fields are (that is what backs "Priority").
+
+An unknown `fieldId` — or a field whose `type` is not one of the seven
+`FieldType` values — is treated as **inert**: it matches rather than excluding
+everything. Labels and fields get deleted; a stale filter must not blank the
+board.
+
+### 4.12 `UserProfile`
 
 ```jsonc
 { "id": "…", "name": "…", "email": "…", "picture": "https://…" }
@@ -334,6 +386,10 @@ coerces any historical or malformed input into a valid `Board`.
 | `columns[].cardIds` not an array | `[]` |
 | `Card.type` missing | `"task"` |
 | `customFieldValues` (legacy key) | migrated to `boardFieldValues` |
+| `savedViews` missing / not an array | `[]` |
+| `savedViews[]` entry missing `id`, `name` or `filter` | entry dropped |
+| `savedViews[]` blank `name` | entry dropped |
+| duplicate `savedViews` name or `id` | first wins, rest dropped |
 | Malformed JSON | empty board, **not** an exception |
 | `id` / `createdAt` / `updatedAt` missing | generated / `Date.now()` |
 
@@ -373,9 +429,17 @@ Computed on read, never persisted:
 | Card column | `buildColumnIndex(board)` | Reverse index from `cardIds` |
 | Card is done | `isCardInDoneColumn` | Column ∈ `doneColumnIds` |
 | Counts by type | `countByType` | Grouped for the sidebar |
+| Search haystack | `searchHaystack` (internal) | title + tag-stripped description + label **names** + type **label** |
+| Visible cards | `visibleCardIds` | Search AND filter; `null` when neither narrows (render fast path) |
 
 Storing these would create a denormalisation that can drift. They are cheap to
 compute and derived deterministically instead.
+
+> **Search and filter state are session-only.** The active query and the active
+> filter live in `src/state/viewState.tsx`, never in the board file. Only an
+> explicitly saved *view* is persisted (see §4.10). This is deliberate: baking a
+> transient view into the authoritative document would be a bug class of its
+> own, and it would make the file differ from the data the user last edited.
 
 ---
 

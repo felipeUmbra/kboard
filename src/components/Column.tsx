@@ -15,9 +15,20 @@ interface Props {
   column: ColumnModel;
   board: Board;
   onOpenCard: (card: CardModel) => void;
+  /**
+   * Cards to render, or null for "all of them".
+   *
+   * Filtering happens HERE, at render time, and `column.cardIds` is never
+   * mutated. That array is the authoritative order and the thing that gets
+   * persisted to Drive; mutating it for a transient view would destroy the
+   * ordering the moment the user cleared the filter.
+   */
+  visibleCardIds?: Set<string> | null;
+  /** Total cards in the column before filtering, for the "n of m" count. */
+  totalCount?: number;
 }
 
-export function Column({ column, board, onOpenCard }: Props) {
+export function Column({ column, board, onOpenCard, visibleCardIds = null, totalCount }: Props) {
   const ctx = useBoard();
   const [adding, setAdding] = useState<CardType | null>(null);
   const [draft, setDraft] = useState("");
@@ -26,9 +37,18 @@ export function Column({ column, board, onOpenCard }: Props) {
   const [typeMenuOpen, setTypeMenuOpen] = useState(false);
   const [colMenuOpen, setColMenuOpen] = useState(false);
 
-  const sortableItems = column.cardIds;
+  // `sortableItems` is the rendered order. When a filter/search is active it is
+  // the subset; otherwise it is everything. The id list handed to
+  // SortableContext is the same array, so dnd-kit's collision maths operates
+  // over what the user can actually see.
+  const sortableItems = visibleCardIds
+    ? column.cardIds.filter((id) => visibleCardIds.has(id))
+    : column.cardIds;
   const isEmpty = sortableItems.length === 0;
   const isDone = board.doneColumnIds.includes(column.id);
+  const shown = sortableItems.length;
+  const total = totalCount ?? column.cardIds.length;
+  const isFiltered = total > shown;
 
   const { setNodeRef, isOver } = useDroppable({ id: `column:${column.id}` });
 
@@ -75,7 +95,12 @@ export function Column({ column, board, onOpenCard }: Props) {
           >
             {isDone && <span className="kanban-column__done-dot" title="Done column" />}
             {column.name}
-            <span className="kanban-column__count">{" (" + sortableItems.length + ")"}</span>
+            {/* "n" when unfiltered, "n of m" when a search or filter is hiding
+                cards — otherwise a column silently looking empty reads as data
+                loss rather than as a view. */}
+            <span className="kanban-column__count">
+              {isFiltered ? ` (${shown} of ${total})` : ` (${shown})`}
+            </span>
           </h2>
         )}
         <div style={{ display: "flex", gap: 4, position: "relative" }}>

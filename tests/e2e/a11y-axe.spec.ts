@@ -115,6 +115,28 @@ test.describe("axe-core (Sprint 4.1)", () => {
     test.info().annotations.push({ type: "axe", description: summariseAxeResults(results) });
   });
 
+  test("search and filter toolbar has no violations", async ({ page }) => {
+    await installFakesOnPage(page);
+    const bp = new BoardPage(page);
+    await bp.login();
+    await bp.createBoard(`Axe toolbar ${uniqueId()}`);
+    await bp.addCard("", "Axe searchable card", "task");
+
+    // The search input, the trigger, and an active chip all present at once —
+    // the three states that differ visually and for assistive tech.
+    await page.locator('[data-testid="search-input"]').fill("searchable");
+    await page.locator('[data-testid="filter-trigger"]').click();
+    const menu = page.locator('[data-testid="filter-menu"]');
+    await expect(menu).toBeVisible();
+    // Tick a control so the menu is exercised with an active filter, which
+    // renders the chips row and the badge.
+    await page.locator('[data-testid="filter-type-task"]').check();
+    await expect(page.locator('[data-testid="filter-chips"]')).toBeVisible();
+
+    const results = await expectNoAxeViolations(page, { label: "search/filter toolbar" });
+    test.info().annotations.push({ type: "axe", description: summariseAxeResults(results) });
+  });
+
   test("card editor modal has no violations", async ({ page }) => {
     await installFakesOnPage(page);
     const bp = new BoardPage(page);

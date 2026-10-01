@@ -903,4 +903,62 @@
   border: 2px solid var(--color-accent);
   border-radius: 0 0 var(--radius-md) 0;
 }
+
+/* ═══ Board toolbar (search + filter) ═══════════════════════════
+   On a phone the filter menu becomes a bottom sheet rather than a
+   popover: a 360px popover anchored to a button in a toolbar is
+   cramped and its lower options fall off-screen. The sheet is
+   full-width, scrolls internally, and respects the safe-area inset
+   so it never sits under the home indicator. */
+
+.board-toolbar {
+  padding: var(--space-2) var(--space-3);
+  gap: var(--space-2);
+}
+
+/* The search input takes the full first row; the filter trigger wraps
+   beneath it rather than competing for a 360px line. */
+.search-bar {
+  flex: 1 1 100%;
+  max-width: none;
+}
+
+@media (max-width: 640px) {
+  .filter-menu {
+    position: fixed;
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    max-width: none;
+    /* Cap at most of the viewport so the header stays visible and the
+       user can always see what they are filtering. */
+    max-height: 82vh;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    border-bottom: 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    animation: filter-sheet-in var(--motion-base) cubic-bezier(0.2, 0, 0.2, 1);
+  }
+
+  /* The footer is sticky so "Done" is reachable without scrolling to the
+     bottom of a long option list. */
+  .filter-menu__footer {
+    position: sticky;
+    bottom: 0;
+    background: var(--color-surface);
+    border-top: 1px solid var(--color-border);
+  }
+}
+
+@keyframes filter-sheet-in {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .filter-menu {
+    animation: none;
+  }
+}
  

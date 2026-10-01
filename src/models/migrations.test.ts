@@ -208,6 +208,75 @@ describe("normalizeBoard", () => {
       expect(board.doneColumnIds).toEqual(["c1", "c2"]);
     });
 
+    // ─── savedViews ───────────────────────────────────────────────
+    // Per-entry validation lives in `normalizeSavedViews`; these cases assert
+    // that `normalizeBoard` wires it in and degrades rather than throwing.
+
+    it("defaults savedViews to an empty array when absent", () => {
+      expect(normalizeBoard({}).savedViews).toEqual([]);
+    });
+
+    it("defaults savedViews to an empty array when not an array", () => {
+      expect(normalizeBoard({ savedViews: "nope" }).savedViews).toEqual([]);
+      expect(normalizeBoard({ savedViews: { a: 1 } }).savedViews).toEqual([]);
+    });
+
+    it("keeps valid savedViews in order", () => {
+      const board = normalizeBoard({
+        savedViews: [
+          { id: "v1", name: "Bugs", filter: { cardTypes: ["task"] } },
+          { id: "v2", name: "Urgent", filter: { done: "done" } },
+        ],
+      });
+      expect(board.savedViews?.map((v) => v.name)).toEqual(["Bugs", "Urgent"]);
+    });
+
+    it("drops malformed savedViews entries but keeps the good ones", () => {
+      const board = normalizeBoard({
+        savedViews: [
+          { id: "v1", name: "Keep", filter: {} },
+          null,
+          { name: "No id" },
+          { id: "v2", filter: {} },
+          { id: "v3", name: "  ", filter: {} },
+          { id: "v4", name: "No filter" },
+        ],
+      });
+      expect(board.savedViews?.map((v) => v.name)).toEqual(["Keep"]);
+    });
+
+    it("resolves duplicate savedView names first-wins", () => {
+      const board = normalizeBoard({
+        savedViews: [
+          { id: "v1", name: "Bugs", filter: {} },
+          { id: "v2", name: "bugs", filter: {} },
+        ],
+      });
+      expect(board.savedViews?.map((v) => v.id)).toEqual(["v1"]);
+    });
+
+    it("drops duplicate savedView ids", () => {
+      const board = normalizeBoard({
+        savedViews: [
+          { id: "same", name: "A", filter: {} },
+          { id: "same", name: "B", filter: {} },
+        ],
+      });
+      expect(board.savedViews?.map((v) => v.name)).toEqual(["A"]);
+    });
+
+    it("stamps missing savedView timestamps", () => {
+      const board = normalizeBoard({ savedViews: [{ id: "v", name: "A", filter: {} }] });
+      expect(board.savedViews?.[0].createdAt).toBeGreaterThan(0);
+      expect(board.savedViews?.[0].updatedAt).toBeGreaterThan(0);
+    });
+
+    it("does not throw on a wholly malformed board that only has savedViews", () => {
+      expect(() =>
+        normalizeBoard({ savedViews: [undefined, 0, "", [], { id: 1 }] }),
+      ).not.toThrow();
+    });
+
     it("detects a done column regardless of case or padding", () => {
       const board = normalizeBoard({
         columns: [
