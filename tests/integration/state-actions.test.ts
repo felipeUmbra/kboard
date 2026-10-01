@@ -18,6 +18,12 @@ import {
   removeColumn,
   moveColumn,
 } from "../../src/state/actions";
+import {
+  saveView,
+  updateView,
+  renameView,
+  deleteView,
+} from "../../src/state/savedViewActions";
 
 function makeBoard(): Board {
   return normalizeBoard({
@@ -221,6 +227,128 @@ describe("moveCard", () => {
 
     const next = moveCard(board, ids[0], "col-1", 2);
     expect(next.columns[0].cardIds[2]).toBe(ids[0]);
+  });
+
+  // Card order is the persisted thing a filter could corrupt, so pin the
+  // behaviour a filtered drag depends on: dropping ON a visible card inserts
+  // at that card's absolute index, and hidden siblings do not shift it.
+  // Verified against dnd-kit's arrayMove before these were written.
+  it("a drop onto a visible card is index-correct with hidden siblings present", () => {
+    let board = makeBoard();
+    for (const [title, type] of [
+      ["A", "task"],
+      ["B", "epic"],
+      ["C", "task"],
+      ["D", "task"],
+    ] as const) {
+      ({ board } = addCard(board, "col-1", title, type));
+    }
+    const [a, b, c, d] = board.columns[0].cardIds;
+
+    // Filter hides B (epic). Visible order is A, C, D; stored is A, B, C, D.
+    const next = moveCard(board, d, "col-1", board.columns[0].cardIds.indexOf(c));
+
+    // D sits immediately before C in the stored order, exactly where the user
+    // dropped it relative to the card they aimed at.
+    expect(next.columns[0].cardIds).toEqual([a, b, d, c]);
+  });
+
+  it("dropping on the last visible card appends correctly despite hidden cards", () => {
+    let board = makeBoard();
+    for (const [title, type] of [
+      ["A", "task"],
+      ["B", "epic"],
+      ["C", "task"],
+    ] as const) {
+      ({ board } = addCard(board, "col-1", title, type));
+    }
+    const ids = board.columns[0].cardIds;
+
+    // Drag A onto C (the last visible card). C's absolute index is 2, and A
+    // is removed before the splice, so A lands last.
+    const next = moveCard(board, ids[0], "col-1", ids.indexOf(ids[2]));
+    expect(next.columns[0].cardIds).toEqual([ids[1], ids[2], ids[0]]);
+  });
+});
+
+// ─── Saved views ──────────────────────────────────────────────────────
+//
+// Persistence is the whole point of a saved view, so these go through the
+// JSON round-trip that Drive actually performs rather than trusting the
+// in-memory shape.
+describe("saved views persistence", () => {
+  /** Simulate the Drive save/load cycle. */
+  const roundTrip = (b: Board): Board =>
+    normalizeBoard(JSON.parse(JSON.stringify(b)) as unknown);
+
+  it("survives a Drive round-trip", () => {
+    const { board: saved, viewId } = saveView(makeBoard(), "Bugs", {
+      cardTypes: ["task"],
+    });
+    expect(viewId).not.toBeNull();
+
+    const loaded = roundTrip(saved);
+    expect(loaded.savedViews).toHaveLength(1);
+    expect(loaded.savedViews![0]).toMatchObject({
+      id: viewId,
+      name: "Bugs",
+      filter: { cardTypes: ["task"] },
+    });
+  });
+
+  it("keeps multiple views in order across a round-trip", () => {
+    let board = makeBoard();
+    board = saveView(board, "First", { cardTypes: ["task"] }).board;
+    board = saveView(board, "Second", { done: "done" }).board;
+
+    expect(roundTrip(board).savedViews!.map((v) => v.name)).toEqual([
+      "First",
+      "Second",
+    ]);
+  });
+
+  it("an updated filter survives a round-trip", () => {
+    const { board: saved, viewId } = saveView(makeBoard(), "Bugs", {
+      cardTypes: ["task"],
+    });
+    const updated = updateView(saved, viewId!, { cardTypes: ["epic"] });
+
+    expect(roundTrip(updated).savedViews![0].filter).toEqual({ cardTypes: ["epic"] });
+  });
+
+  it("a renamed view survives a round-trip", () => {
+    const { board: saved, viewId } = saveView(makeBoard(), "Old", {});
+    const r = renameView(saved, viewId!, "New");
+
+    expect(r.error).toBeNull();
+    expect(roundTrip(r.board).savedViews![0].name).toBe("New");
+  });
+
+  it("a deleted view does not come back", () => {
+    const { board: saved, viewId } = saveView(makeBoard(), "Temp", {});
+    expect(roundTrip(deleteView(saved, viewId!)).savedViews).toEqual([]);
+  });
+
+  it("refuses a duplicate name and leaves the persisted list untouched", () => {
+    const { board: saved } = saveView(makeBoard(), "Bugs", {});
+    const dup = saveView(saved, "BUGS", {});
+
+    expect(dup.viewId).toBeNull();
+    expect(dup.error).toMatch(/already exists/i);
+    expect(roundTrip(dup.board).savedViews).toHaveLength(1);
+  });
+
+  it("uniqueness is enforced case-insensitively after a round-trip", () => {
+    const { board: saved } = saveView(makeBoard(), "Bugs", {});
+    // Re-load first: the guard must work against what Drive returns, not just
+    // the in-memory array.
+    expect(saveView(roundTrip(saved), "bugs", {}).viewId).toBeNull();
+  });
+
+  it("a board with no savedViews key still loads with an empty list", () => {
+    const legacy = normalizeBoard({ id: "b1", name: "Old" });
+    expect(legacy.savedViews).toEqual([]);
+    expect(saveView(legacy, "First", {}).viewId).not.toBeNull();
   });
 });
 

@@ -62,6 +62,15 @@ export {
   removePresetOptionForType,
 } from "./typeActions";
 
+export {
+  saveView,
+  updateView,
+  renameView,
+  deleteView,
+  findView,
+  type SaveViewResult,
+} from "./savedViewActions";
+
 /** Placeholder to keep import path stable; not used. */
 export function closeBoardActions(): void {
   /* no-op */

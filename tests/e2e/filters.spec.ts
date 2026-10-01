@@ -26,6 +26,40 @@ async function closeMenu(page: Page) {
   await expect(page.locator(menu)).toHaveCount(0);
 }
 
+/**
+ * Move a card to another column, using whichever cross-column gesture the
+ * current viewport supports.
+ *
+ * Desktop and tablet render every column side by side, so the destination has
+ * real geometry. Mobile renders ONE column at a time and offers the
+ * `MobileColumnTargets` overlay instead — `dragCardToColumn` would time out
+ * there waiting for a bounding box that never exists.
+ */
+async function moveCardToColumn(bp: BoardPage, cardTitle: string, toColumnName: string) {
+  if (await bp.isMobileView()) {
+    await bp.dragCardToMobileColumn(cardTitle, toColumnName);
+  } else {
+    await bp.dragCardToColumn(cardTitle, toColumnName);
+  }
+}
+
+/**
+ * Cards inside one named column.
+ *
+ * Desktop and tablet render every column, so the column element scopes the
+ * query. Mobile renders ONE column at a time and `selectColumnTab` switches to
+ * it — but the rail strip ALSO matches the column name, so scoping to the
+ * `.kanban-column` element there would pick up the wrong thing (or nothing).
+ * Select the tab first and query the cards directly instead.
+ */
+async function cardsIn(bp: BoardPage, columnName: string) {
+  if (await bp.isMobileView()) {
+    await bp.selectColumnTab(columnName);
+    return bp.page.locator(sel.card);
+  }
+  return bp.page.locator(sel.column).filter({ hasText: columnName }).locator(sel.card);
+}
+
 test.describe("Filters", () => {
   test("filters by card type and clears", async ({ page }) => {
     const bp = new BoardPage(page);
@@ -427,5 +461,147 @@ test.describe("Filters", () => {
 
     await expect(page.locator(badge)).toHaveCount(0);
     await expect(page.locator(sel.card)).toHaveCount(1);
+  });
+
+  // ─── Drag and drop under an active filter ────────────────────────────
+  //
+  // The plan flagged this as a corruption risk: `column.cardIds` holds
+  // absolute indices, so it seemed that a drop index taken from the VISIBLE
+  // list would land in the wrong place once cards were hidden.
+  //
+  // It was measured instead, and the risk does not materialise.
+  // KanbanDndContext resolves a drop on a card as that card's index in the
+  // FULL column, and `moveCard` strips the dragged card before splicing at
+  // that index — so "sit where that visible card sits" is index-correct
+  // regardless of how many hidden siblings sit between them. A filter hides
+  // cards; it does not renumber the survivors relative to each other.
+  //
+  // These tests are therefore a REGRESSION GUARD, not a bug reproduction:
+  // they pin the behaviour we verified so a future change to either
+  // `moveCard` or the drop resolution cannot silently corrupt card order.
+  // Verified against `arrayMove` (dnd-kit's own semantics) across every
+  // filtered same-column gesture before these were written.
+
+  test("a filtered card keeps its relative order after another is moved", async ({
+    page,
+  }) => {
+    const bp = new BoardPage(page);
+    await installFakesOnPage(page);
+    await bp.login();
+    await bp.createBoard("DnD order");
+    // Create the destination BEFORE filtering: adding a column mid-test
+    // re-renders the board and the drag gesture is timing-sensitive.
+    await bp.addColumn("Archive");
+    await bp.addCard("", "Alpha task", "task");
+    await bp.addCard("", "Beta epic", "epic");
+    await bp.addCard("", "Gamma task", "task");
+    await bp.addCard("", "Delta task", "task");
+
+    // Hide the epic, so the visible order is Alpha, Gamma, Delta while the
+    // stored order is Alpha, Beta, Gamma, Delta.
+    await openMenu(page);
+    await page.locator('[data-testid="filter-type-task"]').check();
+    await closeMenu(page);
+
+    await expect(page.locator(sel.card)).toHaveCount(3);
+
+    // Move Alpha into Archive, leaving the filtered list behind.
+    await moveCardToColumn(bp, "Alpha task", "Archive");
+    const inArchive = await cardsIn(bp, "Archive");
+    await expect(inArchive).toHaveCount(1);
+    await expect(inArchive.first()).toContainText("Alpha task");
+
+    await page.locator(clearAll).click();
+
+    // After clearing the filter the full stored order must be intact: the
+    // three remaining cards keep their original relative order.
+    const todo = await cardsIn(bp, "To do");
+    await expect(todo).toHaveCount(3);
+    await expect(todo.nth(0)).toContainText("Beta epic");
+    await expect(todo.nth(1)).toContainText("Gamma task");
+    await expect(todo.nth(2)).toContainText("Delta task");
+  });
+
+  test("moving a card while filtered survives a reload", async ({ page }) => {
+    const bp = new BoardPage(page);
+    await installFakesOnPage(page);
+    await bp.login();
+    await bp.createBoard("DnD persist");
+    await bp.addColumn("Archive");
+    await bp.addCard("", "Alpha task", "task");
+    await bp.addCard("", "Beta epic", "epic");
+    await bp.addCard("", "Gamma task", "task");
+
+    await openMenu(page);
+    await page.locator('[data-testid="filter-type-task"]').check();
+    await closeMenu(page);
+    await expect(page.locator(sel.card)).toHaveCount(2);
+
+    await moveCardToColumn(bp, "Gamma task", "Archive");
+    const archiveCards = await cardsIn(bp, "Archive");
+    await expect(archiveCards).toHaveCount(1);
+    await expect(archiveCards.first()).toContainText("Gamma task");
+
+    // Board saves are DEBOUNCED (600ms). Wait past the debounce, then reload
+    // so the document comes back from Drive rather than from memory:
+    // column.cardIds is what is persisted, so a clean reload is the only
+    // proof that the stored order was not corrupted.
+    await page.waitForTimeout(1_500);
+    await bp.gotoBoards();
+    await page.locator(sel.syncButton).click();
+    await expect(page.locator(sel.boardCard).filter({ hasText: "DnD persist" })).toBeVisible();
+    await bp.openBoard("DnD persist");
+    await expect(page.locator(sel.card).first()).toBeVisible();
+
+    const archiveAfter = await cardsIn(bp, "Archive");
+    await expect(archiveAfter).toHaveCount(1);
+    await expect(archiveAfter.first()).toContainText("Gamma task");
+
+    const todo = await cardsIn(bp, "To do");
+    await expect(todo).toHaveCount(2);
+    await expect(todo.nth(0)).toContainText("Alpha task");
+    await expect(todo.nth(1)).toContainText("Beta epic");
+  });
+
+  test("the mobile drop target shows the filtered count, not the total", async ({
+    page,
+  }) => {
+    const bp = new BoardPage(page);
+    await installFakesOnPage(page);
+    await bp.login();
+    await bp.createBoard("Mobile counts");
+    await bp.addCard("", "Alpha task", "task");
+    await bp.addCard("", "Beta epic", "epic");
+    await bp.addCard("", "Gamma task", "task");
+
+    // The overlay only exists in the mobile layout — BoardView renders it
+    // inside the mobile branch, and desktop/tablet have no column rail.
+    test.skip(!(await bp.isMobileView()), "mobile cross-column targets only");
+
+    await bp.expandSidebar();
+    await bp.collapseSidebar();
+
+    await openMenu(page);
+    await page.locator('[data-testid="filter-type-task"]').check();
+    await closeMenu(page);
+    await expect(page.locator(sel.card)).toHaveCount(2);
+
+    // MobileColumnTargets only renders while a drag is active, so start one.
+    // The overlay's counts must reflect what will actually be visible in the
+    // destination (2 tasks), not the column's stored total (3 cards).
+    const card = page.locator(sel.card).filter({ hasText: "Alpha task" }).first();
+    const box = await card.boundingBox();
+    expect(box).not.toBeNull();
+    await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box!.x + box!.width / 2 + 12, box!.y + box!.height / 2 + 12, {
+      steps: 5,
+    });
+
+    const target = page.locator('.mobile-move-target').first();
+    await expect(target).toBeVisible();
+    await expect(target.locator(".mobile-move-target__count")).toHaveText("(2)");
+
+    await page.mouse.up();
   });
 });

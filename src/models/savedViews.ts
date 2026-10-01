@@ -5,8 +5,8 @@
 // nothing here needs to resolve ids across boards.
 //
 // Every function is total and returns a new array — nothing mutates in place,
-// and nothing throws on malformed input. The mutation + persistence half lives
-// in `src/state/savedViewActions.ts`.
+// and nothing throws on malformed input. The board-shaped wrapper that applies
+// these to `Board.savedViews` lives in `src/state/savedViewActions.ts`.
 
 import { cryptoRandomId } from "./migrations";
 import type { FilterState, SavedView } from "./types";

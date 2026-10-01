@@ -18,6 +18,7 @@ import * as cardActions from "../../src/state/cardActions";
 import * as typeActions from "../../src/state/typeActions";
 import * as fieldActions from "../../src/state/fieldActions";
 import * as boardColumnActions from "../../src/state/actions";
+import * as savedViewActions from "../../src/state/savedViewActions";
 import { makeBoard } from "./helpers/board";
 import { normalizeBoard } from "../../src/models/migrations";
 
@@ -75,6 +76,12 @@ describe("actionsIndex barrel", () => {
     "addPresetOptionForType",
     "updatePresetOptionForType",
     "removePresetOptionForType",
+    // savedViewActions.ts
+    "saveView",
+    "updateView",
+    "renameView",
+    "deleteView",
+    "findView",
     // local
     "closeBoardActions",
   ] as const;
@@ -98,7 +105,8 @@ describe("actionsIndex barrel", () => {
         (boardColumnActions as Record<string, unknown>)[name] ??
         (cardActions as Record<string, unknown>)[name] ??
         (fieldActions as Record<string, unknown>)[name] ??
-        (typeActions as Record<string, unknown>)[name];
+        (typeActions as Record<string, unknown>)[name] ??
+        (savedViewActions as Record<string, unknown>)[name];
       expect(origin, `${name} is not exported by any defining module`).toBeDefined();
       expect(
         (actionsIndex as Record<string, unknown>)[name],

@@ -961,4 +961,36 @@
     animation: none;
   }
 }
+
+/* Saved views gets the same bottom-sheet treatment as the filter menu: at
+   640px the anchored popover would cover most of the viewport, and a sheet
+   keeps the list and the footer actions both reachable. */
+@media (max-width: 640px) {
+  .saved-views__menu {
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    max-width: none;
+    max-height: 82vh;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    border-bottom: 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    animation: filter-sheet-in var(--motion-base) cubic-bezier(0.2, 0, 0.2, 1);
+  }
+
+  .saved-views__footer {
+    position: sticky;
+    bottom: 0;
+    background: var(--color-surface);
+    border-top: 1px solid var(--color-border);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .saved-views__menu {
+    animation: none;
+  }
+}
  

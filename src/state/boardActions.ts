@@ -6,6 +6,7 @@ import type {
   Card,
   CardType,
   CustomField,
+  FilterState,
   Label,
   PresetOption,
 } from "../models/types";
@@ -54,6 +55,10 @@ import {
   updateCustomField as updateCustomFieldAction,
   updateLabel,
   updatePresetOption as updatePresetOptionAction,
+  saveView as saveViewAction,
+  updateView as updateViewAction,
+  renameView as renameViewAction,
+  deleteView as deleteViewAction,
   type FieldScope,
 } from "./actionsIndex";
 import { ALL_CARD_TYPES, CARD_TYPE_META } from "../models/cardTypeMeta";
@@ -185,6 +190,14 @@ export type BoardActions = {
   setCardTypeEnabled: (type: CardType, enabled: boolean) => void;
   setCardTypeLabel: (type: CardType, label: string) => void;
   setDoneColumn: (columnId: string, isDone: boolean) => void;
+  /** Create a new saved view from the given filter. Returns the new view's
+   *  id, or an error message when the name is rejected. */
+  saveView: (name: string, filter: FilterState) => { viewId: string | null; error: string | null };
+  /** Overwrite an existing saved view's filter (the "Update view" action). */
+  updateView: (viewId: string, filter: FilterState) => void;
+  /** Rename a saved view. Returns an error message when rejected. */
+  renameView: (viewId: string, name: string) => string | null;
+  deleteView: (viewId: string) => void;
 };
 
 export function buildActions(deps: ActionDeps): BoardActions {
@@ -389,6 +402,34 @@ export function buildActions(deps: ActionDeps): BoardActions {
       mutate((b) => setCardTypeLabelAction(b, type, label)),
     setDoneColumn: (columnId, isDone) =>
       mutate((b) => setDoneColumnAction(b, columnId, isDone)),
+    // Saved views. `saveView` and `renameView` surface a validation message
+    // instead of throwing, because the caller needs to show it next to the name
+    // input and announce it — the same contract `addLabel` uses by returning
+    // null on a bad name.
+    saveView: (name, filter) => {
+      let out: { viewId: string | null; error: string | null } = {
+        viewId: null,
+        error: null,
+      };
+      mutate((b) => {
+        const r = saveViewAction(b, name, filter);
+        out = { viewId: r.viewId, error: r.error };
+        return r.board;
+      });
+      return out;
+    },
+    updateView: (viewId, filter) =>
+      mutate((b) => updateViewAction(b, viewId, filter)),
+    renameView: (viewId, name) => {
+      let error: string | null = null;
+      mutate((b) => {
+        const r = renameViewAction(b, viewId, name);
+        error = r.error;
+        return r.board;
+      });
+      return error;
+    },
+    deleteView: (viewId) => mutate((b) => deleteViewAction(b, viewId)),
   };
 }
 

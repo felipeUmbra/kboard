@@ -1445,3 +1445,162 @@
   font-size: var(--text-sm);
 }
 
+/* ─── Saved views ─── */
+
+.saved-views {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  /* Never shrink: the toolbar is nowrap so that the filter trigger stays put
+     (see .board-toolbar). If this could shrink, the Views button would drift
+     instead and take the anchored menu with it. */
+  flex: 0 0 auto;
+}
+
+.saved-views__menu {
+  /* Same anchoring contract as .filter-menu — fixed, sized and clamped to the
+     viewport, never stretched by the toolbar's contents. */
+  position: fixed;
+  z-index: var(--z-modal);
+  display: flex;
+  flex-direction: column;
+  top: var(--space-4);
+  right: var(--space-4);
+  width: min(340px, calc(100vw - 32px));
+  max-height: min(70vh, 560px);
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+.saved-views__empty {
+  margin: 0;
+  padding: var(--space-4);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.saved-views__list {
+  margin: 0;
+  padding: var(--space-2);
+  list-style: none;
+  overflow-y: auto;
+}
+
+.saved-views__list li {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-1);
+  border-radius: var(--radius-md);
+}
+
+.saved-views__list li:hover,
+.saved-views__list li:focus-within {
+  background: var(--color-surface-hover);
+}
+
+.saved-views__item {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: var(--space-2);
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  color: inherit;
+}
+
+.saved-views__item[data-active="true"] {
+  background: var(--color-accent-soft);
+}
+
+.saved-views__item-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.saved-views__item-meta {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.saved-views__rename,
+.saved-views__delete {
+  align-self: center;
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-xs);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--color-text-muted);
+}
+
+.saved-views__rename:hover,
+.saved-views__delete:hover {
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+}
+
+.saved-views__delete:hover {
+  color: var(--color-danger);
+}
+
+.saved-views__footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+.saved-views__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+}
+
+.saved-views__label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.saved-views__input {
+  padding: var(--space-2);
+  font: inherit;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+}
+
+.saved-views__input:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.saved-views__error {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+}
+
+.saved-views__form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
