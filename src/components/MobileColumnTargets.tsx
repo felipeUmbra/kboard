@@ -61,10 +61,15 @@ function ColumnTarget({
 export function MobileColumnTargets({
   board,
   currentColumnId,
+  visibleCardIds = null,
 }: {
   board: Board;
   /** The currently-expanded mobile column — dimmed in the overlay. */
   currentColumnId: string | undefined;
+  /** The active search/filter result set, or null when nothing is narrowed.
+   *  When present, each target shows how many cards will actually be visible
+   *  there rather than the unfiltered `column.cardIds.length`. */
+  visibleCardIds?: Set<string> | null;
 }) {
   // Track the drag lifecycle locally so the overlay only appears while
   // a card is being dragged. useDndMonitor is scoped to the enclosing
@@ -88,7 +93,14 @@ export function MobileColumnTargets({
           key={col.id}
           columnId={col.id}
           name={col.name}
-          cardCount={col.cardIds.length}
+          // Under an active filter the unfiltered count would overstate what
+          // the user will see in the destination, so show the filtered count.
+          // Null means "not filtering" — fall back to the raw length.
+          cardCount={
+            visibleCardIds
+              ? col.cardIds.filter((id) => visibleCardIds.has(id)).length
+              : col.cardIds.length
+          }
           isCurrent={col.id === currentColumnId}
         />
       ))}

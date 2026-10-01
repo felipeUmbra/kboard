@@ -619,6 +619,85 @@ describe("field routing", () => {
   });
 });
 
+// The saved-view actions are the one place where `mutate` has to BOTH capture a
+// return value and commit the new board. A `mutate` that only captured the id
+// would look correct to the caller and silently drop the change, so these
+// assert on the resulting board as well as the return value.
+describe("saved view actions", () => {
+  it("saveView commits the view and returns its id", () => {
+    const h = harness();
+    const result = h.actions.saveView("Bugs", { cardTypes: ["task"] });
+
+    expect(result.error).toBeNull();
+    expect(result.viewId).not.toBeNull();
+    expect(h.current().savedViews).toHaveLength(1);
+    expect(h.current().savedViews![0]).toMatchObject({
+      id: result.viewId,
+      name: "Bugs",
+      filter: { cardTypes: ["task"] },
+    });
+  });
+
+  it("saveView reports a duplicate name and leaves the board unchanged", () => {
+    const h = harness();
+    h.actions.saveView("Bugs", {});
+    const before = h.current().savedViews!.length;
+    const result = h.actions.saveView("bugs", {});
+
+    expect(result.viewId).toBeNull();
+    expect(result.error).toMatch(/already exists/i);
+    expect(h.current().savedViews).toHaveLength(before);
+  });
+
+  it("updateView rewrites the filter in place", () => {
+    const h = harness();
+    const { viewId } = h.actions.saveView("Bugs", { cardTypes: ["task"] });
+
+    h.actions.updateView(viewId!, { done: "done" });
+    expect(h.current().savedViews).toHaveLength(1);
+    expect(h.current().savedViews![0]).toMatchObject({
+      id: viewId,
+      name: "Bugs",
+      filter: { done: "done" },
+    });
+  });
+
+  it("renameView renames and returns null on success", () => {
+    const h = harness();
+    const { viewId } = h.actions.saveView("Old", {});
+
+    expect(h.actions.renameView(viewId!, "New")).toBeNull();
+    expect(h.current().savedViews![0].name).toBe("New");
+  });
+
+  it("renameView reports a clash and keeps the old name", () => {
+    const h = harness();
+    const first = h.actions.saveView("A", {}).viewId!;
+    h.actions.saveView("B", {});
+
+    expect(h.actions.renameView(first, "b")).toMatch(/already exists/i);
+    expect(h.current().savedViews!.map((v) => v.name)).toEqual(["A", "B"]);
+  });
+
+  it("deleteView removes the view", () => {
+    const h = harness();
+    const keep = h.actions.saveView("Keep", {}).viewId!;
+    const drop = h.actions.saveView("Drop", {}).viewId!;
+
+    h.actions.deleteView(drop);
+    expect(h.current().savedViews!.map((v) => v.id)).toEqual([keep]);
+  });
+
+  it("is a no-op for unknown view ids", () => {
+    const h = harness();
+    expect(() => {
+      h.actions.updateView("ghost", {});
+      h.actions.deleteView("ghost");
+    }).not.toThrow();
+    expect(h.actions.renameView("ghost", "X")).toMatch(/no longer exists/i);
+  });
+});
+
 describe("card type and done column settings", () => {
   it("toggles a card type's enabled flag", () => {
     const h = harness();

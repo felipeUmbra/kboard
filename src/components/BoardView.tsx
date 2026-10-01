@@ -8,6 +8,7 @@ import { MobileColumnTargets } from "./MobileColumnTargets";
 import { useViewport } from "../hooks/useViewport";
 import { SearchBar } from "./SearchBar";
 import { FilterBar } from "./FilterBar";
+import { SavedViewsMenu } from "./SavedViewsMenu";
 import { Toast, useToast } from "./Toast";
 import { visibleCardIds as computeVisible } from "../models/filters";
 import type { AddCardDirection } from "../state/cardActions";
@@ -222,11 +223,15 @@ function BoardViewInner({ onBackToList }: { onBackToList: () => void }) {
         <DndKeyboardHelp id={DND_HELP_ID} />
       </div>
 
-      {/* Search + filter toolbar. Sits between the board header and the
-          columns, full width, and wraps on narrow viewports. */}
+      {/* Search + filter + saved views toolbar. Sits between the board header
+          and the columns, full width. It does NOT wrap: wrapping pushed the
+          filter bar onto a second line on tablet, which dragged the anchored
+          menu down and made its options unclickable. The search box is the
+          only shrinkable child (see .board-toolbar in components.css). */}
       <div className="board-toolbar">
         <SearchBar matchCount={matchCount} totalCount={totalCount} />
         <FilterBar board={b} />
+        <SavedViewsMenu />
       </div>
 
 
@@ -285,6 +290,7 @@ function BoardViewInner({ onBackToList }: { onBackToList: () => void }) {
               <MobileColumnTargets
                 board={b}
                 currentColumnId={b.columns[mobileColumnIndex]?.id}
+                visibleCardIds={visible}
               />
             </KanbanDndProvider>
           </div>
