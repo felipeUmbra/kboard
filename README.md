@@ -224,6 +224,48 @@ by the Playwright matrix instead, since a jsdom render proves little that a
 real browser does not. Reaching 100% meant fixing real defects rather than
 writing tests around them: see the notes in `vitest.config.ts`.
 
+### Defect register
+
+Gates catch regressions in behaviour that is already asserted. They cannot
+report a defect nobody has written a test about — and this repo has had one
+sitting in plain sight: a stylesheet import order that made every
+`@media (max-width)` override in the app inert. It was present from the first
+commit, survived ~49 commits, and was found only when a test happened to
+measure it.
+
+So Medium/High product defects get a GitHub issue, always, via the **Defect
+hunt** workflow:
+
+| Trigger | When | What it does |
+|---|---|---|
+| `workflow_dispatch` | After unit tests are green, **before** writing E2E automation for a feature | Exploratory hunt; files what it confirms |
+| `schedule` | Nightly | Backstop, so defects found by nobody still land |
+| `workflow_run` | The E2E suite fails | Triage: product defect or harness problem |
+
+Run it from **Actions → Defect hunt → Run workflow**. `focus` narrows it to
+one area; `base_ref` makes it hunt the diff since that ref, which is the
+highest-signal mode.
+
+Three rules make it a register rather than a suggestion:
+
+- **File it even if you are about to fix it.** Finding and fixing are separate
+  acts. A fixed-but-unregistered defect is a defect that gets reintroduced.
+- **An issue closes only after a retest**, and only QA closes it. A commit
+  that references an issue does not close it — that is what stops "fixed"
+  from quietly meaning "believed".
+- **Never end a run with a Medium/High finding that is neither filed nor
+  explicitly reported as unfilable.**
+
+To find where defects are most likely to be hiding:
+
+```powershell
+python scripts/backfill-candidates.py --top 12
+```
+
+It ranks by churn among files no test names. It is a *where to look* hint, not
+a coverage verdict — the suite drives the UI through selectors, so "no test
+mentions this file" is weak evidence on its own.
+
 ### Known limitations
 
 - **Cross-browser runs are advisory.** Firefox and WebKit smoke suites are
