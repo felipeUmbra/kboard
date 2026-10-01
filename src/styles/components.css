@@ -1,4 +1,4 @@
-﻿/* Component styles. Trello-inspired kanban, card editor, modals. */
+/* Component styles. Trello-inspired kanban, card editor, modals. */
 
 /* ===== Board list cards ===== */
 .board-card {
@@ -1141,12 +1141,38 @@
 .board-toolbar {
   display: flex;
   align-items: flex-start;
+  /* `nowrap`, not `wrap`. This is the fix for the tablet E2E failure and it was
+     measured, not guessed.
+
+     .board-toolbar holds the search box and the filter bar. When a filter is
+     applied the chip row appears and .filter-bar grows taller. With `wrap`, the
+     two toolbar items no longer fit side by side in the space the sidebar
+     leaves (488px on a 768px tablet), so the toolbar REFLOWED and pushed the
+     filter bar onto a second line — trigger y 184 -> 240, measured. The menu
+     is anchored to the trigger, so it moved too, and because the click-away
+     backdrop covers the viewport the relocated checkbox ended up underneath it
+     and became unclickable: applying one filter silently blocked the next.
+
+     Desktop had room to absorb the reflow and mobile is a bottom sheet, so only
+     tablet exposed it. The search box may still shrink; below 640px the
+     responsive rules give it a full line anyway. */
+  flex-wrap: nowrap;
   justify-content: space-between;
   gap: var(--space-3);
-  flex-wrap: wrap;
   padding: var(--space-2) var(--space-4);
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
+}
+
+/* The search box absorbs the squeeze; the filter bar must not, or its contents
+   (trigger, badge, chips) re-wrap and the trigger drifts again. */
+.board-toolbar > .search-bar {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.board-toolbar > .filter-bar {
+  flex: 0 0 auto;
 }
 
 /* ─── Search ─── */
@@ -1220,6 +1246,11 @@
 }
 
 .filter-bar__chips {
+  /* `flex-basis: 100%` gives the chip row its OWN line inside .filter-bar.
+     Without it the chips share the flex line with .filter-bar__controls (they
+     are siblings), and on a narrow viewport that line wraps — which would move
+     the trigger even though the toolbar itself no longer reflows. */
+  flex: 0 0 100%;
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-1);
@@ -1238,6 +1269,8 @@
 }
 
 .filter-bar__note {
+  /* Own line, for the same reason as .filter-bar__chips. */
+  flex: 0 0 100%;
   color: var(--color-text-muted);
   font-size: var(--text-xs);
 }

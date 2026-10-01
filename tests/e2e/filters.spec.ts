@@ -328,7 +328,9 @@ test.describe("Filters", () => {
     await expect(page.locator(menu)).toHaveCount(0);
   });
 
-  test("the menu does not move when a filter is applied", async ({ page }) => {
+  test("applying a filter does not move the trigger or the menu", async ({
+    page,
+  }) => {
     const bp = new BoardPage(page);
     await installFakesOnPage(page);
     await bp.login();
@@ -337,31 +339,33 @@ test.describe("Filters", () => {
     await bp.addCard("", "An epic card", "epic");
 
     await openMenu(page);
+    const trigger = page.locator('[data-testid="filter-trigger"]');
     const menuLocator = page.locator(menu);
-    const firstOption = page.locator('[data-testid="filter-type-task"]');
     const secondOption = page.locator('[data-testid="filter-type-epic"]');
 
-    const menuBefore = await menuLocator.boundingBox();
-    const optionBefore = await secondOption.boundingBox();
-
-    await firstOption.check();
-    // The active-filter chips appear below the trigger once a filter is set.
-    // The menu is `position: fixed` and positioned from the trigger's viewport
-    // rect, so it must NOT be dragged down by the growing container.
+    // Measure the TRIGGER, not just the menu. The trigger is the thing that
+    // used to move: .filter-bar is a wrapping flex row and the chip row is a
+    // SIBLING of .filter-bar__controls, so on a 768px tablet the chips no
+    // longer fitted beside the trigger and the row wrapped — pushing the
+    // trigger down 56px (y 184 -> 240). The menu tracked the trigger, so it
+    // moved too, and because the click-away backdrop covers the viewport the
+    // relocated checkbox ended up under the backdrop and unclickable.
     //
-    // Regression guard: with `position: absolute` it moved 56px on a 768px
-    // tablet, which relocated the next checkbox under the click-away backdrop
-    // and made it unclickable — applying one filter silently blocked the next.
-    await expect(page.locator(chips)).toBeVisible();
-    const menuAfter = await menuLocator.boundingBox();
-    const optionAfter = await secondOption.boundingBox();
-    expect(menuAfter?.y).toBe(menuBefore?.y);
-    expect(optionAfter?.y).toBe(optionBefore?.y);
+    // Asserting the menu alone was NOT enough: an earlier version of this test
+    // passed with the bug present, because the menu is `position: fixed` and
+    // had already been pinned independently of the container.
+    const triggerBefore = (await trigger.boundingBox())?.y;
+    const menuBefore = (await menuLocator.boundingBox())?.y;
 
-    // And the second filter must still be reachable — the practical assertion
-    // that the click-away backdrop is no longer swallowing menu clicks.
-    // Both card types are selected, which is ONE chip ("Type: Task, Epic"):
-    // the badge counts active chips, not active dimensions.
+    await page.locator('[data-testid="filter-type-task"]').check();
+    await expect(page.locator(chips)).toBeVisible();
+
+    expect((await trigger.boundingBox())?.y).toBe(triggerBefore);
+    expect((await menuLocator.boundingBox())?.y).toBe(menuBefore);
+
+    // The practical consequence: a second filter must still be selectable.
+    // Both types selected is ONE chip ("Type: Task, Epic") — the badge counts
+    // active chips, not active dimensions.
     await secondOption.check();
     await expect(page.locator(badge)).toHaveText("1");
     await expect(page.locator(chips)).toContainText("Task, Epic");
