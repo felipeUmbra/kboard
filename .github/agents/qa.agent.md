@@ -54,6 +54,75 @@ still stand on their own.
 - NEVER click a control without first asserting it is actionable (`toBeEnabled()`); a click on a `disabled` button is a silent no-op that later surfaces as an unrelated timeout
 - NEVER rely on a previous test's board/card, or on ambient state left in `localStorage` / `sessionStorage`
 - NEVER claim a flake is fixed when you could not reproduce it. Say what you measured and what you inferred, and keep the two separate
+- **File a GitHub issue for every confirmed Medium/High product defect** — automatically, see **Filing bugs** below for the kboard bands, labels, and commands
+- NEVER file a bug you have not first confirmed is a product defect, and NEVER file a duplicate
+- NEVER file silently: every issue you open or comment on must appear in your final summary with its number and impact band
+- NEVER end a run with a confirmed Medium/High finding that was neither filed nor explicitly reported as unfilable
+
+## Filing bugs
+
+The method — impact bands, the confirm-before-filing rule, dedupe search, and
+the `gh` fallback chain — is in the global agent. This section holds only the
+kboard specifics.
+
+### Impact bands, by example
+
+Judge these against **this** app's core flows: sign in → open/create a board →
+edit a card → drag between columns → changes persist to Drive.
+
+| Band | Definition | Looks like |
+|---|---|---|
+| **High** | Breaks a feature across **all devices** (desktop, tablet, mobile), **or prevents a user from reaching a feature at all** | Board cannot be opened; cards cannot be created on any device; a feature is unreachable everywhere |
+| **Medium** | Breaks **one device feature or form factor only** — tablet only, PWA only, one browser only | Filter menu unusable on tablet only; drag broken on mobile only; install prompt broken only in the PWA build |
+| **Low** | Cosmetic, copy, or a rough edge that does not block a task | Misaligned chip; awkward wording |
+
+**Ask "which devices?" first.** The device scope is what separates Medium from
+High. If you cannot say which devices are affected, the band is not decided yet.
+
+**Sync and data-integrity defects are High** even when reproduced on one device,
+because the data is wrong for that user on every device they next open the board
+on. Note the distinction in the issue: *the symptom* may be tablet-only while
+*the corruption* is not.
+
+### Labels
+
+Check what exists before relying on a label — GitHub drops unrecognised ones
+without error:
+
+```powershell
+gh label list
+gh label create "impact:high" --color B60205 --description "All devices, or a feature is unreachable"
+gh label create "impact:medium" --color FBCA04 --description "One device / form factor only"
+gh label create "area:filter-search" --color 1D76DB --description "Search, filter, saved views"
+```
+
+Use `--body-file`, not an inline body. Multi-line strings are easily mangled in
+PowerShell.
+
+### Before filing, check these kboard-specific traps first
+
+A surprising number of "bugs" here are harness problems, not defects. Rule these
+out before filing:
+
+1. **Stale `dist/`.** CI serves the production build. If a fix "does nothing",
+   run `npx vite build` first — an unbuilt bundle is the single most common
+   false bug in this repo.
+2. **Debounced saves.** Board writes are debounced 600ms. Reading Drive
+   immediately after an edit shows a pre-save document and looks exactly like
+   data loss.
+3. **The service-worker trap.** A mocked-Drive failure that only appears under
+   `CI=true` is usually route interception being bypassed, not a product defect.
+4. **Viewport-specific layout.** Confirm which viewport fails. Tablet-only bugs
+   are real and worth filing; "it fails on my machine" across all viewports is
+   usually a test assumption.
+
+### Env note
+
+`gh` is installed on PATH but **was not authenticated** in the session where this
+section was written (`gh auth status` fails, and neither `GH_TOKEN` nor
+`GITHUB_TOKEN` is set). The fallback is a GitHub MCP tool; if neither is
+available, write the issue body to a file, tell the user where it is, and say
+plainly that you could not file it. Never silently drop a Medium/High finding.
 
 ## Test Isolation — the kboard-specific hazards
 
@@ -193,6 +262,7 @@ When reporting test results:
 
 - List passed/failed/skipped counts per project
 - For failures: spec file, test name, error message, and suspected root cause
+- **For each bug filed: issue number, impact band, title, and whether it was a new issue or a comment on an existing one. If none were filed, say so and why.**
 - For new tests: describe what they cover and any new helpers/fixtures added
 - Always note if any `test.fixme` or `test.skip` was added and why
 - When something could not be reproduced, say so plainly rather than implying the fix was verified
@@ -229,6 +299,7 @@ When reporting test results:
 - **An empty status-check list on a PR is not "still pending".** `pull_request.branches` filters on the BASE branch; a PR targeting `Dev` runs nothing when the filter says `[main]`. `scripts/check-pr-triggers.py` guards this.
 - **Do not re-add `nested-interactive`/`region` to `lighthouserc.json`**, and keep `--color-warning: #9c4f00` unchanged; both were deliberate and the current values pass their gates.
 - **The NVDA/VoiceOver walkthrough in `Docs/ACCESSIBILITY-TESTING.md` has not been executed.** Do not report it as done.
+- **Do not create a throwaway issue to test whether a label exists.** GitHub drops unrecognised labels silently, so the probe succeeds either way and leaves noise in the tracker. Use `gh label list`.
 
 General gotchas not specific to kboard — CI cache guards, brace balance,
 PowerShell quoting, accessibility-check removals — are in the global agent.

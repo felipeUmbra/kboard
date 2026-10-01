@@ -10,6 +10,11 @@ export default defineConfig({
       "tests/unit/**/*.test.ts",
       "tests/unit/**/*.test.tsx",
       "tests/integration/**/*.test.ts",
+      // Phase 5.1 perf measurements. Separate npm script (`npm run test:perf`),
+      // NOT part of the default run or the coverage gate — these assert
+      // generous order-of-magnitude ceilings and print real timings, and
+      // wall-clock numbers do not belong in a pass/fail build gate.
+      "tests/perf/**/*.test.ts",
     ],
     coverage: {
       provider: "v8",

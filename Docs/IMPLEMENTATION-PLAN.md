@@ -11,14 +11,14 @@ actionable: every item names its files and its verification.
 |---|---|
 | **Version** | 0.1.0 |
 | **Status** | v1 feature-complete and verified |
-| **Commits** | 56 |
-| **Tracked files** | 140 |
-| **Unit/integration tests** | 518 passing, 19 files |
+| **Commits** | 80 |
+| **Tracked files** | 186 |
+| **Unit/integration tests** | 762 passing, 25 files |
 | **E2E tests** | 356 collected, 4 Chromium projects (+94 cross-browser smoke); 1 quarantined |
 | **Type errors** | 0 |
 | **Contrast failures** | 0 (all tokens, both themes) |
 | **Hardcoded colour literals** | 0 |
-| **axe-core violations** | 0 (6 surfaces, light + dark) |
+| **axe-core violations** | 0 (8 surfaces, light + dark) |
 | **Coverage** | 100% lines / statements / branches / functions (`src/models/`, `src/state/`) |
 
 ---
@@ -98,6 +98,55 @@ actionable: every item names its files and its verification.
 | **WCAG Sprint 2** — skip link, alt, lang | `src/components/AppShell.tsx` | ✅ |
 | **WCAG Sprint 3** — DnD help, focus, targets | `DndKeyboardHelp.tsx`, `styles/` | ✅ |
 | Colour literal linter | `scripts/lint-color-literals.js` | ✅ |
+
+### Phase 7 — Find: search, filter and saved views
+
+Shipped after Phases 1–6. Full design in
+[`FILTER-SEARCH-SAVED-VIEWS-PLAN.md`](./FILTER-SEARCH-SAVED-VIEWS-PLAN.md);
+flows in [APP-FLOW §11](./APP-FLOW.md#11-filter-search-and-saved-views).
+
+| Item | Files | Status |
+|---|---|---|
+| Free-text search over title, description, labels, parent/child titles | `src/models/filters.ts` | ✅ |
+| Type / label / date-range / done filters, AND-combined | `src/models/filters.ts` | ✅ |
+| Search + filter toolbar, chip row, match-count badge | `src/components/FilterBar.tsx` | ✅ |
+| Filter popover (desktop) and bottom sheet (mobile) | `src/components/FilterMenu.tsx` | ✅ |
+| Saved views: capture, recall, update, delete | `src/models/savedViews.ts`, `src/state/savedViewActions.ts`, `src/components/SavedViewsMenu.tsx` | ✅ |
+| View limits — ≤ 50 per board, names ≤ 60 chars, unique | `src/models/savedViews.ts` | ✅ |
+| `Board.savedViews` persistence + migration | `src/models/migrations.ts` | ✅ |
+| "Nothing matches" empty state with clear-all | `src/views/BoardView.tsx` | ✅ |
+| Toolbar reflow fix (tablet) | `src/styles/components.css` | ✅ |
+| CSS cascade fix — `components.css` before `responsive.css` | `src/main.tsx` | ✅ |
+
+**Two defects found while building this, both worth recording.**
+
+1. *Toolbar reflow.* `flex-wrap: wrap` let an active chip row push the filter bar
+   onto its own row. The popover is anchored to that bar, so it was dragged away
+   from the pointer mid-interaction — and because the transparent backdrop covers
+   the viewport, the checkbox being reached for landed under the backdrop and
+   became unclickable. Applying one filter silently blocked the next.
+2. *Stylesheet cascade.* `src/main.tsx` imported `responsive.css` **before**
+   `components.css`. Their selectors have equal specificity, so source order
+   decided — and `components.css` won, making every `max-width` override in
+   `responsive.css` dead on arrival. Symptom: the mobile filter sheet declared
+   `width: 100%` yet measured 328 px on a 360 px viewport. The `min()` base rule
+   was emitted after the media rule. Fixed by ordering the imports, with a
+   comment at the import site explaining why the order is load-bearing.
+
+**Measured performance** (`tests/perf/filter-perf.test.ts`, 2000-card board,
+asserted against order-of-magnitude ceilings, not golden values):
+
+| Operation | Cost |
+|---|---|
+| `visibleCardIds`, 2000 cards → 111 matches | 16.1 ms |
+| `matchesSearch`, per card | 0.0079 ms |
+| Type filter vs free-text, 2000 cards | 1.8 ms vs 13.4 ms |
+| `htmlToText`, 700 cards | 12.7 ms |
+
+The type filter is ~7× cheaper than free-text because it compares a string
+field; free-text runs `htmlToText` over every rich-text description first.
+That is why the label/type filters stay on the hot path and free-text is
+debounced.
 
 ---
 
@@ -385,7 +434,6 @@ not a default.
 | Multi-select and bulk operations | The main missing ergonomic feature |
 | Recurring cards | Common planning need |
 | Board templates | Onboarding friction |
-| Filters and saved views | Scales past ~500 cards |
 
 ### v3 — Exploratory · not committed
 

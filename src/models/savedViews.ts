@@ -17,6 +17,19 @@ function nameKey(name: string): string {
 }
 
 /**
+ * Maximum saved views per board.
+ *
+ * Every view lives in the board's single Drive JSON file, and that file is
+ * rewritten whole on every save — so views are not free, and the cost lands on
+ * the same write path as every card. A ceiling keeps the worst case bounded
+ * without constraining realistic use.
+ *
+ * This is deliberately a cap and not a quota: it counts what exists, not how
+ * fast it was created, so a slow accumulation never silently blocks a save.
+ */
+export const MAX_SAVED_VIEWS = 50;
+
+/**
  * Validate a proposed view name.
  *
  * Returns `null` when the name is acceptable, otherwise a message suitable for
@@ -39,6 +52,24 @@ export function validateViewName(
   // and are rendered into a <select>-style list, so they need a sane bound.
   if (trimmed.length > 60) return "View names are limited to 60 characters.";
   return null;
+}
+
+/**
+ * Whether another view can be added to a board.
+ *
+ * Separate from `validateViewName` because it is a different concern: the name
+ * is checked when the user types, the cap when they commit. Reporting both at
+ * once would tell someone with an invalid name their board is full.
+ *
+ * `rename` and `update` are unaffected — they do not add a view.
+ */
+export function canAddSavedView(existing: SavedView[]): boolean {
+  return existing.length < MAX_SAVED_VIEWS;
+}
+
+/** Message shown when a board is already at `MAX_SAVED_VIEWS`. */
+export function savedViewLimitMessage(): string {
+  return `This board already has the maximum of ${MAX_SAVED_VIEWS} saved views. Delete one to add another.`;
 }
 
 /** Coerce unknown input into a valid SavedView, or null if it can't be. */

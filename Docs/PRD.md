@@ -136,7 +136,25 @@ Status: **All v1 requirements shipped.** Priorities: P0 = must, P1 = should.
 | F-4.7 | Week planner view across all boards | P1 | ✅ |
 | F-4.8 | In-app keyboard-shortcut panel | P2 | ✅ |
 
-### 5.5 Platform
+### 5.6 Find
+
+Delivered as Phase 3–5 of the filter/search/saved-views effort.
+
+| ID | Requirement | Pri | Status |
+|---|---|---|---|
+| F-6.1 | Free-text search over card title, description, labels and parent/child titles | P1 | ✅ |
+| F-6.2 | Filter by card type (all / epic / story / task) | P1 | ✅ |
+| F-6.3 | Multi-select label filter | P1 | ✅ |
+| F-6.4 | Date-range filter (overdue / today / week / no date) | P1 | ✅ |
+| F-6.5 | Done / undone filter | P1 | ✅ |
+| F-6.6 | Filters AND-combine, with an active-filter chip row and a count badge on the trigger | P1 | ✅ |
+| F-6.7 | Saved views: capture a named filter, recall it, update it in place, delete it | P1 | ✅ |
+| F-6.8 | Saved views persisted per board in Drive; ≤ 50 per board, names ≤ 60 chars and unique per board | P1 | ✅ |
+| F-6.9 | Dedicated empty state with a one-click "clear search and filters" when nothing matches | P1 | ✅ |
+| F-6.10 | Search and filter state is session-only and never persisted | P2 | ✅ |
+| F-6.11 | Filtering composes with drag-and-drop without disturbing hidden cards | P1 | ✅ |
+
+### 5.7 Platform
 
 | ID | Requirement | Pri | Status |
 |---|---|---|---|
@@ -147,6 +165,7 @@ Status: **All v1 requirements shipped.** Priorities: P0 = must, P1 = should.
 | F-5.5 | Deployable under a subpath (GitHub Pages) | P1 | ✅ |
 | F-5.6 | Dark mode via `prefers-color-scheme` | P1 | ✅ |
 | F-5.7 | WCAG 2.1 AA with automated gates | P0 | ✅ |
+| F-5.8 | Popovers become full-bleed bottom sheets on narrow viewports | P1 | ✅ |
 
 ---
 
@@ -223,6 +242,10 @@ that the UI stays conformant as it evolves.
 6. **Unmeasured with real assistive technology.** Automated checks catch
    roughly a third of real accessibility problems; no screen-reader testing
    has been performed yet.
+7. **Search and filter state is not persisted.** A saved view is, but the live
+   query is session-only by design (F-6.10), so a reload returns to an
+   unfiltered board. Persisting it would put transient view state into the
+   Drive file and make it a conflict surface for no user benefit.
 
 ---
 

@@ -29,7 +29,7 @@ export function BoardView({ onBackToList }: { onBackToList: () => void }) {
 function BoardViewInner({ onBackToList }: { onBackToList: () => void }) {
   const board = useBoard();
   const viewport = useViewport();
-  const { searchQuery, filter, clearFilter } = useViewState();
+  const { searchQuery, filter, clearFilter, clearSearch, isNarrowed } = useViewState();
   const { toast, notify, dismiss } = useToast();
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
   // Track cards created via "+ Add child/parent" so the editor can gate
@@ -156,6 +156,23 @@ function BoardViewInner({ onBackToList }: { onBackToList: () => void }) {
   const columnsToShow =
     viewport.isMobile ? [b.columns[mobileColumnIndex]].filter(Boolean) : b.columns;
 
+  /**
+   * Clear BOTH the search text and the structured filter.
+   *
+   * The empty state has one action, and a user who reached it by typing in the
+   * search box would not expect to have to find the filter's own "Clear all"
+   * as well — leaving the search text behind would keep the board empty and
+   * read as "the button did nothing".
+   *
+   * Leaving a saved view active is deliberate: the view is a named filter, not
+   * the narrowing itself, and the user may want to leave it and filter afresh.
+   * The active-view badge makes that state visible.
+   */
+  const clearFilters = useCallback(() => {
+    clearSearch();
+    clearFilter();
+  }, [clearSearch, clearFilter]);
+
   const handleAddColumn = () => {
     const name = prompt("Column name");
     if (name && name.trim()) board.addColumn(name);
@@ -233,6 +250,35 @@ function BoardViewInner({ onBackToList }: { onBackToList: () => void }) {
         <FilterBar board={b} />
         <SavedViewsMenu />
       </div>
+
+      {/* Board-wide "nothing matched" state.
+          Shown only when the board HAS cards and narrowing is active but
+          matched none. Without it the user sees an empty board and has no way
+          to tell that apart from an empty board, or from a filter that ate
+          everything — the columns still render (showing 0) so the board's
+          shape is not lost, but nothing explains why. */}
+      {isNarrowed && matchCount === 0 && (
+        <div
+          className="empty-state"
+          role="status"
+          data-testid="board-no-matches"
+        >
+          <p className="empty-state__title">No cards match</p>
+          <p className="empty-state__msg">
+            {searchQuery
+              ? "Nothing matches the current search and filters."
+              : "Nothing matches the current filters."}
+          </p>
+          <button
+            type="button"
+            className="btn btn--primary"
+            onClick={clearFilters}
+            data-testid="board-no-matches-clear"
+          >
+            Clear search and filters
+          </button>
+        </div>
+      )}
 
 
       {viewport.isMobile ? (

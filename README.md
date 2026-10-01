@@ -20,6 +20,11 @@ A Trello-inspired Kanban board that signs you in with Google and stores your boa
 - ✅ **Card editor Column picker** — a combobox in the editor auto-selects the card's current column and lists the others in board order; changing it moves the card (applies on save)
 - ✅ **Three-level card hierarchy** — Epics contain Stories, Stories contain Tasks, with type-safe parent linking, cycle prevention, and progress rollup
 - ✅ **Activity log** — every change is auto-recorded (create, title/description/type/label/parent/date changes, moves, comments) with filterable pills and a collapsible timeline
+- ✅ **Search** — matches card titles, descriptions, labels, and parent/child titles as you type
+- ✅ **Filters** — by type (Epic / Story / Task), labels (multi-select), date range, and done/undone. All conditions combine with AND, and the active filters show as removable chips with a match count on the trigger
+- ✅ **Saved views** — save the current filter under a name, recall it in one click, update it in place, or delete it. Views are stored per board and synced to Drive (up to 50 per board)
+- ✅ **"Nothing matches" empty state** — when a search or filter matches no cards, the board says so and offers a one-click **Clear search and filters** (the live search/filter is session-only and is deliberately not persisted; saved views are)
+- ✅ **Works under filtering** — dragging cards while a filter is active reorders the visible cards only; hidden cards keep their positions
 - ✅ **Comments** — per-card threaded comments with author, avatar, and timestamp; current user can delete their own
 - ✅ **Rich text descriptions** powered by Tiptap + DOMPurify (bold, italic, headings, lists, quotes, code)
 - ✅ **Personalized labels** with a curated 12-color palette

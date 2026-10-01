@@ -21,6 +21,17 @@ defines the behaviour this plan schedules.
 |---|---|---|
 | Drag-and-drop while filtered? | **Enabled.** | Index mapping is mandatory, not optional. Own phase, own test budget. §5.3, Phase 4 |
 | Saved-view scope? | **Per board. No global views.** | `Board.savedViews[]`. Lives and dies with the board. No cross-board lookups, no user-level index. §3.2 |
+| Toolbar layout? | **Toolbar beside the filter button**, not a separate bar. | Chip row lives inside `.filter-bar` on its own line; `.board-toolbar` stays `flex-wrap: nowrap`. §5.2 |
+| `filteredOrder.ts`? | **Dropped.** | `moveCard` already matches `arrayMove` across every filtered gesture, so the dedicated index-mapping module was redundant. Phase 4 shrank to "prove it". |
+| View cap? | **50 per board.** Names ≤ 60 chars, unique per board. | `MAX_SAVED_VIEWS` in `src/models/savedViews.ts`; `saveView` checks the cap **before** the name, so the user is told the real blocker. |
+| Mobile filter UX (§9.1)? | **Full set, in a bottom sheet.** | Confirmed as shipped. |
+| Sorting in a view (§9.2)? | **Out of scope.** | Confirmed excluded; a saved view stores a filter only, never an ordering. |
+
+> **Phase 4 was re-scoped during implementation.** The original Phase 4 assumed
+> a dedicated filtered-order index map would be required. Probing `moveCard`
+> against `arrayMove` showed it already matches for mouse, touch, keyboard and
+> mobile-column-target paths, so the phase became verification rather than new
+> machinery. See `Docs/IMPLEMENTATION-PLAN.md` "Phase 7 — Find".
 
 Two facts from the codebase drive the rest of the plan:
 

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useViewState } from "../state/viewState";
 import { useBoard } from "../state/BoardContext";
 import { filterSummary } from "../models/filters";
+import { MAX_SAVED_VIEWS, canAddSavedView } from "../models/savedViews";
 import type { FilterState, SavedView } from "../models/types";
 
 /**
@@ -42,6 +43,11 @@ export function SavedViewsMenu({ anchorRef }: { anchorRef?: React.RefObject<HTML
   const views: SavedView[] = activeBoard?.savedViews ?? [];
   const active = views.find((v) => v.id === activeViewId) ?? null;
   const canSave = Object.keys(filter).length > 0;
+  // At the cap, "Save as new…" cannot succeed, so offer the update path and
+  // explain why creating is closed. Updating an existing view adds nothing, so
+  // it stays available at the limit.
+  const atLimit = !canAddSavedView(views);
+  const canCreate = canSave && !atLimit;
 
   const close = (refocus = true) => {
     setOpen(false);
@@ -243,7 +249,7 @@ export function SavedViewsMenu({ anchorRef }: { anchorRef?: React.RefObject<HTML
                   <button
                     type="button"
                     className="btn btn--primary"
-                    disabled={!canSave}
+                    disabled={!(active && isDirty) && !canCreate}
                     onClick={() => {
                       setMode("save");
                       setName(active ? `${active.name} (edited)` : "");
@@ -251,9 +257,18 @@ export function SavedViewsMenu({ anchorRef }: { anchorRef?: React.RefObject<HTML
                     }}
                     data-testid="views-save"
                   >
-                    {active && isDirty ? `Update view — ${active.name}` : "Save as new…"}
+                    {active && isDirty
+                      ? `Update view — ${active.name}`
+                      : "Save as new…"}
                   </button>
                 </div>
+
+                {atLimit && (
+                  <p className="saved-views__note" data-testid="views-limit-note">
+                    This board has the maximum of {MAX_SAVED_VIEWS} saved views.
+                    Delete one to add another.
+                  </p>
+                )}
               </>
             )}
 

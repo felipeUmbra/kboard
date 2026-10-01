@@ -285,6 +285,80 @@ top-left. Implemented with `clip` / `clip-path` and **no negative margin** — s
 [App Flow §9.1](./APP-FLOW.md#91-skip-link) for why the conventional recipes
 break keyboard access.
 
+### 4.8 Board toolbar — search, filter, saved views
+
+One `flex` row with `flex-wrap: nowrap`, laid out from the right:
+
+```
+┌───────────────────────────────────────────────────────────┐
+│ 🔍 Search…                    │ [Filter ▾ 2]  │ [Views ▾] │
+│                              │ ✕ Story  ✕ 📅  │           │
+└────────────────────────────────────────────────────────────┘
+```
+
+| Slot | Flex | Notes |
+|---|---|---|
+| `.search-bar` | `1 1 260px; min-width: 0` | Absorbs the leftover width; `min-width: 0` is load-bearing, or the input's intrinsic width refuses to shrink and re-introduces the reflow |
+| `.filter-bar` | `0 0 auto` | Never grows; the chips wrap onto a second line *inside* it |
+| `.views-bar` | `0 0 auto` | Same |
+
+`nowrap` plus `flex: 0 0 auto` on the two right-hand slots is a bug fix, not a
+preference. With wrapping enabled, an active-filter chip row could push the
+filter bar onto its own row, which moved the anchored popover away from under
+the pointer mid-interaction — and because the transparent backdrop covers the
+viewport, the checkbox the user was reaching for landed *under* the backdrop and
+became unclickable. Applying one filter silently blocked the next. See
+[App Flow §11](./APP-FLOW.md#11-filter-search-and-saved-views).
+
+**The toolbar may grow taller when chips appear, and that is correct** — the
+chip row takes its own line inside `.filter-bar`, so the bar grows downward
+(~25 px desktop). What must never happen is the toolbar *reflowing* onto a
+second row. The e2e invariant is therefore positional, not size-based: the
+toolbar's top edge and its right edge are pinned, and the trigger never moves
+**vertically**. Its `x` legitimately moves left — the toolbar is laid out from
+the right, so a wider chip row pushes the trigger left, not the bar right.
+
+### 4.9 Filter popover and mobile sheet
+
+`.filter-menu` is **`position: fixed`**, never `absolute`. `.filter-bar` grows
+when chips appear, and an absolutely positioned popover is measured against
+that container — so it was dragged down by exactly the height the chips added
+(56 px at 768 px), moving the options out from under the pointer. `fixed` is
+unaffected by the container's size. Positioning is still computed from the
+trigger's viewport rect, so the menu stays visually anchored to the button
+while the chips wrap.
+
+Width is `min(360px, calc(100vw - 32px))`; under `@media (max-width: 640px)` it
+becomes a full-width bottom sheet (`left/right/bottom: 0`, `max-height: 82vh`,
+top-rounded, `padding-bottom: env(safe-area-inset-bottom)`, `filter-sheet-in`
+animation).
+
+> **Stylesheet import order is load-bearing.** `responsive.css` is almost
+> entirely `max-width` overrides of rules declared in `components.css`, and the
+> two selectors have *equal* specificity — so the cascade decides on source
+> order alone. `components.css` must therefore be imported **before**
+> `responsive.css` in `src/main.tsx`. With the order reversed, every override in
+> the responsive file is silently dead: the mobile filter sheet declared
+> `width: 100%; max-width: none` and still measured 328 px on a 360 px viewport,
+> because the base `min()` rule was emitted after it. If a `max-width` rule here
+> ever stops taking effect, check `src/main.tsx` first.
+
+`prefers-reduced-motion: reduce` cancels `filter-sheet-in`.
+
+### 4.10 Saved views menu
+
+Same popover/sheet pattern as the filter menu (`.saved-views__panel`), listing
+each view with its filter summary plus Apply / Update / Delete.
+
+- **Apply** is inert when the current filter already matches, and **Update** is
+  inert when the filter is untouched — neither is a no-op button.
+- The save field enforces the same 60-character limit as the name model.
+- At the 50-view cap the list shows an explanatory note instead of silently
+  refusing the save, and the save control is disabled.
+- Every row handler calls `stopPropagation()`. The backdrop is a *sibling* of
+  the panel, so a click that bubbles reaches it and closes the menu — taking
+  Delete with it.
+
 ---
 
 ## 5. Responsive strategy
@@ -297,6 +371,8 @@ Three layouts, chosen by width and pointer type.
 | Sidebar | 56 px icon rail, expandable drawer | Collapsible rail | Full, persistent |
 | Board | Vertical column rail, one column at a time | Columns side-by-side, scroll | Columns side-by-side |
 | Modal | Bottom sheet, full height | Centred dialog | Centred dialog |
+| Toolbar | Search full width; filter + views on a second row | Single `nowrap` row | Single `nowrap` row |
+| Filter menu | Full-width bottom sheet | Popover, ≤ 360 px | Popover, ≤ 360 px |
 | Tested at | 360×800 (20:9) | 768×1024 | 1280×800 |
 
 **Mobile layout invariants** (all covered by e2e tests):
@@ -305,10 +381,19 @@ Three layouts, chosen by width and pointer type.
 - The topbar and the rail always cover their full area, including under a
   notch, via `env(safe-area-inset-*)`.
 - Modals fit the viewport.
+- Bottom sheets are **full-bleed**: `.filter-menu` and the saved-views panel
+  measure the full viewport width, not `100vw - 32px`.
+
+**Tablet invariant.** With an active filter the toolbar still fits one row at
+768 px. Columns may be stacked; the toolbar may not.
 
 **Pointer queries are used for interaction density, not just width.**
 `@media (pointer: coarse)` raises tap targets without inflating the desktop
 layout, which keeps a mouse user from getting a needlessly sparse toolbar.
+
+> Touch-target assertions are therefore split. Desktop asserts **≥ 24 px**
+> (WCAG 2.5.8, AA); only mobile/tablet runs assert **≥ 44 px**. Asserting 44 px
+> on desktop fails by construction — it measures the CSS, not the app.
 
 ---
 

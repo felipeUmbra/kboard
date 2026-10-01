@@ -137,6 +137,53 @@ test.describe("axe-core (Sprint 4.1)", () => {
     test.info().annotations.push({ type: "axe", description: summariseAxeResults(results) });
   });
 
+  test("saved views menu has no violations", async ({ page }) => {
+    await installFakesOnPage(page);
+    const bp = new BoardPage(page);
+    await bp.login();
+    await bp.createBoard(`Axe views ${uniqueId()}`);
+    await bp.addCard("", "Axe task card", "task");
+    await bp.addCard("", "Axe story card", "story");
+
+    // Save one view so the menu is scanned with a list, a summary line, the
+    // active marker, and the footer actions all present — not just the empty
+    // state, which exercises a different subset.
+    await page.locator('[data-testid="filter-trigger"]').click();
+    await expect(page.locator('[data-testid="filter-menu"]')).toBeVisible();
+    await page.locator('[data-testid="filter-type-task"]').check();
+    await page.locator('[data-testid="filter-menu-done"]').click();
+
+    await page.locator('[data-testid="views-trigger"]').click();
+    await expect(page.locator('[data-testid="views-menu"]')).toBeVisible();
+    await page.locator('[data-testid="views-save"]').click();
+    await page.locator('[data-testid="views-name-input"]').fill(`Axe view ${uniqueId()}`);
+    await page.locator('[data-testid="views-submit"]').click();
+    await expect(page.locator('[data-testid="views-menu"]')).toHaveCount(0);
+
+    // Reopen and scan the populated menu.
+    await page.locator('[data-testid="views-trigger"]').click();
+    await expect(page.locator('[data-testid="views-list"]')).toBeVisible();
+
+    const results = await expectNoAxeViolations(page, { label: "saved views menu" });
+    test.info().annotations.push({ type: "axe", description: summariseAxeResults(results) });
+  });
+
+  test("the no-cards-match empty state has no violations", async ({ page }) => {
+    await installFakesOnPage(page);
+    const bp = new BoardPage(page);
+    await bp.login();
+    await bp.createBoard(`Axe empty ${uniqueId()}`);
+    await bp.addCard("", "Axe task card", "task");
+
+    // The empty state renders alongside the columns, so it must not displace
+    // them from the accessibility tree or announce anything incorrectly.
+    await page.locator('[data-testid="search-input"]').fill("zzzznomatchaxe");
+    await expect(page.locator('[data-testid="board-no-matches"]')).toBeVisible();
+
+    const results = await expectNoAxeViolations(page, { label: "no-cards-match empty state" });
+    test.info().annotations.push({ type: "axe", description: summariseAxeResults(results) });
+  });
+
   test("card editor modal has no violations", async ({ page }) => {
     await installFakesOnPage(page);
     const bp = new BoardPage(page);
