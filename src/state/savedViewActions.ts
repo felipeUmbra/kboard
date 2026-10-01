@@ -14,8 +14,10 @@
 
 import {
   addSavedView,
+  canAddSavedView,
   deleteSavedView,
   renameSavedView,
+  savedViewLimitMessage,
   updateSavedView,
   validateViewName,
 } from "../models/savedViews";
@@ -47,6 +49,10 @@ export interface SaveViewResult {
  *
  * An empty `filter` is allowed. "All cards" with no narrowing is a legitimate
  * (if not very useful) saved view, and refusing it would be a surprise.
+ *
+ * Also refuses once the board holds `MAX_SAVED_VIEWS`. The cap is checked
+ * BEFORE the name so the two refusals never compete, and `addSavedView` is
+ * never reached at the limit.
  */
 export function saveView(
   board: Board,
@@ -55,6 +61,9 @@ export function saveView(
   now: number = Date.now(),
 ): SaveViewResult {
   const existing = viewsOf(board);
+  if (!canAddSavedView(existing)) {
+    return { board, viewId: null, error: savedViewLimitMessage() };
+  }
   const error = validateViewName(name, existing);
   if (error) return { board, viewId: null, error };
   // No `next === existing` guard: addSavedView re-runs the same

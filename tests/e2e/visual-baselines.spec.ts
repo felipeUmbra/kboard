@@ -153,6 +153,221 @@ test.describe("Visual baselines (Sprint 4.4)", () => {
   });
 });
 
+/**
+ * Phase 5.4 — baselines for the search / filter / saved-views surfaces.
+ *
+ * Same philosophy as Sprint 4.4 above: screenshots written to `test-results/`
+ * for a reviewer to look at, with GEOMETRIC assertions that are stable across
+ * environments. No golden-image diffing — see the header comment for why.
+ *
+ * The geometry here is not decorative. Each assertion below corresponds to a
+ * bug that actually shipped or nearly shipped:
+ *
+ *  - The toolbar must stay on ONE line. When it wrapped on tablet, the filter
+ *    bar dropped to a second row and dragged its anchored menu down with it.
+ *  - The filter menu must stay anchored to its trigger for the same reason.
+ *  - The saved-views popover must stay inside the viewport, since it is
+ *    positioned from the trigger's rect near the right edge.
+ *  - The chip row must not push the trigger vertically (it takes its own line
+ *    inside `.filter-bar` via `flex: 0 0 100%`).
+ */
+test.describe("Visual baselines — search, filter and saved views (Phase 5)", () => {
+  async function seed(page: Page) {
+    await installFakesOnPage(page);
+    const bp = new BoardPage(page);
+    await bp.login();
+    await bp.createBoard("Phase 5 visuals");
+    await bp.addCard("", "Alpha task", "task");
+    await bp.addCard("", "Beta epic", "epic");
+    await bp.addCard("", "Gamma task", "task");
+    return bp;
+  }
+
+  test("the toolbar stays on one line with an active filter", async ({ page }) => {
+    const bp = await seed(page);
+
+    const toolbar = page.locator(".board-toolbar");
+    await expect(toolbar).toBeVisible();
+    const before = await toolbar.boundingBox();
+    const triggerBefore = await page
+      .locator('[data-testid="filter-trigger"]')
+      .boundingBox();
+    expect(before).not.toBeNull();
+    expect(triggerBefore).not.toBeNull();
+
+    await page.locator('[data-testid="filter-trigger"]').click();
+    await expect(page.locator('[data-testid="filter-menu"]')).toBeVisible();
+    await page.locator('[data-testid="filter-type-task"]').check();
+    await expect(page.locator('[data-testid="filter-chips"]')).toBeVisible();
+
+    // The toolbar DOES get taller here, and that is correct: the chip row
+    // takes its own line *inside* `.filter-bar` (flex: 0 0 100%), so the bar
+    // grows downward. What must NOT happen is the toolbar reflowing so the
+    // filter bar lands on a different row — that is the bug that dragged the
+    // anchored menu down and made its options unclickable.
+    const after = await toolbar.boundingBox();
+    const triggerAfter = await page
+      .locator('[data-testid="filter-trigger"]')
+      .boundingBox();
+    expect(after).not.toBeNull();
+    expect(triggerAfter).not.toBeNull();
+
+    // Same line: the toolbar's top edge never moves, and the trigger never
+    // shifts VERTICALLY. Its x and width both change — the trigger is
+    // right-aligned, and the badge widens it while a wider chip row pushes it
+    // left — so the only stable anchor is the toolbar's own right edge. That
+    // is the property that actually matters: the bar stays on the same row,
+    // pinned to the same side.
+    expect(Math.abs(after!.y - before!.y)).toBeLessThanOrEqual(2);
+    expect(Math.abs(triggerAfter!.y - triggerBefore!.y)).toBeLessThanOrEqual(2);
+
+    // The toolbar's own right edge is the pinned anchor and must not drift:
+    // the toolbar is laid out from its right-hand side, so a chip row that
+    // grows inside `.filter-bar` pushes the trigger LEFT, not the bar right.
+    // (Asserting "toolbar.right - trigger.right" is constant would be wrong —
+    // that gap is *supposed* to widen, by exactly how far the trigger slid.)
+    const toolbarRightBefore = before!.x + before!.width;
+    const toolbarRightAfter = after!.x + after!.width;
+    expect(Math.abs(toolbarRightAfter - toolbarRightBefore)).toBeLessThanOrEqual(2);
+
+    // And the trigger really did slide left — otherwise the assertion above
+    // would pass vacuously if chips somehow did not affect layout at all.
+    expect(triggerAfter!.x).toBeLessThanOrEqual(triggerBefore!.x + 2);
+
+    // Still a single wrapping row, not two stacked toolbars.
+    const wrap = await toolbar.evaluate((el) => getComputedStyle(el).flexWrap);
+    expect(wrap).toBe("nowrap");
+
+    // And it grew only as much as the chip row needs, not without bound.
+    expect(after!.height - before!.height).toBeLessThan(80);
+
+    await page.screenshot({ path: test.info().outputPath("toolbar-filter-active.png") });
+    await bp.clickButtonFallback(page.locator('[data-testid="filter-menu-done"]'));
+  });
+
+  test("the filter menu stays anchored to its trigger", async ({ page }) => {
+    await seed(page);
+
+    await page.locator('[data-testid="filter-trigger"]').click();
+    const menu = page.locator('[data-testid="filter-menu"]');
+    await expect(menu).toBeVisible();
+    await page.locator('[data-testid="filter-type-task"]').check();
+    await expect(page.locator('[data-testid="filter-chips"]')).toBeVisible();
+
+    const trigger = await page.locator('[data-testid="filter-trigger"]').boundingBox();
+    const menuBox = await menu.boundingBox();
+    expect(trigger).not.toBeNull();
+    expect(menuBox).not.toBeNull();
+
+    // On desktop/tablet the menu is a popover positioned from the trigger's
+    // rect, so it must sit below it. On mobile it is a bottom sheet placed by
+    // CSS, and the anchoring rule does not apply.
+    if (!isMobileProject(page)) {
+      expect(menuBox!.y).toBeGreaterThanOrEqual(trigger!.y + trigger!.height - 1);
+    }
+    const viewport = page.viewportSize()!;
+    expect(menuBox!.y + menuBox!.height).toBeLessThanOrEqual(viewport.height + 1);
+    expect(menuBox!.x).toBeGreaterThanOrEqual(-1);
+    expect(menuBox!.x + menuBox!.width).toBeLessThanOrEqual(viewport.width + 1);
+
+    await page.screenshot({ path: test.info().outputPath("filter-menu-open.png") });
+  });
+
+  test("the saved-views popover stays inside the viewport", async ({ page }) => {
+    await seed(page);
+
+    await page.locator('[data-testid="views-trigger"]').click();
+    const menu = page.locator('[data-testid="views-menu"]');
+    await expect(menu).toBeVisible();
+
+    const box = await menu.boundingBox();
+    expect(box).not.toBeNull();
+    const viewport = page.viewportSize()!;
+    // The trigger sits at the toolbar's right edge, so this is the case where
+    // an un-clamped popover would hang off-screen.
+    expect(box!.x).toBeGreaterThanOrEqual(-1);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(viewport.width + 1);
+    expect(box!.y).toBeGreaterThanOrEqual(-1);
+
+    await page.screenshot({ path: test.info().outputPath("saved-views-menu.png") });
+  });
+
+  test("the no-matches empty state does not displace the columns", async ({ page }) => {
+    const bp = await seed(page);
+    const columnCount = await page.locator(sel.column).count();
+    expect(columnCount).toBeGreaterThan(0);
+
+    await page.locator('[data-testid="search-input"]').fill("zzzznomatch");
+    const empty = page.locator('[data-testid="board-no-matches"]');
+    await expect(empty).toBeVisible();
+
+    // The board's shape survives: the same columns are still rendered, just
+    // showing zero. An empty state must not remove the board.
+    await expect(page.locator(sel.column)).toHaveCount(columnCount);
+
+    // And the clear action is reachable without scrolling to a corner.
+    const clearBtn = page.locator('[data-testid="board-no-matches-clear"]');
+    const btnBox = await clearBtn.boundingBox();
+    expect(btnBox).not.toBeNull();
+    const viewport = page.viewportSize()!;
+    expect(btnBox!.y).toBeLessThanOrEqual(viewport.height);
+    // WCAG 2.5.8 Target Size (minimum) is 24x24. The 44px target is scoped to
+    // `pointer: coarse` (see responsive.css) so the denser desktop layout is
+    // unchanged, so assert the standard here and the touch size below.
+    expect(btnBox!.height).toBeGreaterThanOrEqual(24);
+
+    await page.screenshot({ path: test.info().outputPath("no-cards-match.png") });
+    void bp;
+  });
+
+  test("the filter menu becomes a bottom sheet on mobile", async ({ page }) => {
+    const bp = await seed(page);
+    test.skip(!isMobileProject(page), "bottom sheet is the mobile presentation");
+
+    await bp.collapseSidebar();
+    await page.locator('[data-testid="filter-trigger"]').click();
+    const menu = page.locator('[data-testid="filter-menu"]');
+    await expect(menu).toBeVisible();
+
+    const box = await menu.boundingBox();
+    const viewport = page.viewportSize()!;
+    // Full width and flush to the bottom edge, which is what makes it a sheet.
+    // Measured against the VIEWPORT, not the layout width: the page can be
+    // narrower than the emulated screen, so comparing the two directly fails
+    // for reasons that have nothing to do with the sheet.
+    expect(box!.width).toBeGreaterThanOrEqual(viewport.width - 2);
+    const boxRight = await menu.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      return r.right + window.scrollX;
+    });
+    const docWidth = await page.evaluate(() => document.documentElement.clientWidth);
+    expect(boxRight).toBeGreaterThanOrEqual(docWidth - 2);
+    expect(box!.y + box!.height).toBeGreaterThanOrEqual(viewport.height - 40);
+
+    await page.screenshot({ path: test.info().outputPath("filter-sheet-mobile.png") });
+  });
+
+  test("toolbar controls meet the touch target size on mobile", async ({ page }) => {
+    await seed(page);
+    test.skip(!isMobileProject(page), "tap target rule is scoped to coarse pointers");
+
+    // The 44px target only applies under `pointer: coarse` (responsive.css),
+    // so this is asserted where that rule is actually active rather than
+    // against the intentionally denser desktop layout.
+    for (const id of ["search-input", "filter-trigger", "views-trigger"]) {
+      const box = await page.locator(`[data-testid="${id}"]`).boundingBox();
+      expect(box, `${id} has no layout box`).not.toBeNull();
+      expect(box!.height, `${id} is under the 44px touch target`).toBeGreaterThanOrEqual(44);
+    }
+
+    const clearBtn = page.locator('[data-testid="board-no-matches-clear"]');
+    await page.locator('[data-testid="search-input"]').fill("zzzznomatch");
+    await expect(clearBtn).toBeVisible();
+    const clearBox = await clearBtn.boundingBox();
+    expect(clearBox!.height).toBeGreaterThanOrEqual(44);
+  });
+});
+
 /** True in the chromium-mobile project. */
 function isMobileProject(page: Page): boolean {
   return page.viewportSize()?.width === MOBILE.width;

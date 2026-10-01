@@ -6,6 +6,7 @@ import {
   saveView,
   updateView,
 } from "../../src/state/savedViewActions";
+import { MAX_SAVED_VIEWS } from "../../src/models/savedViews";
 import type { Board, FilterState, SavedView } from "../../src/models/types";
 
 function boardWith(views?: SavedView[]): Board {
@@ -140,5 +141,50 @@ describe("findView", () => {
     expect(findView(base, "v1")?.name).toBe("A");
     expect(findView(base, null)).toBeNull();
     expect(findView(base, "ghost")).toBeNull();
+  });
+});
+
+describe("saveView at the cap", () => {
+  const full = (n: number) =>
+    boardWith(
+      Array.from({ length: n }, (_, i) => view(`v${i}`, `View ${i}`)),
+    );
+
+  it("refuses to add beyond MAX_SAVED_VIEWS and leaves the board untouched", () => {
+    const base = full(MAX_SAVED_VIEWS);
+    const r = saveView(base, "One more", {}, 1);
+
+    expect(r.viewId).toBeNull();
+    expect(r.error).toContain(String(MAX_SAVED_VIEWS));
+    expect(r.board).toBe(base);
+    expect(r.board.savedViews).toHaveLength(MAX_SAVED_VIEWS);
+  });
+
+  it("still allows saving on the last free slot", () => {
+    const r = saveView(full(MAX_SAVED_VIEWS - 1), "Last one", {}, 1);
+    expect(r.error).toBeNull();
+    expect(r.viewId).not.toBeNull();
+    expect(r.board.savedViews).toHaveLength(MAX_SAVED_VIEWS);
+  });
+
+  it("reports the cap before the name, so a bad name at the limit is unambiguous", () => {
+    // Both are refusals; the cap must win so the user is told the actionable
+    // thing (delete a view) rather than a name they could simply change.
+    const r = saveView(full(MAX_SAVED_VIEWS), "   ", {}, 1);
+    expect(r.error).toContain(String(MAX_SAVED_VIEWS));
+  });
+
+  it("frees a slot on delete so the board is usable again", () => {
+    const base = full(MAX_SAVED_VIEWS);
+    const afterDelete = deleteView(base, "v0");
+    expect(saveView(afterDelete, "Fresh", {}, 1).viewId).not.toBeNull();
+  });
+
+  it("does not cap update or rename — neither adds a view", () => {
+    const base = full(MAX_SAVED_VIEWS);
+    expect(updateView(base, "v0", { done: "done" }).savedViews![0].filter).toEqual({
+      done: "done",
+    });
+    expect(renameView(base, "v1", "Renamed").error).toBeNull();
   });
 });

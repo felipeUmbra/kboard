@@ -15,6 +15,8 @@ const menu = '[data-testid="filter-menu"]';
 const badge = '[data-testid="filter-badge"]';
 const chips = '[data-testid="filter-chips"]';
 const clearAll = '[data-testid="filter-clear-all"]';
+const searchInput = '[data-testid="search-input"]';
+const noMatches = '[data-testid="board-no-matches"]';
 
 async function openMenu(page: Page) {
   await page.locator(trigger).click();
@@ -462,7 +464,84 @@ test.describe("Filters", () => {
     await expect(page.locator(badge)).toHaveCount(0);
     await expect(page.locator(sel.card)).toHaveCount(1);
   });
+});
 
+// ─── "No cards match" empty state ─────────────────────────────────────
+//
+// Without this the user sees an empty board and cannot tell that apart from
+// a board that has no cards, or from a filter that swallowed everything. The
+// columns still render (showing 0) so the board's shape survives; this block
+// is what explains why it is empty and offers the way out.
+test.describe("No cards match", () => {
+  test.beforeEach(async ({ page }) => {
+    const bp = new BoardPage(page);
+    await installFakesOnPage(page);
+    await bp.login();
+    await bp.createBoard("Empty state");
+    await bp.addCard("", "A task card", "task");
+    await bp.addCard("", "A story card", "story");
+  });
+
+  test("appears when a search matches nothing, and clears both search and filter", async ({
+    page,
+  }) => {
+    await page.locator(searchInput).fill("zzzznomatch");
+    await expect(page.locator(noMatches)).toBeVisible();
+    await expect(page.locator(noMatches)).toContainText("No cards match");
+
+    // The columns are still there — the board's shape is not lost.
+    await expect(page.locator(sel.column)).not.toHaveCount(0);
+
+    await page.locator('[data-testid="board-no-matches-clear"]').click();
+
+    await expect(page.locator(noMatches)).toHaveCount(0);
+    await expect(page.locator(sel.card)).toHaveCount(2);
+    // Both halves must be cleared, or the board stays empty and the button
+    // looks like it did nothing.
+    await expect(page.locator(searchInput)).toHaveValue("");
+    await expect(page.locator(badge)).toHaveCount(0);
+  });
+
+  test("appears when a filter matches nothing, and the action restores every card", async ({
+    page,
+  }) => {
+    // Filter to a type that exists, then narrow further with a search so both
+    // halves of `clearFilters` are genuinely engaged.
+    await openMenu(page);
+    await page.locator('[data-testid="filter-type-task"]').check();
+    await closeMenu(page);
+    await expect(page.locator(sel.card)).toHaveCount(1);
+
+    await page.locator(searchInput).fill("A story");
+    await expect(page.locator(noMatches)).toBeVisible();
+
+    await page.locator('[data-testid="board-no-matches-clear"]').click();
+    await expect(page.locator(sel.card)).toHaveCount(2);
+    await expect(page.locator(sel.card).filter({ hasText: "A story card" })).toHaveCount(1);
+  });
+
+  test("does NOT appear on an empty board with no narrowing", async ({ page }) => {
+    // A genuinely empty board must not claim that cards were filtered out —
+    // that would be a lie about state the user did not create.
+    const bp = new BoardPage(page);
+    await bp.gotoBoards();
+    await bp.createBoard("Truly empty");
+
+    await expect(page.locator(sel.card)).toHaveCount(0);
+    await expect(page.locator(noMatches)).toHaveCount(0);
+  });
+
+  test("does not appear while cards still match", async ({ page }) => {
+    await openMenu(page);
+    await page.locator('[data-testid="filter-type-task"]').check();
+    await closeMenu(page);
+
+    await expect(page.locator(sel.card)).toHaveCount(1);
+    await expect(page.locator(noMatches)).toHaveCount(0);
+  });
+});
+
+test.describe("Filters under drag and drop", () => {
   // ─── Drag and drop under an active filter ────────────────────────────
   //
   // The plan flagged this as a corruption risk: `column.cardIds` holds

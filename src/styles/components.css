@@ -1598,6 +1598,13 @@
   font-size: var(--text-sm);
 }
 
+.saved-views__note {
+  margin: 0;
+  padding: 0 var(--space-4) var(--space-3);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
 .saved-views__form-actions {
   display: flex;
   justify-content: flex-end;

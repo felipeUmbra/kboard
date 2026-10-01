@@ -23,6 +23,7 @@
     "test:e2e:debug": "playwright test --debug",
     "test:e2e:chromium": "playwright test --project=chromium-desktop",
     "test:e2e:subpath": "node scripts/test-subpath.mjs",
+    "test:perf": "vitest run tests/perf --reporter=verbose",
     "test:e2e:report": "playwright show-report",
     "a11y:contrast": "node scripts/check-contrast.js",
     "lint:colors": "node scripts/lint-color-literals.js",

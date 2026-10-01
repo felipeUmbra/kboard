@@ -1,11 +1,14 @@
 import { describe, it, expect } from "vitest";
 import {
   addSavedView,
+  canAddSavedView,
   deleteSavedView,
   findSavedView,
+  MAX_SAVED_VIEWS,
   normalizeSavedView,
   normalizeSavedViews,
   renameSavedView,
+  savedViewLimitMessage,
   updateSavedView,
   validateViewName,
 } from "./savedViews";
@@ -298,5 +301,33 @@ describe("findSavedView", () => {
 
   it("returns undefined for an unknown id", () => {
     expect(findSavedView([makeView()], "nope")).toBeUndefined();
+  });
+});
+
+describe("canAddSavedView", () => {
+  const many = (n: number) =>
+    Array.from({ length: n }, (_, i) => makeView({ id: `v${i}`, name: `View ${i}` }));
+
+  it("allows adding below the cap", () => {
+    expect(canAddSavedView([])).toBe(true);
+    expect(canAddSavedView(many(MAX_SAVED_VIEWS - 1))).toBe(true);
+  });
+
+  it("refuses at the cap", () => {
+    expect(canAddSavedView(many(MAX_SAVED_VIEWS))).toBe(false);
+  });
+
+  it("refuses above the cap, so a hand-edited board cannot bypass it", () => {
+    expect(canAddSavedView(many(MAX_SAVED_VIEWS + 10))).toBe(false);
+  });
+
+  it("allows adding again after a delete frees a slot", () => {
+    const full = many(MAX_SAVED_VIEWS);
+    expect(canAddSavedView(full)).toBe(false);
+    expect(canAddSavedView(deleteSavedView(full, "v0"))).toBe(true);
+  });
+
+  it("names the cap in the limit message", () => {
+    expect(savedViewLimitMessage()).toContain(String(MAX_SAVED_VIEWS));
   });
 });

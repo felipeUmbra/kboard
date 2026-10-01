@@ -380,7 +380,88 @@ effectively invisible against the dark rail.
 
 ---
 
-## 11. Related documents
+## 11. Filter, search and saved views
+
+Search, filtering and saved views are **board-scoped and session-only**. The
+query is never persisted — see [Data Model §8](./DATA-MODEL.md#8-derived-data-not-stored).
+Only the saved views themselves live on `Board.savedViews` and reach Drive.
+
+### 11.1 Search → filter → save → recall → update
+
+```
+                    ┌──────────────────────────────────────┐
+  type in .search-bar│  query matches card title, desc,    │
+  ─────────────────▶│  labels, and parent/child titles     │
+                    └──────────────────────────────────────┘
+                    ┌──────────────────────────────────────┐
+  open .filter-menu │  type (all/epic/story/task),         │
+  ─────────────────▶│  labels (multi), date range,         │
+                    │  done/undone                         │
+                    └──────────────────────────────────────┘
+                    ┌──────────────────────────────────────┐
+  both narrow?      │  AND-combined. Count badge on the    │
+  ─────────────────▶│  trigger. Zero matches → empty state │
+                    └──────────────────────────────────────┘
+                    ┌──────────────────────────────────────┐
+  Views ▾ → Save    │  name (≤ 60 chars, unique per board, │
+  ─────────────────▶│  ≤ 50 views) → written to Drive      │
+                    └──────────────────────────────────────┘
+                    ┌──────────────────────────────────────┐
+  click a saved view│  replaces the live filter atomically; │
+  ─────────────────▶│  no merge, no accumulation           │
+                    └──────────────────────────────────────┘
+```
+
+**Applying a view replaces the filter; it never adds to it.** A user who has a
+label filter open and recalls a saved view gets the saved view's filter, not
+the union. Merging would make the trigger badge and the active chips disagree
+with the rows on screen.
+
+**Update ≠ Apply.** *Apply* sets the live filter from the stored view. *Update*
+overwrites the stored view with whatever is currently live — which is why it is
+disabled while the filter is untouched, so a no-op can't silently discard a
+view's contents.
+
+### 11.2 Empty state
+
+When the filter matches zero cards the board shows a dedicated empty state
+(`data-testid="board-no-matches"`) rather than the ordinary "no cards yet" one:
+
+> Nothing matches the current search and filters.
+> **[Clear search and filters]**
+
+This matters because the two states need different actions — the first needs a
+card, the second needs the filters reset. It carries `role="status"` so the
+change is announced. A **zero-match search with no active filter chips** is
+still a filter state, not an error.
+
+### 11.3 Interaction traps
+
+Three ways this flow breaks a naive implementation, each fixed and covered:
+
+1. **The popover must be `position: fixed`.** `.filter-bar` grows when the chip
+   row appears; an `absolute` popover is measured against that container and is
+   dragged down by the height the chips added (measured 56 px at 768 px). The
+   transparent backdrop then covers the option the user was reaching for, so
+   applying one filter silently blocks the next. See
+   [UX-UI-DESIGN §4.9](./UX-UI-DESIGN.md#49-filter-popover-and-mobile-sheet).
+2. **Menu rows must stop propagation.** The backdrop is a *sibling* of the
+   panel. Without `stopPropagation()`, clicking Delete also hits the backdrop
+   and closes the menu.
+3. **The toolbar must not reflow.** With `flex-wrap: wrap`, an active chip row
+   could push the filter bar onto its own row and drag the anchored menu away
+   from the pointer mid-interaction.
+
+### 11.4 Under drag and drop
+
+Dragging a card while a filter is active moves it within the **visible**
+ordering. `column.cardIds` remains the single source of truth for order, and
+every filtered gesture resolves the target through `arrayMove` over the visible
+ids, so filtering never reorders or drops the hidden cards around it.
+
+---
+
+## 12. Related documents
 
 - [PRD](./PRD.md) — what the product is for
 - [TRD](./TRD.md) — how it is built
