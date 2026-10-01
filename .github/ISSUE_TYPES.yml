@@ -1,0 +1,31 @@
+# Available issue types for this repository.
+#
+# Keeps the tracker consistent for humans and for the QA agent, which files
+# bugs automatically (see .github/agents/qa.agent.md and the global
+# qa.agent.md "Filing bugs" section).
+#
+# Impact bands used by the agent, and why:
+#   High   — breaks a feature on ALL devices, or blocks access to a feature.
+#   Medium — breaks ONE device feature / form factor only (tablet, PWA, one
+#            browser). Other devices are unaffected.
+#   Low   — cosmetic or non-blocking. NOT filed; reported in a test summary.
+#
+# Keep the labels below in sync with the Impact dropdown in
+# .github/ISSUE_TEMPLATE/bug.yml and the gh label commands in the repo agent.
+# GitHub silently drops labels it does not recognise, so a typo here produces
+# an unlabelled issue rather than an error — check with `gh label list`.
+
+Bug:
+  description: A defect in the app, its data handling, or its accessibility
+  title: "[Bug] "
+  labels:
+    - bug
+    - needs-triage
+  apply_labels_to: issues
+
+Task:
+  description: A unit of work that is not a defect
+  title: "[Task] "
+  labels:
+    - needs-triage
+  apply_labels_to: issues

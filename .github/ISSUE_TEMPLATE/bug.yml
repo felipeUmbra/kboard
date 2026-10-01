@@ -1,0 +1,180 @@
+name: Bug report
+description: A defect in the app, its data handling, or its accessibility. Filed by a human or by the QA agent.
+title: "[Bug] <short summary of what is wrong>"
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Do not use this for
+        - Feature requests → open a **discussion** instead.
+        - Test-only problems (a spec that is wrong but the app behaves
+          correctly) → these belong in a test-run comment, not the tracker.
+        - Anything you have not seen fail yourself → say so in the body and
+          mark **Reproduced** as "Not yet".
+
+  - type: dropdown
+    id: impact
+    attributes:
+      label: Impact
+      description: >
+        Decides triage order and whether a release is blocked. Rate by HOW MUCH
+        is broken, not by how annoying it is.
+      options:
+        - High — breaks a feature for ALL devices (desktop, tablet and mobile),
+          or prevents a user from reaching a feature at all.
+        - Medium — breaks ONE device feature or form factor only (tablet only,
+          PWA only, one browser only). Other devices are unaffected.
+        - Low — cosmetic, copy, or a rough edge that does not block a task.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: devices
+    attributes:
+      label: Devices affected
+      description: >
+        Which of these show the defect. A Medium issue affects a subset; a High
+        issue affects all of them.
+      options:
+        - "All (desktop + tablet + mobile)"
+        - "Desktop only"
+        - "Tablet only"
+        - "Mobile only"
+        - "PWA only"
+        - "One browser only (state which)"
+        - "Not device-specific"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Where in the app the defect lives. Used to track which areas generate the most bugs.
+      options:
+        - Board / columns / cards
+        - Drag and drop
+        - Search / filter / saved views
+        - Card editor (content, dates, checklists)
+        - Sync / storage / Google Drive
+        - Auth / permissions
+        - Planner
+        - PWA / install / offline
+        - Accessibility
+        - Responsive layout
+        - Tests or tooling only
+        - Unknown / other
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you observed, including any error text verbatim.
+      placeholder: |
+        The toolbar reflowed onto a second line when a filter was applied, and
+        the next checkbox in the menu became unclickable.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      description: What you expected instead.
+      placeholder: |
+        The filter trigger stays put and every menu option stays clickable.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: reproduced
+    attributes:
+      label: Reproduced
+      description: >
+        Be precise. "Inferred" means the evidence points here but nobody has
+        watched it fail. A correct inference is far more useful than a guess
+        presented as a fact.
+      options:
+        - "Yes — seen every time"
+        - "Yes — seen intermittently"
+        - "Inferred from evidence, not directly observed"
+        - "Not yet — suspected"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: filed-by
+    attributes:
+      label: Filed by
+      description: Set automatically by the QA agent. Leave as-is if filing manually.
+      options:
+        - "QA agent (automated)"
+        - "Human"
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: >
+        Exact steps, from a known state. Include which viewport, browser, and
+        whether the app was served from a production build or the dev server.
+      placeholder: |
+        1. Sign in, open a board with 4 cards in "To do"
+        2. Filter → Card type → Task
+        3. Open the filter menu again and tick "Epic"
+        4. Observed: the menu has moved down and "Epic" is unclickable
+        - Viewport: chromium-tablet 768×1024, `CI=true` (production build)
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: >
+        Error messages, stack traces, `test-results/**/error-context.md`, failing
+        test names, axe output, or a geometry dump. Paste it verbatim — do not
+        paraphrase an error.
+      placeholder: |
+        Error: expect(locator).toBeVisible() failed
+        Expected: visible
+        Received: <element(s) not found>
+        Call log:
+          - Expect "toBeVisible" with timeout 5000ms
+        ---
+        axe: 1 violation (color-contrast) on .filter-bar__badge
+      render: text
+
+  - type: textarea
+    id: impact-detail
+    attributes:
+      label: Who is affected and how badly
+      description: >
+        Which users hit this, on which devices, and whether data is at risk.
+        This is what justifies the Impact rating — state the feature that is
+        blocked, or the fact that all devices are affected.
+      placeholder: |
+        Tablet only (768-1024px); desktop and mobile are unaffected. The filter
+        menu opens but its options are unclickable, so filtering cannot be
+        completed. No data loss; reloading recovers.
+    validations:
+      required: true
+
+  - type: input
+    id: regression
+    attributes:
+      label: Was this passing before?
+      description: The last known-good commit, if you have one.
+      placeholder: "618c718"
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: Screenshots, recordings, or hypotheses already ruled out.
+      placeholder: |
+        Ruled out: not a stale build (rebuilt and retried), not the service
+        worker (CI=true only, and workers are blocked in this config).
