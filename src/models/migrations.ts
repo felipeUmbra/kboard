@@ -11,6 +11,7 @@ import type {
   Label,
 } from "./types";
 import { ALL_CARD_TYPES, CARD_TYPE_META } from "./cardTypeMeta";
+import { normalizeSavedViews } from "./savedViews";
 
 /** Build a fresh per-type config block. */
 function defaultCardTypes(): CardTypeConfig[] {
@@ -115,6 +116,11 @@ export function normalizeBoard(raw: unknown): Board {
     customFields,
     cardTypes,
     doneColumnIds,
+    // Degrade, never crash: a missing or hand-mangled `savedViews` becomes a
+    // usable (empty) list rather than taking the whole board down with it.
+    // Per-entry validation, duplicate-name and duplicate-id resolution all
+    // live in `normalizeSavedViews`.
+    savedViews: normalizeSavedViews(r.savedViews),
     columns,
     cards,
     createdAt: typeof r.createdAt === "number" ? r.createdAt : now,

@@ -83,6 +83,101 @@ export interface CardTypeConfig {
   customFields: CustomField[]; // per-type fields (separate from board-level)
 }
 
+// ─── Filtering and saved views ─────────────────────────────────────
+
+/** Which side(s) of a date to bound, for the relative date presets. */
+export type DatePreset =
+  | "overdue"
+  | "today"
+  | "tomorrow"
+  | "this-week"
+  | "next-week"
+  | "next-30-days"
+  | "no-date"
+  | "before"
+  | "after";
+
+/**
+ * A date filter. Exactly one of the two shapes is meaningful:
+ * - `preset`  — a relative window ("overdue", "this week", …).
+ * - `from`/`to` — explicit ISO YYYY-MM-DD bounds. Either may be omitted for
+ *   an open-ended range; both present is a closed range.
+ *
+ * An absent DateFilter means "do not filter on this date". An *empty*
+ * DateFilter is normalized away to absent so "no filter" has one
+ * representation, not two.
+ */
+export interface DateFilter {
+  preset?: DatePreset;
+  from?: string;
+  to?: string;
+}
+
+/**
+ * A filter on one custom field. Which properties are meaningful depends on
+ * the field's `type`:
+ * - `preset_list` → `optionIds` (OR within)
+ * - `boolean`     → `bool`
+ * - `number` / `percentage` → `num` ({ min?, max? })
+ * - `date`        → `date` ({ from?, to? })
+ * - text types    → not filterable; a text field filter is ignored.
+ */
+export interface FieldFilter {
+  /** The CustomField.id this filters on. */
+  fieldId: string;
+  optionIds?: string[];
+  bool?: boolean;
+  num?: { min?: number; max?: number };
+  date?: { from?: string; to?: string };
+}
+
+/** Whether the filter targets done or not-done cards. */
+export type DoneFilter = "done" | "not-done";
+
+/**
+ * A structured, persistable board filter.
+ *
+ * Every property is optional and every array defaults to empty, so an EMPTY
+ * FilterState means "no filtering". That invariant is what makes `isFilterEmpty`
+ * total and "Clear all" a single assignment.
+ *
+ * Predicates are AND-ed across properties; values within one property are
+ * OR-ed. `cardTypes: [epic, story]` means "epic OR story"; combined with
+ * `labelIds: [bug]` it means "(epic OR story) AND has label bug".
+ *
+ * Deliberately absent: title, description, comments. Those are searchable but
+ * not filterable, and omitting the keys makes that structurally impossible
+ * rather than a rule someone has to remember.
+ */
+export interface FilterState {
+  cardTypes?: CardType[];
+  labelIds?: string[];
+  columnIds?: string[];
+  fieldFilters?: FieldFilter[];
+  startDate?: DateFilter;
+  dueDate?: DateFilter;
+  done?: DoneFilter;
+}
+
+/**
+ * A named, persisted filter preset, scoped to ONE board.
+ *
+ * Views are board-scoped by design (no global views), so every id inside
+ * `filter` — labelIds, columnIds, fieldId, optionIds — refers to an entity
+ * owned by that same board. Nothing here needs cross-board id resolution.
+ *
+ * Note there is no `searchQuery`: a view stores a filter only. Persisting a
+ * search term would make a recalled view silently hide most of the board.
+ */
+export interface SavedView {
+  id: string;
+  /** Unique per board, compared case-insensitively after trimming. */
+  name: string;
+  filter: FilterState;
+  createdAt: number;
+  updatedAt: number;
+}
+
 // ─── Activity log ───────────────────────────────────────────────────
 
 /** The kind of change recorded in a card's activity log. */
@@ -188,8 +283,15 @@ export interface Board {
   customFields: CustomField[];
   /** Per-type configurations (epic / story / task). */
   cardTypes: CardTypeConfig[];
-  /** IDs of columns that count as "done" for progress calculation. */
+  // IDs of columns that count as "done" for progress calculation.
   doneColumnIds: string[];
+  /**
+   * Named filter presets. Optional so board files written before saved views
+   * existed need no rewrite; `normalizeBoard` defaults it to `[]`.
+   *
+   * Ordering is creation order. Drag-reordering views is an explicit non-goal.
+   */
+  savedViews?: SavedView[];
   columns: Column[];
   cards: Record<string, Card>;
   createdAt: number;

@@ -1,14 +1,27 @@
 /**
  * Centralized selector catalog for kboard.
  *
- * The app does not ship `data-testid` attributes — we derive stable selectors
- * from semantic HTML (role + aria-label) and BEM class names. All selectors
- * live here so a future refactor only requires updating one file.
+ * kboard uses TWO selector strategies, both in active use:
  *
- * Conventions:
- *   - getByRole(...)       → preferred for interactive elements
- *   - getByLabel(...)      → for inputs with aria-label
- *   - .locator('.bclass')  → for non-interactive containers
+ *   1. `sel.*` (this file) — semantic selectors derived from role, aria-label
+ *      and BEM class names. ~125 call sites across 12 spec files.
+ *   2. `data-testid` — used by the newer surfaces: ChecklistEditor,
+ *      Planner, ShareToBoardModal, ParentPicker, the PWA toasts and the
+ *      topbar planner button. ~52 call sites across 4 spec files.
+ *
+ * Which to use for NEW code:
+ *   - Prefer `data-testid` in the component. It is decoupled from copy and
+ *     from CSS class names, so a copy edit or a rename does not break tests.
+ *   - Strongly prefer it for dynamically-rendered UI (popovers, filter menus,
+ *     anything with computed or conditional text), where a `:has-text()`
+ *     selector becomes brittle or impossible.
+ *   - `sel.*` remains correct and supported for the existing selectors here.
+ *     Do NOT migrate working call sites just for consistency; the diff would
+ *     be large, risky, and buy nothing.
+ *
+ * This catalog is NOT exhaustive — some testids are referenced as literals in
+ * the specs rather than registered here. When you add a selector that is used
+ * in more than one spec, register it below so a refactor has one place to fix.
  */
 export const sel = {
   // Login
@@ -40,6 +53,19 @@ export const sel = {
   addColumnButton: 'button:has-text("Add column")',
   column: ".kanban-column",
   columnTitle: ".kanban-column__title",
+
+  // Search + filter toolbar (Phases 1–2). These use data-testid rather than
+  // this catalog because the menu renders conditionally and its checkbox
+  // labels are computed, so a class-based selector would be brittle.
+  searchInput: '[data-testid="search-input"]',
+  searchClear: '[data-testid="search-clear"]',
+  searchCount: '[data-testid="search-count"]',
+  filterTrigger: '[data-testid="filter-trigger"]',
+  filterMenu: '[data-testid="filter-menu"]',
+  filterBadge: '[data-testid="filter-badge"]',
+  filterChips: '[data-testid="filter-chips"]',
+  filterClearAll: '[data-testid="filter-clear-all"]',
+  filterMenuDone: '[data-testid="filter-menu-done"]',
   columnOptions: 'button[aria-label="Column options"]',
   columnAddBtn: ".kanban-column__add-btn",
   columnDoneDot: ".kanban-column__done-dot",

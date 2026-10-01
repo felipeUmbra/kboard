@@ -1,17 +1,35 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useBoard } from "../state/BoardContext";
+import { ViewStateProvider, useViewState, isHiddenByView } from "../state/viewState";
 import { Column } from "./Column";
 import { CardEditor } from "./CardEditor";
 import { KanbanDndProvider } from "./KanbanDndContext";
 import { MobileColumnTargets } from "./MobileColumnTargets";
 import { useViewport } from "../hooks/useViewport";
+import { SearchBar } from "./SearchBar";
+import { FilterBar } from "./FilterBar";
+import { Toast, useToast } from "./Toast";
+import { visibleCardIds as computeVisible } from "../models/filters";
 import type { AddCardDirection } from "../state/cardActions";
 import type { Card } from "../models/types";
 import { DndKeyboardHelp, DND_HELP_ID } from "./DndKeyboardHelp";
 
 export function BoardView({ onBackToList }: { onBackToList: () => void }) {
   const board = useBoard();
+  // The provider keys off the board id so switching boards clears the query
+  // and the filter — a saved view's ids mean nothing on another board.
+  return (
+    <ViewStateProvider boardId={board.activeBoard?.id ?? null}>
+      <BoardViewInner onBackToList={onBackToList} />
+    </ViewStateProvider>
+  );
+}
+
+function BoardViewInner({ onBackToList }: { onBackToList: () => void }) {
+  const board = useBoard();
   const viewport = useViewport();
+  const { searchQuery, filter, clearFilter } = useViewState();
+  const { toast, notify, dismiss } = useToast();
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
   // Track cards created via "+ Add child/parent" so the editor can gate
   // Save and require a name before letting the user close.
@@ -106,6 +124,34 @@ export function BoardView({ onBackToList }: { onBackToList: () => void }) {
     setNewCardOrigin(null);
   };
 
+  // One pass over the board's cards per query/filter change, not one per
+  // column. `computeVisible` returns null when nothing is narrowed, and the
+  // Column treats null as "render everything" — so the common case costs
+  // nothing at all.
+  const visible = useMemo(
+    () => (b ? computeVisible(b, searchQuery, filter) : null),
+    [b, searchQuery, filter],
+  );
+  const matchCount = visible ? visible.size : Object.keys(b?.cards ?? {}).length;
+  const totalCount = Object.keys(b?.cards ?? {}).length;
+
+  /**
+   * A card created under an active filter that hides it is still created —
+   * the work is never lost — but we say so, because an invisible new card
+   * looks exactly like a failed create.
+   */
+  const warnIfHidden = useCallback(
+    (card: Card) => {
+      if (isHiddenByView(b, filter, card)) {
+        notify("Card added — hidden by the current filters.", {
+          label: "Clear filters",
+          onAction: clearFilter,
+        });
+      }
+    },
+    [b, filter, notify, clearFilter],
+  );
+
   const columnsToShow =
     viewport.isMobile ? [b.columns[mobileColumnIndex]].filter(Boolean) : b.columns;
 
@@ -176,6 +222,14 @@ export function BoardView({ onBackToList }: { onBackToList: () => void }) {
         <DndKeyboardHelp id={DND_HELP_ID} />
       </div>
 
+      {/* Search + filter toolbar. Sits between the board header and the
+          columns, full width, and wraps on narrow viewports. */}
+      <div className="board-toolbar">
+        <SearchBar matchCount={matchCount} totalCount={totalCount} />
+        <FilterBar board={b} />
+      </div>
+
+
       {viewport.isMobile ? (
         <div className="kanban-mobile">
           {/* Collapsible column rail — each column is a vertical strip; the
@@ -217,6 +271,7 @@ export function BoardView({ onBackToList }: { onBackToList: () => void }) {
                     column={col}
                     board={b}
                     onOpenCard={openCard}
+                    visibleCardIds={visible}
                   />
                 ))}
               </div>
@@ -244,6 +299,7 @@ export function BoardView({ onBackToList }: { onBackToList: () => void }) {
                   column={col}
                   board={b}
                   onOpenCard={openCard}
+                  visibleCardIds={visible}
                 />
               ))}
               <button
@@ -279,10 +335,13 @@ export function BoardView({ onBackToList }: { onBackToList: () => void }) {
           isNewCard={editingCardId === newlyCreatedCardId}
           newCardOrigin={newCardOrigin ?? undefined}
           onSaved={handleCardSaved}
+          onSavedCard={warnIfHidden}
           onAddChild={handleAddChild}
           onAddParent={handleAddParent}
         />
       )}
+
+      <Toast toast={toast} onDismiss={dismiss} />
     </div>
   );
 }

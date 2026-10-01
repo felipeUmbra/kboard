@@ -31,6 +31,7 @@ export function CardEditor({
   isNewCard = false,
   newCardOrigin,
   onSaved,
+  onSavedCard,
   onAddChild,
   onAddParent,
 }: {
@@ -47,6 +48,10 @@ export function CardEditor({
   /** Called after a successful Save so the host can clear its
    *  newlyCreatedCardId flag. */
   onSaved?: () => void;
+  /** Called with the saved card after a successful Save. The host uses this to
+   *  warn when an active filter will hide the card the user just saved, so an
+   *  invisible new card doesn't read as a failed save. */
+  onSavedCard?: (card: CardModel) => void;
   /** Host provides the create+link actions so the editor doesn't reach
    *  back into the board context for navigation. */
   onAddChild?: (originCardId: string) => void;
@@ -190,6 +195,11 @@ export function CardEditor({
   const saveAndClose = () => {
     if (!commitEdits()) return;
     onSaved?.();
+    // Hand back the card as it now stands — the host may need to re-check it
+    // against an active filter after the type/labels/dates the user just
+    // changed.
+    const saved = ctx.activeBoard?.cards[safeCard.id];
+    if (saved) onSavedCard?.(saved);
     onClose();
   };
 
