@@ -243,16 +243,117 @@ test.describe("Sprint 3.1 — drag-and-drop keyboard instructions", () => {
     await expectAAContrast(page.locator(".dnd-help kbd").first(), "dnd help kbd");
   });
 
-  test("a card can be moved with the keyboard alone", async ({ page }) => {
+  test("a card can be moved with the keyboard alone", async ({ page, isMobile }) => {
     // 2.1.1: the feature the instructions describe must actually work.
+    //
+    // Bug #18 made this assertion vacuous. It pressed Space, pressed Arrow
+    // Right, pressed Space again, then only checked the card count was still
+    // 1 — which also holds when Space opened the editor and nothing was ever
+    // dragged, because the card never left the board. It proved the keyboard
+    // did not crash, not that the card moved.
+    //
+    // These assertions check the three things that actually matter: Space
+    // lifts the card, the live region announces it, and the card ends up
+    // somewhere the user did not leave it.
+    //
+    // Two layout facts shape the last assertion (both measured, see the
+    // probe in this file's history):
+    //   - The move is asserted as "a DIFFERENT column", not "column index 1".
+    //     `.kanban-column` has no data-column-id, and sortableKeyboardCoordinates
+    //     moves to the nearest droppable, so an index assumption is wrong.
+    //   - On MOBILE the board renders exactly ONE column at a time (the rail
+    //     expands a single column), so there is no second column for ArrowRight
+    //     to reach and a cross-column move is impossible by construction.
+    //     Tablet renders all three and the move works there. Skipping mobile
+    //     here is honest about that limitation; the MOBILE keyboard-drag path
+    //     is still covered by the pickup assertions below, which run
+    //     everywhere and are what bug #18 actually broke.
     const card = page.locator(".kanban-card").first();
+
+    // Which column holds the card before we start? Resolve by the column
+    // that CONTAINS the card, then read its title.
+    const titleOfColumnContaining = async (locator: Locator) =>
+      (
+        await page
+          .locator(sel.column)
+          .filter({ has: locator })
+          .locator(sel.columnTitle)
+          .innerText()
+      )
+        .replace(/\s*\(\d+\)\s*$/, "")
+        .trim();
+
+    const originTitle = await titleOfColumnContaining(card);
     await card.focus();
+
+    // Pick up. The card must report the drag state rather than opening the
+    // editor — the defect was Space falling through to onOpen().
     await page.keyboard.press("Space");
-    // dnd-kit lifts the card; it stays in the DOM while dragging.
-    await page.keyboard.press("ArrowRight");
+    await expect(page.locator(sel.cardTitleInput)).toHaveCount(0);
+    await expect(card).toHaveAttribute("aria-pressed", "true");
+    // KanbanDndContext's own live region announces the pickup. Target it by
+    // class, not by `[aria-live]` positionally — several polite regions exist
+    // (search, toasts, install prompt) and `.first()` lands on an empty one.
+    await expect(page.locator(".sr-only[aria-live='polite']").first()).toContainText(
+      /picked up/i,
+    );
+
+    // Steer right, then drop.
+    //
+    // dnd-kit's KeyboardSensor scrolls the board with `behavior: 'smooth'`
+    // when the destination lies outside the visible area (see
+    // `KeyboardSensor.handleKeyDown` -> `scrollContainer.scrollTo`). On
+    // tablet the board is ~1252px wide inside a 488px viewport, so pressing
+    // ArrowRight starts a 300px smooth scroll; dropping while that animation
+    // is still in flight resolves the collision against the pre-scroll
+    // layout and the card lands back where it started. Desktop's board fits
+    // its viewport, so it never scrolls — which is why the same single press
+    // worked on desktop and appeared "systematic" on tablet.
+    //
+    // Wait for the scroll position to settle instead of guessing a delay, so
+    // the test is correct on any viewport rather than tuned to today's one.
+    //
+    // `.kanban-scroll` exists only on the desktop/tablet board; the mobile
+    // layout renders `.kanban-mobile` with no horizontal scroller, so there is
+    // nothing to wait for (and nothing to scroll into view either).
+    const scroller = page.locator(".kanban-scroll");
+    if (await scroller.count()) {
+      const settled = () =>
+        scroller.evaluate(async (el) => {
+          // Two consecutive identical scrollLeft values => animation finished.
+          const first = el.scrollLeft;
+          await new Promise((r) =>
+            requestAnimationFrame(() => requestAnimationFrame(r)),
+          );
+          return el.scrollLeft === first;
+        });
+      await expect.poll(settled, { timeout: 5_000 }).toBe(true);
+      await page.keyboard.press("ArrowRight");
+      await expect.poll(settled, { timeout: 5_000 }).toBe(true);
+    } else {
+      await page.keyboard.press("ArrowRight");
+    }
     await page.keyboard.press("Space");
-    // Dropping must not throw and the card must remain on the board.
+
+    // Dropped: the drag state is released and the card survived.
     await expect(page.locator(".kanban-card")).toHaveCount(1);
+    await expect(page.locator(".kanban-card").first()).not.toHaveAttribute(
+      "aria-pressed",
+      /.*/,
+    );
+
+    // Cross-column movement is only meaningful where a second column exists.
+    // Tablet and desktop render all columns; mobile renders one.
+    if (isMobile) return;
+
+    // The card must now sit in a DIFFERENT column.
+    const destinationTitle = await titleOfColumnContaining(
+      page.locator(".kanban-card").first(),
+    );
+    expect(
+      destinationTitle,
+      `the card stayed in "${originTitle}"`,
+    ).not.toBe(originTitle);
   });
 });
 

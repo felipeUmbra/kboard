@@ -3,6 +3,7 @@ import {
   PointerSensor,
   TouchSensor,
   KeyboardSensor,
+  KeyboardCode,
   useSensor,
   useSensors,
   closestCorners,
@@ -27,6 +28,15 @@ export function KanbanDndProvider({ children }: { children: ReactNode }) {
   //   users can't drag because the click handler on the card fires first.
   // - Touch: require a 250ms long-press so taps still open the card.
   // - Keyboard: full a11y support.
+  //
+  // `keyboardCodes` is pinned to Space-only for starting/ending a drag.
+  // dnd-kit's DEFAULT also binds Enter to start AND to end, which collides
+  // with the card's primary action — Enter opens the card editor (see the
+  // Card component's key handling, and the "cards are keyboard-activatable
+  // with Enter" e2e check). With the default codes the editor opened and the
+  // card simultaneously began a keyboard drag, so the two fought over one
+  // key press. Space is the documented pickup/drop key (DndKeyboardHelp),
+  // Escape cancels, and Tab ends a drag so focus can leave the board.
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 5 },
@@ -36,6 +46,11 @@ export function KanbanDndProvider({ children }: { children: ReactNode }) {
     }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
+      keyboardCodes: {
+        start: [KeyboardCode.Space],
+        cancel: [KeyboardCode.Esc],
+        end: [KeyboardCode.Space, KeyboardCode.Tab],
+      },
     }),
   );
 

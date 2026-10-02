@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, type KeyboardEventHandler } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { Board, Card as CardModel, CardType } from "../models/types";
@@ -99,6 +99,38 @@ export function Card({
     isDragging,
   } = useSortable({ id: card.id });
 
+  // Our own key handling must COMPOSE with dnd-kit's activator, not replace
+  // it. `listeners.onKeyDown` is the KeyboardSensor activator: on Space it
+  // calls preventDefault() and lifts the card into a keyboard drag.
+  //
+  // Bug #18: this handler used to be declared inline AFTER `{...listeners}`,
+  // so React received a single `onKeyDown` prop that belonged to us, and
+  // dnd-kit's activator was silently overwritten. Space therefore opened the
+  // card editor instead of picking the card up, the sensor never started, and
+  // a keyboard-only user had no way to reorder a card at all — the editor's
+  // Column selector changes columns but never reorders within one.
+  //
+  // The fix is to call both, dnd-kit's first, and only fall through to
+  // "open the editor" when the sensor did not claim the key. We rely on the
+  // sensor calling `preventDefault()` when it activates; checking that is
+  // more robust than key-sniffing, because KanbanDndContext configures the
+  // KeyboardSensor to start on Space only (see `keyboardCodes` there), so the
+  // set of "drag keys" is not hard-coded here. Enter deliberately stays an
+  // open-the-editor key: dnd-kit's default also binds Enter to start a drag,
+  // which would make one press do both things.
+  const handleKeyDown: KeyboardEventHandler<HTMLDivElement> = (e) => {
+    listeners?.onKeyDown?.(e);
+    // A drag is already in flight: dnd-kit owns every key from here on
+    // (arrows move, Space drops, Escape cancels). Opening the editor
+    // mid-drag would both break the drag and hide the card.
+    if (isDragging) return;
+    if (e.defaultPrevented) return;
+    if (e.key === "Enter" || e.key === " " || e.key === "Spacebar") {
+      e.preventDefault();
+      onOpen(card);
+    }
+  };
+
   return (
     <div
       ref={setNodeRef}
@@ -125,12 +157,7 @@ export function Card({
         if ((e as unknown as { defaultPrevented: boolean }).defaultPrevented) return;
         onOpen(card);
       }}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onOpen(card);
-        }
-      }}
+      onKeyDown={handleKeyDown}
     >
       <div className="kanban-card__top">
         <TypeChip

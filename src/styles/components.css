@@ -522,7 +522,31 @@
   user-select: none;
   -webkit-user-select: none;
   -moz-user-select: none;
-  touch-action: pan-y;
+  /* Bug #17: this was `pan-y`, which told the browser it may treat any
+     touch gesture with a vertical component as a scroll. Chrome resolves the
+     permitted scroll axis from the FIRST touchmove's direction, so the
+     moment a long-press drag began by moving up or diagonally — which is
+     exactly what moving a card to the "Move to column" target on the left
+     requires — the browser claimed the gesture, scrolled the column, and
+     fired `pointercancel`. dnd-kit lost the drag and the card snapped back.
+
+     Measured on a scrollable list (tests/e2e/mobile-touch-dnd.spec.ts and
+     the scratch experiments it replaced):
+       pan-y: horizontal opening move survived; up-left diagonal AND
+              straight-up opening moves were both cancelled by the browser.
+       none: all three shapes drag successfully, zero pointercancels.
+     `none` is what dnd-kit's TouchSensor needs, because it cannot
+     retroactively stop a scroll the browser has already claimed.
+
+     TRADE-OFF, measured not assumed: with `pan-y`, a swipe on a card scrolled
+     the column (scrollTop 135); with `none` it does not (scrollTop 0). Cards
+     are `width: 100%`, so they tile the whole scroll port and the gaps
+     between them are not a practical substitute. Dragging a card therefore
+     now takes precedence over scrolling it — the deliberate choice, since a
+     drag that cannot be completed is a broken feature while a column that
+     needs scrolling is a smaller loss. Revisit if touch scrolling on long
+     columns turns out to matter more than dragging them. */
+  touch-action: none;
 }
 
 .kanban-card:hover {

@@ -67,14 +67,37 @@ test.describe("Responsive + A11y (all viewports)", () => {
     await bp.closeCardEditor();
   });
 
-  test("A11y: cards are keyboard-activatable with Space", async ({ page }) => {
+  test("A11y: Enter opens the card editor, Space starts a drag", async ({ page }) => {
+    // Bug #18: these used to be two tests asserting the OPPOSITE for Space.
+    // One claimed Space opens the editor, the other claimed Space picks the
+    // card up for a keyboard drag — and the editor assertion won, which is
+    // exactly how keyboard users lost the ability to reorder a card. One key
+    // press cannot do both, so the split is now explicit:
+    //
+    //   Enter → open the card (the card's primary action)
+    //   Space → pick up / drop, per the "Keyboard shortcuts" help and WCAG 2.1.1
+    //
+    // Space must NOT open the editor; that assertion is the regression guard.
     const bp = new BoardPage(page);
-    await bp.addCard("To do", "Space card");
-    const card = page.locator(sel.card).filter({ hasText: "Space card" }).first();
+    await bp.addCard("To do", "Keyboard card");
+    const card = page.locator(sel.card).filter({ hasText: "Keyboard card" }).first();
+
+    // Enter opens the editor.
     await card.focus();
-    await page.keyboard.press("Space");
+    await page.keyboard.press("Enter");
     await expect(page.locator(sel.cardTitleInput)).toBeVisible({ timeout: 5_000 });
     await bp.closeCardEditor();
+
+    // Space starts a keyboard drag instead, and announces pickup.
+    await card.focus();
+    await page.keyboard.press("Space");
+    await expect(page.locator(sel.cardTitleInput)).toHaveCount(0);
+    await expect(card).toHaveAttribute("aria-pressed", "true");
+
+    // Escape returns the card without moving it, and focus survives.
+    await page.keyboard.press("Escape");
+    await expect(card).not.toHaveAttribute("aria-pressed", /.*/);
+    await expect(page.locator(sel.card)).toHaveCount(1);
   });
 
   test("A11y: all icon-only buttons expose aria-label", async ({ page }) => {
