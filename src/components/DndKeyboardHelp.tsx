@@ -10,8 +10,16 @@
 // A native <details> is used rather than a custom disclosure: it is
 // keyboard-operable, announces its expanded state, and works before JS runs.
 
-/** The keys dnd-kit's KeyboardSensor actually binds, in the order it uses them. */
+/**
+ * The keys the KeyboardSensor is actually configured with, in the order
+ * dnd-kit uses them. Keep in sync with `keyboardCodes` in KanbanDndContext.
+ *
+ * Enter is deliberately NOT a drag key: it opens the card editor, which is
+ * the card's primary action. dnd-kit's default binds Enter to start AND end
+ * a drag, so the two collided (bug #18) — Space is the drag key throughout.
+ */
 const SHORTCUTS: { keys: string; action: string }[] = [
+  { keys: "Enter", action: "Open the focused card" },
   { keys: "Space", action: "Pick up the focused card" },
   { keys: "Arrow keys", action: "Move it between columns and positions" },
   { keys: "Space", action: "Drop it in the new spot" },
