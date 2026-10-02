@@ -23,6 +23,17 @@ name: Defect hunt (QA agent)
 # PERMISSIONS
 # issues: write is required - the agent files issues. Nothing else is granted:
 # no contents write, so this job cannot push code or modify the repository.
+#
+# SECRETS
+# GH_TOKEN is the automatic repository token. `gh` needs it to file issues.
+# COPILOT_GITHUB_TOKEN is separate and does NOT exist yet - until it does, both
+# jobs skip themselves with a notice rather than failing. The two are not
+# interchangeable: Copilot CLI refuses an installation token, so passing
+# GITHUB_TOKEN to it produces "Error: Authentication failed" and exit 1. That
+# is what the first scheduled run did, after 34s of building for nothing.
+#
+# Create COPILOT_GITHUB_TOKEN as a repository secret from a fine-grained PAT
+# with the "Copilot Requests" permission. Classic PATs (ghp_) are rejected.
 
 on:
   workflow_dispatch:
@@ -66,6 +77,14 @@ jobs:
       # The agent must not try to close or reopen anything on this pass; the
       # retest job below owns that.
       QA_MODE: discovery
+      # Copilot CLI does NOT accept GITHUB_TOKEN for model requests. It accepts
+      # a fine-grained PAT with "Copilot Requests", a Copilot CLI OAuth token,
+      # or a GitHub CLI OAuth token. The automatic GITHUB_TOKEN is an
+      # installation token and is not one of those, so passing it produces
+      # "Error: Authentication failed" and exit 1 - which is exactly what the
+      # nightly run did. GH_TOKEN above stays the repo token because `gh` needs
+      # it to file issues; the CLI reads COPILOT_GITHUB_TOKEN first.
+      COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -86,7 +105,24 @@ jobs:
       - name: Confirm gh is authenticated
         run: gh auth status
 
+      # Fail loudly, and with an actionable message, when the agent cannot
+      # possibly authenticate. Without this the job dies 30s later inside the
+      # CLI with a message that does not name the missing secret.
+      #
+      # Skipped rather than failed on purpose: an absent optional secret must
+      # not paint a nightly red build nobody reads, which is the same failure
+      # as a gate nobody watches.
+      - name: Check the Copilot token is configured
+        if: env.COPILOT_GITHUB_TOKEN == ''
+        run: |
+          echo "::notice title=Defect hunt skipped::COPILOT_GITHUB_TOKEN is not set, so the QA agent cannot authenticate. Set it as a repository secret to enable this workflow. Manual runs and scheduled runs will report success without hunting."
+          echo "To create one: Settings > Developer settings > Personal access tokens > Fine-grained tokens, with the 'Copilot Requests' permission."
+          exit 0
+
+      # Gated on the same condition as the check above, so the expensive
+      # install-and-hunt only happens when the agent can actually authenticate.
       - name: Run the QA agent in defect-discovery mode
+        if: env.COPILOT_GITHUB_TOKEN != ''
         env:
           COPILOT_ALLOW_ALL: "true"
         run: |
@@ -166,10 +202,21 @@ jobs:
       issues: write
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Same reason as the hunt job: the automatic GITHUB_TOKEN cannot
+      # authenticate the Copilot CLI. See the note there.
+      COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
+      # Skipped, not failed, when the token is absent. A triage job that can
+      # never work should not turn every unrelated CI failure into a second
+      # red build.
+      - name: Note that triage needs the Copilot token
+        if: env.COPILOT_GITHUB_TOKEN == ''
+        run: echo "::notice title=Triage skipped::COPILOT_GITHUB_TOKEN is not set, so the QA agent cannot triage this failure."
+
       - name: Run the QA agent to triage the failure
+        if: env.COPILOT_GITHUB_TOKEN != ''
         env:
           COPILOT_ALLOW_ALL: "true"
         run: |
