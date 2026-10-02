@@ -78,6 +78,19 @@ test.describe("Responsive + A11y (all viewports)", () => {
     //   Space → pick up / drop, per the "Keyboard shortcuts" help and WCAG 2.1.1
     //
     // Space must NOT open the editor; that assertion is the regression guard.
+    //
+    // CI flaked this test twice (chromium-desktop + chromium-mobile, "2 flaky",
+    // green only because `retries: 2` is set). The cause was a race in THIS
+    // test, not the product: `closeCardEditor()` waits for the title input to
+    // detach and then a fixed 100ms, but the board re-render — which re-mounts
+    // the card and re-registers it with dnd-kit — lands after that. Pressing
+    // Space inside that window started a drag against a node the sensor then
+    // released, leaving `aria-pressed` stuck at "true" for the whole 5s
+    // expect timeout. Verified with a probe that the product itself always
+    // clears `aria-pressed` within ~100ms of Escape.
+    //
+    // Fix: wait for a condition that is actually true only once the board has
+    // settled — focus must LAND on the card — instead of assuming a delay.
     const bp = new BoardPage(page);
     await bp.addCard("To do", "Keyboard card");
     const card = page.locator(sel.card).filter({ hasText: "Keyboard card" }).first();
@@ -89,14 +102,20 @@ test.describe("Responsive + A11y (all viewports)", () => {
     await bp.closeCardEditor();
 
     // Space starts a keyboard drag instead, and announces pickup.
+    // Re-focus and require focus to have landed, so the drag begins against a
+    // settled card rather than one that is still being re-mounted.
     await card.focus();
+    await expect(card).toBeFocused();
     await page.keyboard.press("Space");
     await expect(page.locator(sel.cardTitleInput)).toHaveCount(0);
     await expect(card).toHaveAttribute("aria-pressed", "true");
 
-    // Escape returns the card without moving it, and focus survives.
+    // Escape returns the card without moving it. Assert on the live region too:
+    // it clears on drag end, so it independently proves the drag really ended
+    // rather than the attribute lagging a render behind.
     await page.keyboard.press("Escape");
     await expect(card).not.toHaveAttribute("aria-pressed", /.*/);
+    await expect(page.locator(".sr-only[aria-live='polite']").first()).toHaveText("");
     await expect(page.locator(sel.card)).toHaveCount(1);
   });
 
