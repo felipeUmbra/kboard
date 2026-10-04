@@ -462,7 +462,7 @@ same board coalesce into one API call rather than two.
 | Board size | One file, full replacement | A few hundred KB; fine into the low thousands of cards |
 | Write cost | Whole-file `PATCH` | Write amplification; revisit past ~2000 cards |
 | List cost | One `files.list`, no content download | Constant |
-| Offline | Full read/write; writes deferred | Bounded by localStorage quota (~5 MB) |
+| Offline | Full read/write; writes deferred and retried until Drive confirms them | Bounded by localStorage quota (~5 MB) |
 | Concurrent editors | Last-write-wins with `412` detection | One edit can be lost; surfaced, not silent |
 
 ---

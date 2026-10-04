@@ -1,6 +1,7 @@
 import { expect, type Page, type Locator } from "@playwright/test";
 import { loginAs } from "./login";
 import { sel } from "./selectors";
+import type { FakeDriveFile } from "../fixtures/fakeDrive";
 
 // NOTE ON WAIT TIMEOUTS
 // ----------------------
@@ -534,18 +535,120 @@ export class BoardPage {
   }
 
   // ── Drive introspection ───────────────────────────────────────────
+  /**
+   * The files the fake Drive is actually holding.
+   *
+   * Read from NODE, not from `window.__kboardDrive`: a reload re-runs the
+   * init script and starts the page-side mirror EMPTY, so reading it after a
+   * reload reports a false "Drive is empty". The mirror is only refilled as a
+   * side effect of the next Drive request.
+   */
   async listDriveFiles() {
-    return this.page.evaluate(() => window.__kboardDrive!.list());
+    return this.page.evaluate(() =>
+      (window as unknown as { __kboardDriveList: () => Promise<FakeDriveFile[]> })
+        .__kboardDriveList(),
+    );
+  }
+
+  /**
+   * Replace fields of a file in the real (Node-side) fake Drive store.
+   *
+   * Use this instead of writing to `window.__kboardDrive.files`: that only
+   * edits the page-side mirror, so the route handler would keep serving the
+   * old content and the change would silently not take effect.
+   *
+   * Takes plain data rather than a callback because Playwright serialises
+   * arguments across the binding boundary.
+   */
+  async updateDriveFile(
+    id: string,
+    patch: { content?: string; modifiedTime?: string; version?: string },
+  ): Promise<void> {
+    await this.page.evaluate(
+      ({ fid, p }) =>
+        (
+          window as unknown as {
+            __kboardDrivePatch: (
+              id: string,
+              patch: { content?: string; modifiedTime?: string; version?: string },
+            ) => Promise<void>;
+          }
+        ).__kboardDrivePatch(fid, p),
+      { fid: id, p: patch },
+    );
   }
 
   async setDriveForce401Once() {
-    await this.page.evaluate(() => window.__kboardDrive!.setForce401Once());
+    await this.page.evaluate(() =>
+      (window as unknown as { __kboardDriveForce401Once: () => Promise<void> })
+        .__kboardDriveForce401Once(),
+    );
   }
 
   async setDriveForceNetworkError() {
-    await this.page.evaluate(() => window.__kboardDrive!.setForceNetworkError());
+    await this.page.evaluate(() =>
+      (window as unknown as { __kboardDriveForceNetworkError: () => Promise<void> })
+        .__kboardDriveForceNetworkError(),
+    );
   }
 
+  /**
+   * Take Drive offline (or back online) for EVERY subsequent request, with
+   * no auto-recovery. `setDriveForceNetworkError` fails exactly one request,
+   * which models a transient blip; offline testing needs the network to stay
+   * down across many calls so the debounced save, any retry, and the
+   * revalidation round-trip all genuinely fail.
+   */
+  async setDriveOffline(offline = true) {
+    await this.page.evaluate(
+      (v) =>
+        (window as unknown as { __kboardDriveSetOffline: (v: boolean) => Promise<void> })
+          .__kboardDriveSetOffline(v),
+      offline,
+    );
+  }
+
+  /**
+   * Card titles the fake Drive is actually holding, read from the Drive
+   * documents themselves rather than from localStorage — so a test can
+   * distinguish "saved to Drive" from "only cached locally".
+   *
+   * Each board is stored as its OWN Drive file whose content is a single
+   * serialized `Board` object (not a `{ boards: [...] }` envelope), and the
+   * content is a raw JSON string that has to be parsed here.
+   */
+  async driveBoardTitles(): Promise<string[]> {
+    return this.page.evaluate(async () => {
+      const list = await (
+        window as unknown as { __kboardDriveList: () => Promise<FakeDriveFile[]> }
+      ).__kboardDriveList();
+      const out: string[] = [];
+      for (const f of list) {
+        let board: { cards?: Record<string, { title?: string }> };
+        try {
+          board = JSON.parse(f.content as unknown as string);
+        } catch {
+          continue; // not a board document
+        }
+        for (const c of Object.values(board.cards ?? {})) {
+          if (c?.title) out.push(c.title);
+        }
+      }
+      return out;
+    });
+  }
+
+  /**
+   * Clear the page-side mirror of the fake Drive file map.
+   *
+   * The map itself is owned by Node (see `tests/fixtures/fakeDrive.ts`) so the
+   * route handler never has to read it via page.evaluate during a navigation.
+   * There is therefore no way to clear the real store from the page: this only
+   * drops the mirrored copy, and the next Drive request re-pushes the truth.
+   *
+   * Prefer `setDriveOffline` / `setDriveForce401Once` for failure injection -
+   * those are real Node-side switches.
+   */
   async resetDrive() {
     await this.page.evaluate(() => window.__kboardDrive!.reset());
   }

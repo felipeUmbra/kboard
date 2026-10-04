@@ -21,7 +21,7 @@ import {
 import type { Board } from "../models/types";
 import { buildActions, type BoardActions } from "./boardActions";
 import { setCardStartDate, setCardDueDate } from "./cardActions";
-import { useAuth, BOARDS_CACHE_STORAGE_KEY } from "../auth/useAuth";
+import { useAuth, BOARDS_CACHE_STORAGE_KEY, PENDING_SAVES_KEY } from "../auth/useAuth";
 import { cardDrafts } from "./cardDrafts";
 
 const DEBOUNCE_MS = 600;
@@ -40,6 +40,53 @@ interface BoardCacheMeta {
 }
 
 const CACHE_META_STORAGE_KEY = "kboard:boards-cache-meta";
+
+/**
+ * Board ids whose latest local edit has not yet been confirmed by Drive.
+ *
+ * Bug #20 needed this to be durable, not just in-memory. The local cache
+ * alone is not enough: it preserves the user's data across a reload, but
+ * nothing then knows the board is DIRTY, so no save is ever attempted and
+ * the edit sits in the cache forever, silently out of sync with Drive. A
+ * reload while offline therefore strands the edit unless the flag itself
+ * survives.
+ *
+ * The key lives in `useAuth` (as PENDING_SAVES_KEY) so `logout` and this
+ * tracking cannot drift apart; it is aliased here to match the
+ * `*_STORAGE_KEY` naming used by the other caches in this file.
+ */
+const PENDING_SAVES_STORAGE_KEY = PENDING_SAVES_KEY;
+
+function loadPendingSaves(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(PENDING_SAVES_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((x): x is string => typeof x === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function savePendingSaves(ids: Iterable<string>): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(PENDING_SAVES_STORAGE_KEY, JSON.stringify([...ids]));
+  } catch {
+    // Ignore quota / serialization errors
+  }
+}
+
+/**
+ * How long to wait before retrying a failed Drive save, and the ceiling on
+ * consecutive attempts. The board that failed is remembered by id so a retry
+ * re-saves CURRENT state rather than a stale snapshot taken when it failed.
+ */
+const RETRY_BASE_MS = 2_000;
+const RETRY_MAX_MS = 60_000;
 
 /** Read cached revalidation metadata from localStorage. */
 function loadBoardsCacheMeta(): Record<string, BoardCacheMeta> | null {
@@ -103,6 +150,12 @@ export interface BoardContextValue extends BoardActions {
   loadingBoard: boolean;
   syncing: boolean;
   lastError: string | null;
+  /**
+   * Ids of boards with edits that have not yet reached Drive. Non-empty means
+   * "your work is safe locally but not yet in Drive" — shown as an unsaved
+   * indicator rather than silently swallowed (bug #20).
+   */
+  pendingSaves: ReadonlySet<string>;
   refreshList: () => Promise<void>;
   /**
    * Open a board. The optional `focusCardId` is a one-shot hint:
@@ -138,6 +191,18 @@ export function BoardProvider({ children }: { children: ReactNode }) {
   const [focusCardId, setFocusCardId] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
+  /**
+   * Ids of boards whose latest edit has NOT yet reached Drive. Bug #20:
+   * a failed save used to be invisible — the board looked correct and the
+   * UI said nothing, so an offline edit simply vanished on reload. This
+   * set is what the "unsaved changes" indicator reads, and it is also what
+   * the `online` listener checks to decide whether a flush is worthwhile.
+   */
+  const [pendingSaves, setPendingSaves] = useState<Set<string>>(
+    () => new Set(loadPendingSaves()),
+  );
+  const pendingSavesRef = useRef<Set<string>>(pendingSaves);
+  pendingSavesRef.current = pendingSaves;
   // Per-board revalidation metadata: tracks the last time we asked Drive
   // about each board so we don't refetch on every open. Lives in state +
   // localStorage; not part of the Board domain type because it's purely
@@ -146,6 +211,10 @@ export function BoardProvider({ children }: { children: ReactNode }) {
     () => loadBoardsCacheMeta() ?? {},
   );
   const saveTimer = useRef<number | null>(null);
+  // Bug #20: a failed Drive save is retried on this timer with backoff, so a
+  // temporary outage no longer discards the edit.
+  const retryTimer = useRef<number | null>(null);
+  const retryAttemptRef = useRef(0);
   const boardRef = useRef<Board | null>(board);
   boardRef.current = board;
   // Keep boardRef.current in sync with board state so that publishChange's
@@ -313,6 +382,12 @@ export function BoardProvider({ children }: { children: ReactNode }) {
       // version is stale.
       if (found) {
         setBoard(found);
+        // Bug #20: this board is dirty from an earlier session (an edit made
+        // offline and not yet confirmed by Drive). Nothing else would ever
+        // retry it, because a reload discards the in-memory timer — the edit
+        // would sit in the local cache forever, silently out of sync. Flush
+        // it as soon as the board is opened.
+        if (pendingSaves.has(found.id)) scheduleSave();
         // Background revalidation: if Drive has a newer version, swap it in.
         // Gated by:
         //  - driveFileId (can't reconcile a never-committed board)
@@ -368,56 +443,202 @@ export function BoardProvider({ children }: { children: ReactNode }) {
     setFocusCardId(null);
   }, []);
 
+  /**
+   * Persist the board to Drive, retrying with backoff while it fails.
+   *
+   * Bug #20: this used to fire once and silently give up.
+   *   - The local cache write lived INSIDE the `if (saved)` branch, so a
+   *     failed save persisted nothing anywhere. An offline edit rendered in
+   *     the open board and then vanished on reload — data loss, with no
+   *     error surfaced.
+   *   - `withToken` returns `null` on ANY throw, not only an auth failure,
+   *     so a plain network blip was indistinguishable from "not signed in"
+   *     and took the same silent path.
+   *   - Nothing ever retried, so reconnecting did not help. README.md:54
+   *     promises writes are "deferred ... until you're back online".
+   *
+   * Now: the local cache is written FIRST and unconditionally (it is the
+   * only durable copy we control), and a failure schedules a retry with
+   * exponential backoff. The retry re-reads the board from `boardRef` /
+   * `boardsRef`, so it always saves current state instead of the stale
+   * snapshot that failed.
+   */
+  /**
+   * Mark a board's local edits as confirmed by Drive (or forget it).
+   * Persisted so the dirty set survives a reload — see
+   * PENDING_SAVES_STORAGE_KEY for why that matters.
+   */
+  const markSaved = useCallback((boardId: string, saved: boolean) => {
+    setPendingSaves((prev) => {
+      const has = prev.has(boardId);
+      if (has === !saved) return prev; // already in the desired state
+      const next = new Set(prev);
+      if (saved) next.delete(boardId);
+      else next.add(boardId);
+      savePendingSaves(next);
+      return next;
+    });
+  }, []);
+
+  /**
+   * Which board is the current save attempt about?
+   *
+   * Normally the open board. But after a reload the user may not have
+   * reopened the dirty board yet, and `boardRef.current` would be null —
+   * in which case the pending edit would be unsaveable and, worse, would
+   * clear itself from the dirty set. So fall back to any board in the
+   * list that is still marked dirty. This is what lets a page load
+   * recover an edit that was made offline in a previous session.
+   */
+  const resolveBoardToSave = useCallback((): Board | null => {
+    const active = boardRef.current;
+    if (active?.driveFileId) return active;
+    const dirty = pendingSavesRef.current;
+    if (dirty.size === 0) return null;
+    return boardsRef.current.find((b) => dirty.has(b.id) && b.driveFileId) ?? null;
+  }, []);
+
+  const saveBoardToDrive = useCallback(async () => {
+    const current = resolveBoardToSave();
+    if (!current || !current.driveFileId) return true;
+
+    setSyncing(true);
+    try {
+      const saved = await withToken(() => repoSave(current));
+      if (saved) {
+        // CRITICAL: do NOT replace the in-memory board with `saved`.
+        // `saved` is a snapshot taken at the moment the save started — any
+        // mutations the user made *during* the async round-trip (clicking
+        // the Story radio, editing a title, adding a 4th card) are NOT in
+        // `saved`. Replacing the board would silently revert those
+        // mutations, which is what caused flaky failures in board.spec.ts
+        // ("Change card type from task to story", "Open card editor and edit
+        // title") and hierarchy-progress.spec.ts ("Drag & drop updates
+        // progress bar color" — the 4th addCard was reverted by a stale
+        // response from an earlier save).
+        //
+        // Only carry forward the fields the save actually updates
+        // (driveVersion + updatedAt). Everything else stays as-is.
+        setBoard((prev) =>
+          prev ? { ...prev, driveVersion: saved.driveVersion, updatedAt: saved.updatedAt } : prev,
+        );
+        setBoards((prev) => {
+          const next = prev.map((b) =>
+            b.id === saved.id
+              ? { ...b, driveVersion: saved.driveVersion, updatedAt: saved.updatedAt }
+              : b,
+          );
+          saveBoardsCache(next);
+          return next;
+        });
+        setPendingSaves((prev) => {
+          if (!prev.has(current.id)) return prev;
+          const next = new Set(prev);
+          next.delete(current.id);
+          savePendingSaves(next);
+          return next;
+        });
+        setLastError(null);
+        retryAttemptRef.current = 0;
+        return true;
+      }
+      // withToken returned null: either the token grant failed or the Drive
+      // call threw. Treat both as "not saved" and retry — the next attempt
+      // re-runs ensureToken, so a genuinely signed-out user simply keeps
+      // failing quietly in the background instead of thrashing the API.
+      return false;
+    } catch (err) {
+      setLastError(err instanceof Error ? err.message : "Save failed");
+      return false;
+    } finally {
+      setSyncing(false);
+    }
+  }, [withToken, resolveBoardToSave]);
+
+  /**
+   * Re-attempt the Drive save after a backoff, and keep re-attempting until
+   * it lands. `retryAttemptRef` bounds the delay, not the number of tries —
+   * an edit made offline must eventually reach Drive even if the user walks
+   * away for hours, because the alternative is silent data loss.
+   *
+   * Declared before `scheduleSave` because `scheduleSave` calls it.
+   */
+  const queueRetry = useCallback(() => {
+    if (retryTimer.current !== null) window.clearTimeout(retryTimer.current);
+    const attempt = retryAttemptRef.current;
+    retryAttemptRef.current = Math.min(attempt + 1, 6);
+    const delay = Math.min(RETRY_BASE_MS * 2 ** attempt, RETRY_MAX_MS);
+    retryTimer.current = window.setTimeout(() => {
+      retryTimer.current = null;
+      void (async () => {
+        const ok = await saveBoardToDrive();
+        if (!ok) queueRetry();
+      })();
+    }, delay);
+  }, [saveBoardToDrive]);
+
   const scheduleSave = useCallback(() => {
     if (saveTimer.current !== null) window.clearTimeout(saveTimer.current);
-    saveTimer.current = window.setTimeout(async () => {
-      const current = boardRef.current;
-      if (!current || !current.driveFileId) return;
-      setSyncing(true);
-      setLastError(null);
-      try {
-        const saved = await withToken(() => repoSave(current));
-        if (saved) {
-          // CRITICAL: do NOT replace the in-memory board with `saved`.
-          // `saved` is a snapshot taken at the moment the timer fired —
-          // any mutations the user made *during* the async save round-trip
-          // (e.g. clicking the Story radio, editing a title, adding a
-          // 4th card) are NOT in `saved`. Replacing the board would
-          // silently revert those mutations, which is what was causing
-          // flaky failures in board.spec.ts ("Change card type from task
-          // to story", "Open card editor and edit title") and in
-          // hierarchy-progress.spec.ts ("Drag & drop updates progress
-          // bar color" — the 4th addCard was reverted by a stale
-          // response from an earlier save).
-          //
-          // Only carry forward the fields the save actually updates
-          // (driveVersion + updatedAt). Everything else stays as-is.
-          setBoard((prev) =>
-            prev ? { ...prev, driveVersion: saved.driveVersion, updatedAt: saved.updatedAt } : prev,
-          );
-          setBoards((prev) => {
-            const next = prev.map((b) =>
-              b.id === saved.id
-                ? { ...b, driveVersion: saved.driveVersion, updatedAt: saved.updatedAt }
-                : b,
-            );
-            saveBoardsCache(next);
-            return next;
-          });
-        }
-      } catch (err) {
-        setLastError(err instanceof Error ? err.message : "Save failed");
-      } finally {
-        setSyncing(false);
-      }
+    saveTimer.current = window.setTimeout(() => {
+      saveTimer.current = null;
+      void (async () => {
+        const ok = await saveBoardToDrive();
+        if (!ok) queueRetry();
+      })();
     }, DEBOUNCE_MS);
-  }, [withToken]);
+  }, [saveBoardToDrive, queueRetry]);
 
   useEffect(() => {
     return () => {
       if (saveTimer.current !== null) window.clearTimeout(saveTimer.current);
+      if (retryTimer.current !== null) window.clearTimeout(retryTimer.current);
     };
   }, []);
+
+  // While the browser believes it is offline, retrying on a timer is pure
+  // waste. `online` is the signal that a retry is worth attempting; the
+  // timer-based retry still covers the case where the network is reachable
+  // but Drive is erroring (5xx, quota), which `online` cannot detect.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const flush = () => {
+      if (pendingSavesRef.current.size === 0) return;
+      if (retryTimer.current !== null) {
+        window.clearTimeout(retryTimer.current);
+        retryTimer.current = null;
+      }
+      retryAttemptRef.current = 0;
+      void (async () => {
+        const ok = await saveBoardToDrive();
+        if (!ok) queueRetry();
+      })();
+    };
+    window.addEventListener("online", flush);
+    return () => window.removeEventListener("online", flush);
+  }, [saveBoardToDrive, queueRetry, pendingSaves]);
+
+  // Startup flush (bug #20). A board can be left dirty by a session that
+  // ended while offline: the retry timer died with the page, and the
+  // in-memory `board` is null on a fresh load, so nothing would ever
+  // re-attempt the save. The edit would sit in the local cache forever,
+  // silently out of sync with Drive — exactly the data loss we fixed.
+  //
+  // Kick a retry on mount when there is anything to recover. It is a no-op
+  // in the common case (nothing dirty) and silently backs off to the retry
+  // loop if the network is still down, so it costs one wasted call at most.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (pendingSaves.size === 0) return;
+    if (!navigator.onLine) return; // wait for the `online` listener above
+    if (saveTimer.current !== null) return; // a live edit already owns the save
+    retryAttemptRef.current = 0;
+    void (async () => {
+      const ok = await saveBoardToDrive();
+      if (!ok) queueRetry();
+    })();
+    // Run once per mount-key change only: re-running on every render of
+    // `boards` would fire a Drive write per edit.
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
    * Apply a board change to all derived state. Every action goes
@@ -470,11 +691,22 @@ export function BoardProvider({ children }: { children: ReactNode }) {
       setBoards((prev) => {
         const list = prev.map((b) => (b.id === next.id ? next : b));
         boardsRef.current = list;
+        // Bug #20: persist locally on EVERY edit, not only after Drive
+        // confirms a save. This is the change that stops data loss — the
+        // local cache is the only durable copy we control, and it must be
+        // written before we know whether the network is up. Previously this
+        // call lived inside the `if (saved)` branch of the save, so a failed
+        // save left nothing on disk and an offline edit was gone on reload.
+        saveBoardsCache(list);
         return list;
       });
+      // Mark the board dirty immediately so the UI can say "unsaved" while
+      // the debounce and any retry are still pending, and so a reload can
+      // pick the work back up.
+      if (next.driveFileId) markSaved(next.id, false);
       scheduleSave();
     },
-    [scheduleSave],
+    [scheduleSave, markSaved],
   );
 
   const mutate = useCallback(
@@ -534,6 +766,7 @@ export function BoardProvider({ children }: { children: ReactNode }) {
       loadingBoard: false,
       syncing,
       lastError,
+      pendingSaves,
       refreshList,
       openBoard,
       closeBoard,
@@ -547,6 +780,7 @@ export function BoardProvider({ children }: { children: ReactNode }) {
       board,
       syncing,
       lastError,
+      pendingSaves,
       refreshList,
       openBoard,
       closeBoard,
