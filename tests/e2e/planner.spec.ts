@@ -53,6 +53,21 @@ async function isoDates(page: Page) {
       // check re-derive it; nothing in the suite should assert against it.
       plus2: fmt(new Date(t.getTime() + 2 * 86400000)),
       startOnly: fmt(startOnly),
+      // An overdue date that is ALWAYS inside the planner's visible week
+      // AND strictly before today (so the overdue chip appears).
+      // On Monday, no such day exists in the visible week (Mon-Sun),
+      // so we skip the overdue check on Mondays and use Tuesday's test
+      // to verify the overdue chip.
+      overdue: (() => {
+        const todayIso = fmt(t);
+        for (let i = 6; i >= 0; i--) {
+          const cand = new Date(monday);
+          cand.setDate(monday.getDate() + i);
+          const candIso = fmt(cand);
+          if (candIso < todayIso) return candIso; // strictly before today
+        }
+        return null; // Monday: no prior day in visible week
+      })(),
     };
   });
 }
@@ -79,21 +94,22 @@ async function bootWithCards(page: Page) {
   await page.getByRole("button", { name: /^Create$/ }).click();
   await page.waitForSelector('h1[title="Click to rename"]', { timeout: 10_000 });
 
-  // Add 5 cards to the first column.
-  for (const title of [
+  const dates = await isoDates(page);
+
+  // Add 5 cards to the first column (4 on Monday since we skip overdue).
+  const cardTitles = [
     "Card today",
     "Card tomorrow",
-    "Card yesterday",
     "Card start only",
     "Card no dates",
-  ]) {
+  ];
+  if (dates.overdue) cardTitles.splice(2, 0, "Card overdue");
+  for (const title of cardTitles) {
     await page.locator(".kanban-column__add-btn").first().click();
     const titleInput = page.getByRole("textbox").last();
     await titleInput.fill(title);
     await titleInput.press("Enter");
   }
-
-  const dates = await isoDates(page);
 
   // Set each card's start/due date via the test-only window hook.
   // Read each card's id from the rendered DOM since ids are crypto-random.
@@ -146,7 +162,9 @@ async function bootWithCards(page: Page) {
 
   await setDates("Card today", { dueDate: dates.today });
   await setDates("Card tomorrow", { dueDate: dates.tomorrow });
-  await setDates("Card yesterday", { dueDate: dates.yesterday });
+  if (dates.overdue) {
+    await setDates("Card overdue", { dueDate: dates.overdue });
+  }
   await setDates("Card start only", { startDate: dates.startOnly });
 
   // Wait deterministically for the boards-list state the Planner reads
@@ -174,12 +192,11 @@ async function bootWithCards(page: Page) {
         const b = boards.find((x) => x.boardName === "Planner test board");
         if (!b) return null;
         const byTitle = new Map(b.cards.map((c) => [c.title, c]));
-        return (byTitle.get("Card today")?.dueDate ?? null) === dates.today &&
-          (byTitle.get("Card tomorrow")?.dueDate ?? null) === dates.tomorrow &&
-          (byTitle.get("Card yesterday")?.dueDate ?? null) === dates.yesterday &&
-          (byTitle.get("Card start only")?.startDate ?? null) === dates.startOnly
-          ? "ready"
-          : "pending";
+        const todayOk = (byTitle.get("Card today")?.dueDate ?? null) === dates.today;
+        const tomorrowOk = (byTitle.get("Card tomorrow")?.dueDate ?? null) === dates.tomorrow;
+        const overdueOk = !dates.overdue || (byTitle.get("Card overdue")?.dueDate ?? null) === dates.overdue;
+        const startOnlyOk = (byTitle.get("Card start only")?.startDate ?? null) === dates.startOnly;
+        return todayOk && tomorrowOk && overdueOk && startOnlyOk ? "ready" : "pending";
       },
       { timeout: 10_000, intervals: [250] },
     )
@@ -215,13 +232,20 @@ test.describe("Planner", () => {
       '[data-testid="planner-day"][data-day-iso="' + dates.today + '"]',
     );
     await expect(todayCol.getByText("Card today")).toBeVisible();
-    const yesterdayCol = page.locator(
-      '[data-testid="planner-day"][data-day-iso="' + dates.yesterday + '"]',
-    );
-    await expect(yesterdayCol.getByText("Card yesterday")).toBeVisible();
-    await expect(
-      yesterdayCol.locator(".planner-card__due--overdue"),
-    ).toBeVisible();
+
+    // On Monday, there's no day in the visible week strictly before today,
+    // so we skip the overdue chip check (it would require a date from the
+    // previous week, which isn't rendered). The overdue chip logic is
+    // tested on Tue-Sun runs.
+    if (dates.overdue) {
+      const overdueCol = page.locator(
+        '[data-testid="planner-day"][data-day-iso="' + dates.overdue + '"]',
+      );
+      await expect(overdueCol.getByText("Card overdue")).toBeVisible();
+      await expect(
+        overdueCol.locator(".planner-card__due--overdue"),
+      ).toBeVisible();
+    }
   });
 
   test("start-only cards land under their startDate", async ({ page }) => {

@@ -68,6 +68,14 @@ const ALLOWLIST_PREDICATES = [
     matches: (p) => p.endsWith(".test.ts") || p.endsWith(".test.tsx"),
     reason: "test fixture sentinel values",
   },
+  {
+    matches: (p) => p.endsWith(".stories.tsx") || p.endsWith(".stories.ts"),
+    reason: "Storybook stories — example/demo colours for visual documentation",
+  },
+  {
+    matches: (p) => p.startsWith("src/stories/"),
+    reason: "Storybook default demo stories (not app code)",
+  },
 ];
 
 function allowReasonFor(relPath) {

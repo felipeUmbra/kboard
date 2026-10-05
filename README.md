@@ -5,10 +5,14 @@ A Trello-inspired Kanban board that signs you in with Google and stores your boa
 > **📄 Documentation** — full specs live in [`Docs/`](./Docs):
 > [PRD](./Docs/PRD.md) · [TRD](./Docs/TRD.md) · [App Flow](./Docs/APP-FLOW.md) ·
 > [UX/UI Design](./Docs/UX-UI-DESIGN.md) · [Data Model](./Docs/DATA-MODEL.md) ·
-> [Implementation Plan](./Docs/IMPLEMENTATION-PLAN.md) ·
+> [Implementation Plan](./Docs/Implementations/IMPLEMENTATION-PLAN.md) ·
+> [Filter/Search/Saved Views Plan](./Docs/Implementations/FILTER-SEARCH-SAVED-VIEWS-PLAN.md) ·
+> [Filter/Search/Saved Views Implementation Plan](./Docs/Implementations/FILTER-SEARCH-SAVED-VIEWS-IMPLEMENTATION-PLAN.md) ·
 > [Accessibility Testing](./Docs/ACCESSIBILITY-TESTING.md).
 > Accessibility audits are at [`WCAG_AA_AUDIT_REPORT.md`](./WCAG_AA_AUDIT_REPORT.md)
 > and [`WCAG_AA_ENHANCEMENT_PLAN.md`](./WCAG_AA_ENHANCEMENT_PLAN.md).
+> 
+> **📚 Storybook** — component documentation and visual testing at `npm run storybook` (dev) or `npx storybook build` (static build).
 
 ## Features
 
