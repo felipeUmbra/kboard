@@ -15,6 +15,13 @@ import { cardDrafts } from "../state/cardDrafts";
 const PROFILE_ENDPOINT = "https://www.googleapis.com/oauth2/v3/userinfo";
 const PROFILE_STORAGE_KEY = "kboard:profile";
 const BOARDS_CACHE_KEY = "kboard:boards-cache";
+/**
+ * Board ids with edits not yet confirmed by Drive (see BoardContext's
+ * PENDING_SAVES_STORAGE_KEY). Declared here as well so `logout` can wipe it:
+ * the id must not be duplicated as a literal in two files.
+ */
+const PENDING_SAVES_KEY = "kboard:pending-saves";
+export { PENDING_SAVES_KEY };
 
 export interface AuthState {
   profile: UserProfile | null;
@@ -108,6 +115,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // boards flash by. Drafts are wiped for the same reason — they
     // carry card titles that belong to the previous user.
     localStorage.removeItem(BOARDS_CACHE_KEY);
+    // The pending-save set references board ids from that same account.
+    // Leaving it behind would make the next user's first board open try to
+    // flush someone else's unsaved work (bug #20's dirty-tracking).
+    localStorage.removeItem(PENDING_SAVES_KEY);
     cardDrafts.clear();
     setState({ profile: null, loading: false, ready: false, error: null });
   }, []);

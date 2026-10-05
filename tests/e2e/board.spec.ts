@@ -339,35 +339,38 @@ test.describe("Board view (columns, cards, DnD)", () => {
     const driveFileId = (await bp.listDriveFiles())[0].id;
     expect(driveFileId).toBeTruthy();
 
-    await page.evaluate((fileId) => {
-      const w = window;
-      const file = w.__kboardDrive!.get(fileId);
-      if (!file) throw new Error("file not found");
-      const parsed = JSON.parse(file.content);
-      const cardId = "remote-card-" + Date.now();
-      parsed.cards[cardId] = {
-        id: cardId,
-        type: "task",
-        title: "Remote-only card",
-        descriptionHtml: "",
-        labelIds: [],
-        parentIds: [],
-        startDate: null,
-        dueDate: null,
-        activity: [],
-        comments: [],
-        checklists: [],
-        boardFieldValues: {},
-        typeFieldValues: {},
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      };
-      parsed.columns[0].cardIds.push(cardId);
-      file.content = JSON.stringify(parsed, null, 2);
+    // Mutate the REAL (Node-side) Drive store, not the page-side mirror:
+    // editing `window.__kboardDrive.files` would leave the route handler
+    // serving the old content, so the reconcile would fetch nothing new.
+    const original = (await bp.listDriveFiles()).find(
+      (f) => f.id === driveFileId,
+    )!;
+    const parsed = JSON.parse(original.content);
+    const cardId = "remote-card-" + Date.now();
+    parsed.cards[cardId] = {
+      id: cardId,
+      type: "task",
+      title: "Remote-only card",
+      descriptionHtml: "",
+      labelIds: [],
+      parentIds: [],
+      startDate: null,
+      dueDate: null,
+      activity: [],
+      comments: [],
+      checklists: [],
+      boardFieldValues: {},
+      typeFieldValues: {},
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    parsed.columns[0].cardIds.push(cardId);
+    await bp.updateDriveFile(driveFileId, {
+      content: JSON.stringify(parsed, null, 2),
       // Bump modifiedTime strictly into the future so the > comparison passes.
-      file.modifiedTime = new Date(Date.now() + 60_000).toISOString();
-      file.version = (parseInt(file.version, 10) + 1).toString();
-    }, driveFileId);
+      modifiedTime: new Date(Date.now() + 60_000).toISOString(),
+      version: (parseInt(original.version, 10) + 1).toString(),
+    });
 
     // 4) (TTL reset already happened in step 2 before the reload — the
     //    BoardProvider mounted with lastCheckedAt=0, so reconcileBoard
@@ -384,12 +387,13 @@ test.describe("Board view (columns, cards, DnD)", () => {
     await expect(page.locator(sel.boardTitle)).toBeVisible();
     // Sanity: confirm the fake Drive really has the new card before we
     // wait on the UI — that isolates the failure to the reconcile path.
-    const driveCardTitles = await page.evaluate((fileId) => {
-      const f = window.__kboardDrive!.get(fileId);
-      if (!f) return [];
-      const parsed = JSON.parse(f.content);
-      return Object.values(parsed.cards).map((c: any) => c.title);
-    }, driveFileId);
+    // Read from Node (listDriveFiles), not the page mirror: a reload has
+    // already reset the mirror, so it can be empty here.
+    const driveFiles = await bp.listDriveFiles();
+    const driveFile = driveFiles.find((f) => f.id === driveFileId)!;
+    const driveCardTitles = Object.values(
+      JSON.parse(driveFile.content).cards as Record<string, { title: string }>,
+    ).map((c) => c.title);
     expect(driveCardTitles).toContain("Remote-only card");
     await expect(
       page.locator(sel.card).filter({ hasText: "Remote-only card" }),

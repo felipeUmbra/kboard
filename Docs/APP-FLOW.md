@@ -112,6 +112,14 @@ and hover/focus-revealed actions.
   changes cannot be saved right now.
 - **Delete while offline** — the file cannot be removed. The UI reports the
   failure rather than optimistically removing it.
+- **Board edited while offline** — the edit is written to the local cache
+  immediately and the board's id is added to `kboard:pending-saves`. The top
+  bar shows a pending marker (a dot, plus visually-hidden text) so the
+  deferred write is visible rather than silent. The save is retried with
+  exponential backoff (2s, doubling to a 60s ceiling), again immediately on
+  the browser `online` event, and once on app startup. The pending set is
+  durable, so an edit made offline still reaches Drive after a reload. It is
+  cleared only once Drive confirms the write, and is wiped on `logout`.
 
 ---
 

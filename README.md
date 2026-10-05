@@ -51,7 +51,7 @@ A Trello-inspired Kanban board that signs you in with Google and stores your boa
 - ✅ **100% unit coverage, gated in CI** — the pure logic layers (`src/models/`, `src/state/`) are at 100% statements, branches, functions and lines across 518 tests. Any new uncovered line fails the build; the report is uploaded as an artifact
 - ✅ **Zero backend** — pure static SPA, deploy anywhere
 - ✅ **Installable Progressive Web App** — manifest + service worker; "Add to Home Screen" on iOS / Android gives you a standalone app icon, splash screen, and full-screen launch
-- ✅ **Offline app shell** — Workbox precaches the SPA shell, manifest, and icons so the boards list loads even with no network. Drive writes are deferred via the existing in-memory + localStorage draft path until you're back online
+- ✅ **Offline app shell** — Workbox precaches the SPA shell, manifest, and icons so the boards list loads even with no network. Drive writes are deferred via the in-memory + `localStorage` board cache until you're back online, then retried automatically (on reconnect, on app startup, and with exponential backoff) until they land — an edit made offline is never silently discarded, and the top bar shows “· unsaved” while it is still pending
 - ✅ **Web Share Target** — "Share to Kboard" from any Android app lands as a new board with the shared text and URL pre-filled in the first card
 
 ## Quick Start
@@ -136,13 +136,14 @@ Each file is named `board-<uuid>.json` and contains the entire board (columns, c
 
 ### Client-side caches and drafts
 
-In addition to the Drive-backed JSON, the app keeps three small structures in `localStorage` for offline-first behavior and crash recovery:
+In addition to the Drive-backed JSON, the app keeps four small structures in `localStorage` for offline-first behavior and crash recovery:
 
 | Key | What it stores | Lifecycle |
 |---|---|---|
 | `kboard:boards-cache` | The boards list and the last saved version of each board (so the boards list and last-seen content load instantly, even offline). | Wiped on `logout`. |
 | `kboard:boards-cache-meta` | A per-board `lastCheckedAt` timestamp driving the background Drive revalidation TTL (60 s per board). | Wiped on `logout`. |
 | `kboard:card-drafts` | Unsaved title/description edits per card. The app auto-saves drafts when you navigate between cards, and persists them across page reloads. Discarding a draft via the confirm dialog marks it as a tombstone so the editor opens clean on the next open. | Wiped on `logout`. |
+| `kboard:pending-saves` | Board ids whose latest local edit has not yet been confirmed by Drive. While an id is listed here the board is retried with exponential backoff, again on the browser `online` event, and once more on app startup — so an edit made offline still reaches Drive after a reload. Drives the “· unsaved” marker in the top bar. | Wiped on `logout`. |
 
 Writes to Drive are debounced (600 ms) and use optimistic concurrency via the file's `version` (ETag) returned by the API. If the same file is edited in two tabs, the loser of the race re-reads the winner's version and surfaces a banner with a recovery action.
 

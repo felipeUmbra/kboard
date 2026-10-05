@@ -13,10 +13,14 @@ import type { Page, Route } from "@playwright/test";
  *   PATCH  /upload/drive/v3/files/:id?uploadType=media&fields=…
  *   DELETE /drive/v3/files/:id
  *
- * The fake exposes window.__kboardDrive so tests can introspect state:
+ * The fake exposes window.__kboardDrive so tests can introspect the file map:
  *   page.evaluate(() => window.__kboardDrive.list())
- *   page.evaluate(() => window.__kboardDrive.setForce401Once())
- *   page.evaluate(() => window.__kboardDrive.setForceNetworkError())
+ *
+ * The failure-injection switches (`offline`, `force401Once`,
+ * `forceNetworkError`) deliberately live in NODE, not on `window` — see the
+ * comment on `offline` below for why reading them via page.evaluate() from
+ * the route handler was unsafe. Tests flip them through the bindings below
+ * (see `BoardPage.setDriveOffline` and friends).
  */
 
 export interface FakeDriveFile {
@@ -31,12 +35,8 @@ export interface FakeDriveFile {
 /** Minimal shape of the fake Drive map installed on `window`. */
 export interface FakeDriveGlobal {
   files: Map<string, FakeDriveFile>;
-  force401Once: boolean;
-  forceNetworkError: boolean;
   list: () => FakeDriveFile[];
   get: (id: string) => FakeDriveFile | undefined;
-  setForce401Once: () => void;
-  setForceNetworkError: () => void;
   reset: () => void;
 }
 
@@ -48,77 +48,110 @@ declare global {
 }
 
 export async function installFakeDrive(page: Page) {
+  // The offline switch lives HERE, in Node, not on the page.
+  //
+  // Models a network that stays down for MANY calls in a row (a single
+  // transient blip is `forceNetworkError`, which self-clears). It does not
+  // self-clear: every Drive request fails until the test turns it off.
+  //
+  // The route handler needs it for every request, including the ones that
+  // arrive while the page is mid-navigation. Reading it off `window` via
+  // page.evaluate() is a data race by construction: during `page.reload()`
+  // the execution context is torn down and the evaluate throws
+  // "Execution context was destroyed", failing the test for a reason that
+  // has nothing to do with the app. Node-side state has no such window.
+  let offline = false;
+  // Same reasoning for the two one-shot flags: the route handler reads them on
+  // EVERY request, so page.evaluate() here was the same landmine as `offline`
+  // and produced unrelated "Execution context was destroyed" failures in
+  // search.spec.ts / filters.spec.ts whenever a navigation overlapped a
+  // Drive call. Node-side state has no such window.
+  let force401Once = false;
+  let forceNetworkError = false;
+
+  await page.exposeBinding("__kboardDriveSetOffline", (_source, v: boolean) => {
+    offline = !!v;
+  });
+  await page.exposeBinding("__kboardDriveForce401Once", () => {
+    force401Once = true;
+  });
+  await page.exposeBinding("__kboardDriveForceNetworkError", () => {
+    forceNetworkError = true;
+  });
+
+  // The file map lives here in Node too, for the same reason. The handler
+  // read and wrote it via page.evaluate() on every single Drive call, so any
+  // navigation overlapping a request killed the handler mid-flight with
+  // "Execution context was destroyed". That surfaced as unrelated failures
+  // ("board was not created and no error surfaced") in filters.spec.ts and
+  // search.spec.ts.
+  //
+  // `page.__kboardDrive` is still populated for test introspection, and is
+  // refreshed after every mutation so a test that reads it sees current data.
+  const files = new Map<string, FakeDriveFile>();
+
+  const syncPage = async () => {
+    // Best-effort: the page may be mid-navigation, in which case there is
+    // nothing to sync and the next navigation rehydrates from `files`.
+    await page
+      .evaluate((f) => {
+        window.__kboardDrive!.files.clear();
+        for (const [k, v] of f) window.__kboardDrive!.files.set(k, v);
+      }, Array.from(files.entries()))
+      .catch(() => {});
+  };
+  // Read the real store from Node. Tests MUST use this (via
+  // BoardPage.listDriveFiles) rather than reading window.__kboardDrive,
+  // because a page reload re-runs the init script and starts the mirror
+  // EMPTY. It is only re-populated as a side effect of the next Drive
+  // request, so after a reload the page copy can legitimately be blank
+  // while Drive is full.
+  await page.exposeBinding(
+    "__kboardDriveList",
+    () => Array.from(files.values()),
+  );
+
+  // Same reason: let a test replace a file's content in the real store.
+  // Writing to `window.__kboardDrive.files` only edits the mirror, so the
+  // route handler would never see the change and a subsequent GET would
+  // return the old content. `BoardFilePatch` + `BoardPage.updateDriveFile`
+  // wrap this.
+  //
+  // The patch is PLAIN DATA, not a callback: Playwright serialises arguments
+  // across the binding boundary, so a function argument arrives as
+  // undefined.
+  await page.exposeBinding(
+    "__kboardDrivePatch",
+    (
+      _source,
+      id: string,
+      patch: { content?: string; modifiedTime?: string; version?: string },
+    ) => {
+      const file = files.get(id);
+      if (!file) throw new Error("file not found: " + id);
+      files.set(id, { ...file, ...patch });
+      void syncPage();
+    },
+  );
   await page.addInitScript(() => {
     const w = window;
 
-    // Persist the fake-drive file map across page reloads via sessionStorage.
-    // The init script re-runs on every navigation, so we rehydrate from
-    // sessionStorage each time and serialize back on every mutation.
-    const STORAGE_KEY = "kboard-test-drive";
-    type Stored = { entries: [string, FakeDriveFile][] };
-
-    function load(): Map<string, FakeDriveFile> {
-      try {
-        const raw = sessionStorage.getItem(STORAGE_KEY);
-        if (!raw) return new Map();
-        const parsed = JSON.parse(raw) as Stored;
-        return new Map(parsed.entries);
-      } catch {
-        return new Map();
-      }
-    }
-    function save(map: Map<string, FakeDriveFile>) {
-      try {
-        const entries: [string, FakeDriveFile][] = Array.from(map.entries());
-        sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ entries }));
-      } catch {
-        // ignore
-      }
-    }
-
-    const files = load();
+    // The file map is owned by NODE (see `files` above) and mirrored in here
+    // purely so tests can introspect it via `window.__kboardDrive`. It is
+    // re-pushed after every Drive mutation by `syncPage()`, and this init
+    // script re-runs on every navigation, so the page copy stays current
+    // without the route handler ever having to read it.
     w.__kboardDrive = {
-      files,
-      force401Once: false,
-      forceNetworkError: false,
+      files: new Map<string, FakeDriveFile>(),
       list() {
         return Array.from(this.files.values());
       },
       get(id: string) {
         return this.files.get(id);
       },
-      setForce401Once() {
-        this.force401Once = true;
-      },
-      setForceNetworkError() {
-        this.forceNetworkError = true;
-      },
       reset() {
         this.files.clear();
-        this.force401Once = false;
-        this.forceNetworkError = false;
-        save(this.files);
       },
-    };
-
-    // Save back to sessionStorage whenever the map mutates. We use a
-    // Proxy so any set/delete is caught without having to wrap every method.
-    const origSet = files.set.bind(files);
-    const origDelete = files.delete.bind(files);
-    const origClear = files.clear.bind(files);
-    files.set = (k: string, v: FakeDriveFile) => {
-      origSet(k, v);
-      save(files);
-      return files;
-    };
-    files.delete = (k: string) => {
-      const r = origDelete(k);
-      save(files);
-      return r;
-    };
-    files.clear = () => {
-      origClear();
-      save(files);
     };
   });
 
@@ -126,18 +159,25 @@ export async function installFakeDrive(page: Page) {
     const url = route.request().url();
     const method = route.request().method();
 
+    // Persistent offline: abort EVERY request until the test turns it off.
+    // Checked before the one-shot flags because it models a network that
+    // stays down, so a single transient failure must not fall through and
+    // accidentally succeed.
+    if (offline) {
+      await route.abort("internetdisconnected");
+      return;
+    }
+
     // Force-network-error path: route.abort
-    const forceNetwork = await readDriveFlag(page, "forceNetworkError");
-    if (forceNetwork) {
-      await writeDriveFlag(page, "forceNetworkError", false);
+    if (forceNetworkError) {
+      forceNetworkError = false;
       await route.abort("failed");
       return;
     }
 
     // Force-401-once path
-    const force401 = await readDriveFlag(page, "force401Once");
-    if (force401) {
-      await writeDriveFlag(page, "force401Once", false);
+    if (force401Once) {
+      force401Once = false;
       await route.fulfill({
         status: 401,
         contentType: "application/json",
@@ -148,10 +188,10 @@ export async function installFakeDrive(page: Page) {
 
     // GET list
     if (method === "GET" && /\/drive\/v3\/files\?/.test(url)) {
-      const files = await page.evaluate(() => window.__kboardDrive!.list());
+      const list = Array.from(files.values());
       await route.fulfill({
         status: 200, contentType: "application/json",
-        body: JSON.stringify({ files }),
+        body: JSON.stringify({ files: list }),
       });
       return;
     }
@@ -160,7 +200,7 @@ export async function installFakeDrive(page: Page) {
     const idMatch = url.match(/\/drive\/v3\/files\/([^/?]+)/);
     if (method === "GET" && idMatch) {
       const id = decodeURIComponent(idMatch[1]);
-      const file = await page.evaluate((fid: string) => window.__kboardDrive!.get(fid), id);
+      const file = files.get(id);
       if (!file) {
         await route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ error: { code: 404, message: "File not found" } }) });
         return;
@@ -193,7 +233,8 @@ export async function installFakeDrive(page: Page) {
         appProperties: meta.appProperties, version: "v1",
         modifiedTime: new Date().toISOString(),
       };
-      await page.evaluate((f: FakeDriveFile) => { window.__kboardDrive!.files.set(f.id, f); }, file);
+      files.set(id, file);
+      await syncPage();
       await route.fulfill({
         status: 200, contentType: "application/json",
         body: JSON.stringify({
@@ -207,25 +248,18 @@ export async function installFakeDrive(page: Page) {
     // PATCH update
     if (method === "PATCH" && /\/upload\/drive\/v3\/files\//.test(url)) {
       const id = decodeURIComponent(url.match(/\/files\/([^/?]+)/)![1]);
-      const newContent = route.request().postData() ?? "";
-      const updated = await page.evaluate(
-        ({ fid, content }) => {
-          const k = window.__kboardDrive!;
-          const existing = k.files.get(fid);
-          if (!existing) return null;
-          // Inline incrementVersion (cannot import from here — runs in browser).
-          const n = Number(existing.version.replace(/^v/, ""));
-          const nextVersion = Number.isFinite(n) ? `v${n + 1}` : "v2";
-          const next: FakeDriveFile = {
-            ...existing, content,
-            version: nextVersion,
+      const content = route.request().postData() ?? "";
+      const existing = files.get(id);
+      const updated: FakeDriveFile | undefined = existing
+        ? {
+            ...existing,
+            content,
+            version: incrementVersion(existing.version),
             modifiedTime: new Date().toISOString(),
-          };
-          k.files.set(fid, next);
-          return next;
-        },
-        { fid: id, content: newContent },
-      );
+          }
+        : undefined;
+      if (updated) files.set(id, updated);
+      await syncPage();
       if (!updated) {
         await route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ error: { code: 404, message: "File not found" } }) });
         return;
@@ -244,7 +278,8 @@ export async function installFakeDrive(page: Page) {
     // DELETE
     if (method === "DELETE" && /\/drive\/v3\/files\//.test(url)) {
       const id = decodeURIComponent(url.match(/\/files\/([^/?]+)/)![1]);
-      await page.evaluate((fid: string) => { window.__kboardDrive!.files.delete(fid); }, id);
+      files.delete(id);
+      await syncPage();
       await route.fulfill({ status: 204, body: "" });
       return;
     }
@@ -258,17 +293,6 @@ export async function installFakeDrive(page: Page) {
 
   await page.route("**/www.googleapis.com/drive/v3/**", routeHandler);
   await page.route("**/www.googleapis.com/upload/drive/v3/**", routeHandler);
-}
-
-async function readDriveFlag(page: Page, key: "force401Once" | "forceNetworkError"): Promise<boolean> {
-  return page.evaluate((k) => (window.__kboardDrive as unknown as Record<string, boolean>)[k] === true, key);
-}
-
-async function writeDriveFlag(page: Page, key: "force401Once" | "forceNetworkError", value: boolean): Promise<void> {
-  await page.evaluate(
-    ({ k, v }) => { (window.__kboardDrive as unknown as Record<string, unknown>)[k] = v; },
-    { k: key, v: value },
-  );
 }
 
 function incrementVersion(v: string): string {

@@ -17,9 +17,43 @@ async function isoDates(page: Page) {
     tom.setDate(t.getDate() + 1);
     const yes = new Date(t);
     yes.setDate(t.getDate() - 1);
-    const p2 = new Date(t);
-    p2.setDate(t.getDate() + 2);
-    return { today: fmt(t), tomorrow: fmt(tom), yesterday: fmt(yes), plus2: fmt(p2) };
+
+    // A start-only date that is ALWAYS inside the planner's visible week.
+    //
+    // The planner renders exactly the 7 days of the week containing "today",
+    // Monday-first (see plannerHelpers.weekDays). The obvious choice,
+    // "today + 2", escapes that window whenever today is Fri, Sat or Sun: on
+    // Sun 2026-10-04 the visible week is Mon Sep 28 .. Sun Oct 4, so +2
+    // (Oct 6) is never rendered and the card lands in the dateless
+    // disclosure. The suite then failed on 3 of the 7 weekdays purely
+    // because of the date it ran.
+    //
+    // Resolve the visible Monday explicitly and step forward from it, which
+    // is inside the window by construction on every weekday:
+    //   Mon-Thu -> that day, Fri -> that day, Sat/Sun -> the following
+    //   Monday (still inside the same Sun-ended week).
+    const monday = new Date(t);
+    // getDay(): 0=Sun .. 6=Sat. Convert so Monday is the week start.
+    monday.setDate(t.getDate() - ((t.getDay() + 6) % 7));
+    let startOnly = new Date(monday);
+    for (let i = 0; i < 7; i++) {
+      const cand = new Date(monday);
+      cand.setDate(monday.getDate() + i);
+      if (cand >= t) {
+        startOnly = cand;
+        break;
+      }
+    }
+
+    return {
+      today: fmt(t),
+      tomorrow: fmt(tom),
+      yesterday: fmt(yes),
+      // Retained only to document the original bug and to let a regression
+      // check re-derive it; nothing in the suite should assert against it.
+      plus2: fmt(new Date(t.getTime() + 2 * 86400000)),
+      startOnly: fmt(startOnly),
+    };
   });
 }
 
@@ -113,7 +147,7 @@ async function bootWithCards(page: Page) {
   await setDates("Card today", { dueDate: dates.today });
   await setDates("Card tomorrow", { dueDate: dates.tomorrow });
   await setDates("Card yesterday", { dueDate: dates.yesterday });
-  await setDates("Card start only", { startDate: dates.plus2 });
+  await setDates("Card start only", { startDate: dates.startOnly });
 
   // Wait deterministically for the boards-list state the Planner reads
   // (`ctx.boards`) to reflect the dates. The date-badge in the board view
@@ -143,7 +177,7 @@ async function bootWithCards(page: Page) {
         return (byTitle.get("Card today")?.dueDate ?? null) === dates.today &&
           (byTitle.get("Card tomorrow")?.dueDate ?? null) === dates.tomorrow &&
           (byTitle.get("Card yesterday")?.dueDate ?? null) === dates.yesterday &&
-          (byTitle.get("Card start only")?.startDate ?? null) === dates.plus2
+          (byTitle.get("Card start only")?.startDate ?? null) === dates.startOnly
           ? "ready"
           : "pending";
       },
@@ -195,7 +229,7 @@ test.describe("Planner", () => {
     await page.getByTestId("topbar-planner").click();
     const dates = await isoDates(page);
     const col = page.locator(
-      '[data-testid="planner-day"][data-day-iso="' + dates.plus2 + '"]',
+      '[data-testid="planner-day"][data-day-iso="' + dates.startOnly + '"]',
     );
     await expect(col.getByText("Card start only")).toBeVisible();
   });
