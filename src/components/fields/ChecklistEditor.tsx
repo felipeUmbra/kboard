@@ -21,7 +21,7 @@ export function ChecklistEditor({
   board: Board;
 }) {
   const ctx = useBoard();
-  const checklists = card.checklists;
+  const checklists = card.checklists ?? [];
 
   if (checklists.length === 0) {
     return (

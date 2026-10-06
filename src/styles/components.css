@@ -380,9 +380,86 @@
   opacity: 0.55;
 }
 
-/* ===== Kanban tabs (legacy desktop tab switcher — kept for reference) ===== */
+/* ===== Kanban tabs (mobile horizontal column switcher) ===== */
 .kanban-tabs {
-  display: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  overflow-x: auto;
+  scrollbar-width: thin;
+  flex-shrink: 0;
+}
+
+.kanban-tab {
+  flex-shrink: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  border: 1px solid transparent;
+  min-height: var(--tap-target);
+  cursor: pointer;
+}
+
+.kanban-tab:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.kanban-tab[data-active="true"] {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  border-color: var(--color-accent-soft);
+}
+
+.kanban-tab[data-done="true"] {
+  border-bottom: 2px solid var(--color-success);
+}
+
+.kanban-tab__name {
+  white-space: nowrap;
+}
+
+.kanban-tab__count {
+  font-size: var(--text-xs);
+  background: var(--color-bg-elevated);
+  color: var(--color-text-muted);
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+}
+
+.kanban-tab[data-active="true"] .kanban-tab__count {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.kanban-tab__add {
+  flex-shrink: 0;
+  min-width: 36px;
+  min-height: var(--tap-target);
+  padding: var(--space-1) var(--space-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-lg);
+  border-radius: var(--radius-md);
+  background: transparent;
+  border: 1px dashed var(--color-border-strong);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.kanban-tab__add:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
 }
 
 .kanban-column {

@@ -636,7 +636,7 @@ export function CardEditor({
               fontSize: "var(--text-xs)",
             }}
           >
-            ({safeCard.checklists.length})
+            ({safeCard.checklists?.length ?? 0})
           </span>
         </label>
         <ChecklistEditor card={safeCard} board={board} />

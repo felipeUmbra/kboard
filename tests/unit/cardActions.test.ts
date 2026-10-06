@@ -891,6 +891,22 @@ describe("checklist guard rails", () => {
     const withCl = addChecklist(board, "t1", "Steps");
     return { board: withCl, checklistId: withCl.cards.t1.checklists[0].id };
   }
+
+  it("safely handles legacy cards where checklists is undefined", () => {
+    const base = typedBoard().board;
+    const legacyCard = { ...base.cards.t1, checklists: undefined as any };
+    const board = { ...base, cards: { ...base.cards, t1: legacyCard } };
+
+    const added = addChecklist(board, "t1", "New");
+    expect(added.cards.t1.checklists).toHaveLength(1);
+
+    expect(renameChecklist(board, "t1", "c1", "Title")).toBe(board);
+    expect(deleteChecklist(board, "t1", "c1")).toBe(board);
+    expect(addChecklistItem(board, "t1", "c1", "Item")).toBe(board);
+    expect(toggleChecklistItem(board, "t1", "c1", "i1")).toBe(board);
+    expect(renameChecklistItem(board, "t1", "c1", "i1", "Text")).toBe(board);
+    expect(deleteChecklistItem(board, "t1", "c1", "i1")).toBe(board);
+  });
 });
 
 describe("comment guard rails", () => {

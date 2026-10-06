@@ -319,3 +319,95 @@ test.describe("search icon positioning regression", () => {
   });
 });
 
+// ─── BUG: Keyboard shortcuts disclosure visible on touch devices ─────
+// Root cause: <details> keyboard help was shown on all viewports, even though
+// keyboard drag shortcuts are only relevant on desktop with physical keyboards.
+// Fix: Hide .dnd-help on mobile/tablet viewports (< 1024px); render only on desktop.
+test.describe("keyboard shortcuts disclosure visibility", () => {
+  test("keyboard shortcuts disclosure is hidden on mobile and visible on desktop", async ({
+    page,
+  }) => {
+    const bp = new BoardPage(page);
+    await bp.login();
+    await bp.createBoard("Shortcuts A11y Board");
+
+    // Desktop: should be visible
+    await page.setViewportSize({ width: 1280, height: 800 });
+    const helpDesktop = page.locator(".dnd-help");
+    await expect(helpDesktop).toBeVisible();
+
+    // Mobile: should be hidden/removed
+    await page.setViewportSize({ width: 360, height: 800 });
+    const helpMobile = page.locator(".dnd-help");
+    await expect(helpMobile).toBeHidden();
+
+    // Tablet: should be hidden/removed
+    await page.setViewportSize({ width: 800, height: 1024 });
+    const helpTablet = page.locator(".dnd-help");
+    await expect(helpTablet).toBeHidden();
+  });
+});
+
+// ─── BUG: Desktop sidebar disappeared after resizing to mobile ───────
+// Root cause: PR 23 sidebar collapse state did not reactively restore when
+// viewport changed between desktop and mobile. Resizing desktop -> mobile -> desktop
+// left the sidebar collapsed in desktop mode where no hamburger toggle existed.
+// Fix: AppShell synchronizes railCollapsed state when transitioning across desktop breakpoint.
+test.describe("sidebar resize restoration regression", () => {
+  test("sidebar restores automatically when resizing back to desktop without page reload", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    const bp = new BoardPage(page);
+    await bp.login();
+    await bp.createBoard("Resize Restore Board");
+
+    // Initially on desktop, sidebar is visible in-flow
+    const sidebar = page.locator(sel.sidebar);
+    await expect(sidebar).toBeVisible();
+    expect(await sidebar.getAttribute("data-collapsed")).toBe("false");
+
+    // Resize to mobile
+    await page.setViewportSize({ width: 360, height: 800 });
+    // Collapsed on mobile, menu button visible
+    await expect(sidebar).toHaveCount(0);
+    const menuBtn = page.locator('.topbar__menu-btn').first();
+    await expect(menuBtn).toBeVisible();
+
+    // Resize back to desktop: sidebar must be visible without reloading
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await expect(sidebar).toBeVisible();
+    expect(await sidebar.getAttribute("data-collapsed")).toBe("false");
+  });
+});
+
+// ─── BUG: Mobile left vertical column rail took screen space ──────────
+// Root cause: The 56px vertical strip rail on the left was kept even after
+// cross-column dragging moved to the popover menu.
+// Fix: Left rail removed; horizontal column tabs added at the top on mobile.
+test.describe("mobile horizontal column tabs", () => {
+  test("renders horizontal tabs at top of board on mobile and no left rail", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 360, height: 800 });
+    const bp = new BoardPage(page);
+    await bp.login();
+    await bp.createBoard("Mobile Tabs Board");
+
+    // Vertical rail must not exist on the left
+    await expect(page.locator(".kanban-rail")).toHaveCount(0);
+
+    // Horizontal tabs must exist at top
+    const tabs = page.locator(".kanban-tabs");
+    await expect(tabs).toBeVisible();
+
+    const columnTabs = page.locator(".kanban-tab");
+    await expect(columnTabs).toHaveCount(3);
+    await expect(columnTabs.first()).toHaveAttribute("data-active", "true");
+
+    // Clicking second tab switches active column
+    await columnTabs.nth(1).click();
+    await expect(columnTabs.nth(1)).toHaveAttribute("data-active", "true");
+  });
+});
+

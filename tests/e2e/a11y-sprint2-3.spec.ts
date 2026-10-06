@@ -199,7 +199,14 @@ test.describe("Sprint 2 — language and alt text (WCAG 3.1.1 / 1.1.1)", () => {
 });
 
 test.describe("Sprint 3.1 — drag-and-drop keyboard instructions", () => {
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page }, testInfo) => {
+    const width = page.viewportSize()?.width ?? 1280;
+    if (width < 1024 && testInfo.title !== "a card can be moved with the keyboard alone") {
+      test.skip(
+        true,
+        "DnD keyboard shortcuts disclosure is hidden on touch/mobile/tablet viewports (< 1024px)",
+      );
+    }
     await installFakesOnPage(page);
     const bp = new BoardPage(page);
     await bp.login();

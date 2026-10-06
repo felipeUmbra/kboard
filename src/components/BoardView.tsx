@@ -237,7 +237,7 @@ function BoardViewInner({ onBackToList }: { onBackToList: () => void }) {
         >
           Delete board
         </button>
-        <DndKeyboardHelp id={DND_HELP_ID} />
+        {viewport.isDesktop && <DndKeyboardHelp id={DND_HELP_ID} />}
       </div>
 
       {/* Search + filter + saved views toolbar. Sits between the board header
@@ -281,38 +281,37 @@ function BoardViewInner({ onBackToList }: { onBackToList: () => void }) {
       )}
 
 
+      {viewport.isMobile && (
+        <div className="kanban-tabs" role="tablist" aria-label="Columns">
+          {b.columns.map((c, i) => (
+            <button
+              key={c.id}
+              type="button"
+              role="tab"
+              aria-selected={i === mobileColumnIndex}
+              className="kanban-tab"
+              data-active={i === mobileColumnIndex ? "true" : "false"}
+              data-done={b.doneColumnIds.includes(c.id) ? "true" : "false"}
+              onClick={() => setMobileColumnIndex(i)}
+            >
+              <span className="kanban-tab__name">{c.name}</span>
+              <span className="kanban-tab__count">({c.cardIds.length})</span>
+            </button>
+          ))}
+          <button
+            type="button"
+            className="kanban-tab__add"
+            onClick={handleAddColumn}
+            aria-label="Add column"
+            title="Add column"
+          >
+            +
+          </button>
+        </div>
+      )}
+
       {viewport.isMobile ? (
         <div className="kanban-mobile">
-          {/* Collapsible column rail — each column is a vertical strip; the
-              name reads vertically and the card count "(xx)" sits at the
-              bottom in normal (horizontal) orientation. Tapping a strip
-              expands that column into the content area. */}
-          <div className="kanban-rail" role="tablist" aria-label="Columns">
-            {b.columns.map((c, i) => (
-              <button
-                key={c.id}
-                type="button"
-                role="tab"
-                aria-selected={i === mobileColumnIndex}
-                className="kanban-rail__strip"
-                data-active={i === mobileColumnIndex ? "true" : "false"}
-                data-done={b.doneColumnIds.includes(c.id) ? "true" : "false"}
-                onClick={() => setMobileColumnIndex(i)}
-              >
-                <span className="kanban-rail__name">{c.name}</span>
-                <span className="kanban-rail__count">({c.cardIds.length})</span>
-              </button>
-            ))}
-            <button
-              type="button"
-              className="kanban-rail__add"
-              onClick={handleAddColumn}
-              aria-label="Add column"
-              title="Add column"
-            >
-              +
-            </button>
-          </div>
           <div className="kanban-rail__content">
             <KanbanDndProvider>
               <div className="kanban">
@@ -327,8 +326,7 @@ function BoardViewInner({ onBackToList }: { onBackToList: () => void }) {
                 ))}
               </div>
               {/**
-               * Mobile cross-column moves: the rail shows one column at a
-               * time, so this overlay lists every column as a drop target
+               * Mobile cross-column moves: the overlay lists every column as a drop target
                * while a card is being dragged. Must live inside the
                * KanbanDndProvider so it shares the DndContext's droppable
                * registration and collision detection.

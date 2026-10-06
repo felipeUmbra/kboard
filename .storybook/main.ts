@@ -16,23 +16,15 @@ const config: StorybookConfig = {
   "framework": "@storybook/react-vite",
   "staticDirs": ["../public"],
   async viteFinal(config) {
-    // Create a fresh Vite config without PWA plugin
-    return defineConfig({
+    // Filter out VitePWA plugin without overwriting Storybook's own builder plugins
+    const filteredPlugins = (config.plugins || []).filter((plugin: any) => {
+      const name = Array.isArray(plugin) ? plugin[0]?.name : plugin?.name;
+      return !(typeof name === 'string' && (name.includes('pwa') || name.includes('workbox')));
+    });
+
+    return {
       ...config,
-      plugins: [
-        react(),
-        // Explicitly NOT including VitePWA
-      ],
-      // Externalize the PWA virtual module
-      build: {
-        ...config.build,
-        rollupOptions: {
-          ...config.build?.rollupOptions,
-          external: [...(config.build?.rollupOptions?.external || []), 'virtual:pwa-register'],
-        },
-        manifest: false,
-      },
-      // Also define the module for development
+      plugins: filteredPlugins,
       resolve: {
         ...config.resolve,
         alias: {
@@ -40,7 +32,7 @@ const config: StorybookConfig = {
           'virtual:pwa-register': '/src/mocks/pwa-register.ts',
         },
       },
-    });
+    };
   }
 };
 export default config;
