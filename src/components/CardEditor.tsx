@@ -17,6 +17,7 @@ import { CommentThread } from "./CommentThread";
 import { ChecklistEditor } from "./fields/ChecklistEditor";
 import { cardDrafts, draftDiffersFromCard } from "../state/cardDrafts";
 import { pickForeground } from "../models/colorContrast";
+import { isCardInDoneColumn } from "../models/progress";
 
 /** How often (ms) we mirror the local title/description drafts into
  *  localStorage. Short enough to survive an accidental reload; long
@@ -173,16 +174,16 @@ export function CardEditor({
   // seeded "Untitled" placeholder. This catches both the truly empty
   // input and the case where the user opens the editor and walks away
   // without ever touching the title field.
+  const isDone = isCardInDoneColumn(board, safeCard.id);
   const isTitleEmpty =
     trimmedTitle.length === 0 ||
     (isNewCard && trimmedTitle === "Untitled" && safeCard.title === "Untitled");
-  // "Save" is only gated for new cards: an existing card can fall back
-  // to "Untitled" so a clear-back edit still saves. A new card with an
-  // empty title would otherwise leak as an orphan.
-  const saveDisabled = isNewCard && isTitleEmpty;
+  // "Save" is only gated for un-named new cards that are not done: an existing
+  // or done card can always be saved.
+  const saveDisabled = isNewCard && isTitleEmpty && !isDone;
 
   const commitEdits = (): boolean => {
-    if (isNewCard && isTitleEmpty) return false;
+    if (isNewCard && isTitleEmpty && !isDone) return false;
     const t = trimmedTitle || "Untitled";
     ctx.updateCard(safeCard.id, {
       title: t,
@@ -278,42 +279,89 @@ export function CardEditor({
         </>
       }
     >
-      <div className="field-row">
-        <input
-          className="input card-title-input"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder={isNewCard ? "Card title (required)" : "Card title"}
-          aria-label="Card title"
-          autoFocus={isNewCard}
-        />
-      </div>
+      <div
+        onKeyDown={(e) => {
+          if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+            e.preventDefault();
+            saveAndClose();
+          }
+        }}
+      >
+        <div className="field-row">
+          <input
+            className="input card-title-input"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                saveAndClose();
+              }
+            }}
+            placeholder={isNewCard ? "Card title (required)" : "Card title"}
+            aria-label="Card title"
+            autoFocus={isNewCard}
+          />
+        </div>
 
-      {/* Column combobox — lets the user move the card across columns
-          without leaving the editor. The current column is auto-selected
-          and options follow the board's column order. */}
-      {(() => {
-        const currentCol = board.columns.find((c) =>
-          c.cardIds.includes(safeCard.id),
-        );
-        return (
-          <div style={{ marginBottom: "var(--space-5)" }}>
-            <label className="label" htmlFor="card-col-select">
-              Column
-            </label>
-            <select
-              id="card-col-select"
-              className="select"
-              value={currentCol?.id ?? ""}
-              disabled={isNewCard}
-              onChange={(e) => {
-                const toColumnId = e.target.value;
-                if (!toColumnId || toColumnId === currentCol?.id) return;
-                const toCol = board.columns.find((c) => c.id === toColumnId);
-                if (!toCol) return;
-                ctx.moveCard(safeCard.id, toColumnId, toCol.cardIds.length);
-              }}
-            >
+        {/* Column combobox — lets the user move the card across columns
+            without leaving the editor. The current column is auto-selected
+            and options follow the board's column order. */}
+        {(() => {
+          const currentCol = board.columns.find((c) =>
+            c.cardIds.includes(safeCard.id),
+          );
+          return (
+            <div style={{ marginBottom: "var(--space-5)" }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "var(--space-2)",
+                  marginBottom: "var(--space-1)",
+                }}
+              >
+                <label className="label" htmlFor="card-col-select" style={{ margin: 0 }}>
+                  Column
+                </label>
+                {isDone && (
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      padding: "2px 8px",
+                      borderRadius: "var(--radius-sm)",
+                      fontSize: "var(--text-xs)",
+                      fontWeight: 600,
+                      backgroundColor: "var(--color-accent-soft)",
+                      color: "var(--color-accent)",
+                    }}
+                  >
+                    ✓ Done / Final
+                  </span>
+                )}
+              </div>
+              <select
+                id="card-col-select"
+                className="select"
+                value={currentCol?.id ?? ""}
+                disabled={isNewCard}
+                onChange={(e) => {
+                  const toColumnId = e.target.value;
+                  if (!toColumnId || toColumnId === currentCol?.id) return;
+                  const toCol = board.columns.find((c) => c.id === toColumnId);
+                  if (!toCol) return;
+                  // Persist current title/description drafts before moving
+                  const t = titleRef.current.trim() || "Untitled";
+                  const d = descriptionHtmlRef.current;
+                  ctx.updateCard(safeCard.id, {
+                    title: t,
+                    descriptionHtml: sanitizeRichHtml(d),
+                  });
+                  ctx.moveCard(safeCard.id, toColumnId, toCol.cardIds.length);
+                }}
+              >
               {board.columns.map((c, i) => (
                 <option key={c.id} value={c.id}>
                   {i + 1}. {c.name}
@@ -616,6 +664,7 @@ export function CardEditor({
             onDelete={(commentId) => ctx.removeComment(safeCard.id, commentId)}
           />
         ) : null}
+      </div>
       </div>
     </Modal>
   );

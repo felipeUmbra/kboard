@@ -44,28 +44,30 @@ export function SearchBar({
       <label className="sr-only" htmlFor="kboard-search">
         Search cards
       </label>
-      <span className="search-bar__icon" aria-hidden="true">
-        🔍
-      </span>
-      <input
-        id="kboard-search"
-        ref={inputRef}
-        type="search"
-        className="input search-bar__input"
-        value={searchInput}
-        onChange={(e) => setSearchInput(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Escape" && searchInput) {
-            // Stop the event reaching the board-level Escape handler, which
-            // would otherwise try to close the view.
-            e.stopPropagation();
-            clearSearch();
-          }
-        }}
-        placeholder="Search cards…  ( / )"
-        autoComplete="off"
-        data-testid="search-input"
-      />
+      <div className="search-bar__box">
+        <input
+          id="kboard-search"
+          ref={inputRef}
+          type="search"
+          className="input search-bar__input"
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape" && searchInput) {
+              // Stop the event reaching the board-level Escape handler, which
+              // would otherwise try to close the view.
+              e.stopPropagation();
+              clearSearch();
+            }
+          }}
+          placeholder="Search cards…  ( / )"
+          autoComplete="off"
+          data-testid="search-input"
+        />
+        <span className="search-bar__icon" aria-hidden="true">
+          🔍
+        </span>
+      </div>
       {searchInput && (
         <button
           type="button"

@@ -614,11 +614,11 @@
 }
 
 /* ============================================================
-   TABLET (768-1023px) — collapsible rail
+   TABLET (768-1023px) — remove collapsed rail, in-flow sidebar on toggle
    ============================================================ */
 @media (min-width: 768px) and (max-width: 1023.98px) {
-  .sidebar {
-    width: var(--sidebar-w-collapsed);
+  .sidebar[data-collapsed="true"] {
+    display: none;
   }
 
   .sidebar[data-collapsed="false"] {
@@ -628,6 +628,38 @@
   .sidebar[data-collapsed="true"] .sidebar__title,
   .sidebar[data-collapsed="true"] .sidebar__body {
     display: none;
+  }
+
+  .topbar__menu-btn {
+    display: inline-flex;
+  }
+}
+
+/* ============================================================
+   MOBILE (<768px) & COMPACT LANDSCAPE — full drawer overlay on toggle
+   ============================================================ */
+@media (max-width: 767.98px), (orientation: landscape) and (max-height: 650px) {
+  .sidebar[data-collapsed="true"] {
+    display: none;
+  }
+
+  .sidebar[data-collapsed="false"] {
+    position: fixed;
+    inset: calc(var(--topbar-h) + env(safe-area-inset-top) + env(safe-area-inset-bottom)) auto 0 0;
+    width: min(var(--sidebar-w), 86vw);
+    z-index: var(--z-drawer);
+    box-shadow: var(--shadow-xl);
+    animation: drawer-in var(--motion-base);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .sidebar__backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: calc(var(--z-drawer) - 1);
+    animation: fade-in var(--motion-base);
   }
 
   .topbar__menu-btn {
