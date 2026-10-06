@@ -614,20 +614,31 @@
 }
 
 /* ============================================================
-   TABLET (768-1023px) — collapsible rail
+   SMALL SCREENS (<1024px) & LANDSCAPE MOBILE/COMPACT
+   Remove collapsed sidebar to maximize space; full drawer on toggle
    ============================================================ */
-@media (min-width: 768px) and (max-width: 1023.98px) {
-  .sidebar {
-    width: var(--sidebar-w-collapsed);
+@media (max-width: 1023.98px), (orientation: landscape) and (max-height: 650px) {
+  .sidebar[data-collapsed="true"] {
+    display: none;
   }
 
   .sidebar[data-collapsed="false"] {
-    width: var(--sidebar-w);
+    position: fixed;
+    inset: calc(var(--topbar-h) + env(safe-area-inset-top) + env(safe-area-inset-bottom)) auto 0 0;
+    width: min(var(--sidebar-w), 86vw);
+    z-index: var(--z-drawer);
+    box-shadow: var(--shadow-xl);
+    animation: drawer-in var(--motion-base);
+    padding-bottom: env(safe-area-inset-bottom);
   }
 
-  .sidebar[data-collapsed="true"] .sidebar__title,
-  .sidebar[data-collapsed="true"] .sidebar__body {
-    display: none;
+  .sidebar__backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: calc(var(--z-drawer) - 1);
+    animation: fade-in var(--motion-base);
   }
 
   .topbar__menu-btn {

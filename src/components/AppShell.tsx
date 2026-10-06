@@ -16,7 +16,7 @@ export function AppShell({
   // Single source of truth for the sidebar's horizontal collapse state on ALL
   // viewports. On mobile the rail starts collapsed (icons only); desktop and
   // tablet start expanded. The topbar hamburger toggles it.
-  const [railCollapsed, setRailCollapsed] = useState(viewport.isMobile);
+  const [railCollapsed, setRailCollapsed] = useState(viewport.isSmallOrLandscape);
 
   return (
     <div className="app-shell">
@@ -34,7 +34,7 @@ export function AppShell({
         menuLabel={railCollapsed ? "Expand menu" : "Collapse menu"}
       />
       <div className="app-main">
-        {viewport.isMobile && !railCollapsed && (
+        {viewport.isSmallOrLandscape && !railCollapsed && (
           <div className="sidebar__backdrop" onClick={() => setRailCollapsed(true)} />
         )}
         <Sidebar

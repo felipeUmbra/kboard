@@ -144,7 +144,7 @@ function BoardViewInner({ onBackToList }: { onBackToList: () => void }) {
   const warnIfHidden = useCallback(
     (card: Card) => {
       if (isHiddenByView(b, filter, card)) {
-        notify("Card added — hidden by the current filters.", {
+        notify("Card saved — hidden by the current filters.", {
           label: "Clear filters",
           onAction: clearFilter,
         });

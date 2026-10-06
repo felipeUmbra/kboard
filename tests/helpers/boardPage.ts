@@ -216,6 +216,17 @@ export class BoardPage {
     return this.page.evaluate(() => window.innerWidth < 768);
   }
 
+  async isSmallOrLandscapeView(): Promise<boolean> {
+    return this.page.evaluate(() => {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      const isLandscape = w > h;
+      const isDesktop = w >= 1024;
+      const isLandscapeCompact = isLandscape && (h < 650 || w < 1024);
+      return !isDesktop || isLandscapeCompact;
+    });
+  }
+
   /**
    * Mobile: expand the column rail strip matching `name` (case-insensitive).
    * The strip's accessible name is the vertical column name followed by the
@@ -233,17 +244,17 @@ export class BoardPage {
   }
 
   /**
-   * Mobile: collapse the sidebar drawer back to its icon rail if it's open.
-   * No-op on desktop/tablet or when the rail is already collapsed.
+   * Small/landscape: collapse the sidebar drawer back if it's open.
+   * No-op on desktop or when the rail is already collapsed.
    */
   async collapseSidebar(): Promise<void> {
-    if (!(await this.isMobileView())) return;
+    if (!(await this.isSmallOrLandscapeView())) return;
     const closeBtn = this.page.getByRole("button", { name: /close menu/i }).first();
     if (await closeBtn.count()) {
       // The expanded drawer has a ✕ "Close menu" button in its header.
       await closeBtn.click().catch(() => {});
-      await this.page.waitForSelector(sel.sidebarRail, {
-        state: "visible",
+      await this.page.waitForSelector(sel.sidebar, {
+        state: "detached",
         timeout: 2_000,
       }).catch(() => {});
     }
@@ -267,18 +278,12 @@ export class BoardPage {
   }
 
   /**
-   * Mobile: expand the sidebar (collapsed icon rail → full menu drawer).
-   * `section` optionally targets a rail icon (labels/fields/types/done) so
-   * the drawer opens scrolled to that section. No-op on desktop/tablet.
+   * Small/landscape: expand the sidebar (drawer overlay).
+   * Opens via the topbar menu button. No-op on desktop.
    */
-  async expandSidebar(section?: string): Promise<void> {
-    if (!(await this.isMobileView())) return;
-    const btn =
-      section && section !== "boards"
-        ? this.page
-            .locator(sel.sidebarRail)
-            .getByRole("button", { name: new RegExp(section, "i") })
-        : this.page.locator(sel.sidebarRailExpand);
+  async expandSidebar(_section?: string): Promise<void> {
+    if (!(await this.isSmallOrLandscapeView())) return;
+    const btn = this.page.locator(sel.sidebarRailExpand);
     await btn.first().click();
     // The full menu drawer renders with the Manage buttons.
     await this.page

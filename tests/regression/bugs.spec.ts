@@ -233,3 +233,89 @@ test.describe("boundingBox property access regression", () => {
     expect(bottom).toBeLessThanOrEqual(100);
   });
 });
+
+// ─── BUG: Collapsed sidebar took space on mobile / landscape ────────
+// Root cause: Collapsed sidebar rendered as a 56px rail even on mobile / compact landscape,
+// squeezing columns on narrow/wide devices like 23.1:9 aspect ratio phones.
+// Fix: Remove collapsed sidebar on small/landscape viewports; toggle via topbar menu button.
+test.describe("collapsed sidebar removal on small / landscape viewports", () => {
+  test("collapsed sidebar is not rendered on mobile / compact viewports", async ({ page }) => {
+    // 23.1:9 phone landscape proportion: ~920 x 400
+    await page.setViewportSize({ width: 920, height: 400 });
+    const bp = new BoardPage(page);
+    await bp.login();
+    await bp.createBoard("Landscape Board");
+
+    // Collapsed sidebar must not exist in DOM
+    const sidebar = page.locator(sel.sidebar);
+    expect(await sidebar.count()).toBe(0);
+
+    // Clicking topbar menu button opens the full drawer
+    const menuBtn = page.locator('button[aria-label="Expand menu"], button[aria-label="Collapse menu"]').first();
+    await menuBtn.click();
+    await expect(sidebar).toBeVisible();
+
+    // Toggling again hides it
+    await menuBtn.click();
+    expect(await sidebar.count()).toBe(0);
+  });
+});
+
+// ─── BUG: Done/Final cards could not be edited/saved ────────────────
+// Root cause: Cards in Done columns had save gating or status confusion preventing edits from saving.
+// Fix: Cards in Done status are fully editable and can save changes to title, description, and fields.
+test.describe("Done/final card editing and saving", () => {
+  test("card in Done column can have title, description, and fields edited and saved", async ({ page }) => {
+    const bp = new BoardPage(page);
+    await bp.login();
+    await bp.createBoard("Done Edit Board");
+    await bp.addColumn("Done Column");
+    await bp.toggleDoneColumn("Done Column");
+    await bp.addCard("Done Column", "Done Task");
+
+    // Open the card editor
+    const cardEl = page.locator(sel.card).filter({ hasText: "Done Task" });
+    await cardEl.click();
+    await page.waitForSelector(".modal");
+
+    // Verify title and description can be updated
+    const titleInput = page.locator(".card-title-input");
+    await titleInput.fill("Updated Done Task");
+
+    // Click Save
+    const saveBtn = page.getByRole("button", { name: /^Save$/i });
+    expect(await saveBtn.isDisabled()).toBe(false);
+    await saveBtn.click();
+
+    // Verify modal closed and card updated
+    await expect(page.locator(".modal")).toHaveCount(0);
+    await expect(page.locator(sel.card).filter({ hasText: "Updated Done Task" })).toBeVisible();
+  });
+});
+
+// ─── BUG: Search icon overlapped first 3 letters of search input ─────
+// Root cause: The search icon was positioned at left: var(--space-3) overlapping input text.
+// Fix: Move search icon inside-right, ensuring typed text stops before the icon.
+test.describe("search icon positioning regression", () => {
+  test("search icon is positioned on the inside right of search bar without overlapping text", async ({ page }) => {
+    const bp = new BoardPage(page);
+    await bp.login();
+    await bp.createBoard("Search Icon Board");
+
+    const searchInput = page.locator(sel.searchInput);
+    await expect(searchInput).toBeVisible();
+
+    const searchIcon = page.locator(".search-bar__icon");
+    await expect(searchIcon).toBeVisible();
+
+    const inputRect = await searchInput.boundingBox();
+    const iconRect = await searchIcon.boundingBox();
+    expect(inputRect).not.toBeNull();
+    expect(iconRect).not.toBeNull();
+
+    // The icon must be inside the right half of the search input box
+    expect(iconRect!.x).toBeGreaterThan(inputRect!.x + inputRect!.width / 2);
+    expect(iconRect!.x + iconRect!.width).toBeLessThanOrEqual(inputRect!.x + inputRect!.width + 2);
+  });
+});
+

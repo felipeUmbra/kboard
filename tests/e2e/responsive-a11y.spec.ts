@@ -23,20 +23,20 @@ test.describe("Responsive + A11y (all viewports)", () => {
     expect(overflow).toBe(false);
   });
 
-  test("Mobile: topbar row and sidebar rail fill the viewport with no gaps", async ({ page, isMobile }) => {
+  test("Mobile: collapsed sidebar is removed and topbar fits the viewport", async ({ page, isMobile }) => {
     test.skip(!isMobile, "Desktop/tablet don't use the mobile rail or compact topbar.");
     const bp = new BoardPage(page);
     await bp.addCard("To do", "Scroll card");
 
-    // 1) The collapsed sidebar rail spans the full height under the topbar:
-    //    its bottom edge must reach the viewport bottom (no gap on scroll).
-    const rail = page.locator(sel.sidebarRail);
-    await rail.waitFor({ state: "visible", timeout: 3_000 });
-    const railBox = await rail.boundingBox();
-    const vh = await page.evaluate(() => window.innerHeight);
-    expect(railBox).not.toBeNull();
-    expect(railBox!.y).toBeGreaterThanOrEqual(0);
-    expect(railBox!.y + railBox!.height).toBeGreaterThanOrEqual(vh - 1);
+    // 1) The collapsed sidebar is removed from the DOM on mobile to use all available space:
+    const sidebar = page.locator(sel.sidebar);
+    expect(await sidebar.count()).toBe(0);
+
+    // Opening via the header button displays the full sidebar:
+    await bp.expandSidebar();
+    await expect(sidebar).toBeVisible();
+    await bp.collapseSidebar();
+    expect(await sidebar.count()).toBe(0);
 
     // 2) Every topbar child is fully inside the topbar's painted box —
     //    none extend past its bottom or right edge (the "Sign out clips

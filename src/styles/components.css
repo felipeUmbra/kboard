@@ -308,7 +308,7 @@
 .mobile-move-targets {
   position: fixed;
   top: var(--topbar-h);
-  left: var(--sidebar-w-collapsed);
+  left: 0;
   bottom: 0;
   width: min(240px, 62vw);
   z-index: var(--z-drag);
@@ -1211,9 +1211,20 @@
   max-width: 420px;
 }
 
+.search-bar__box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+}
+
 .search-bar__icon {
   position: absolute;
-  left: var(--space-3);
+  right: var(--space-3);
+  top: 50%;
+  transform: translateY(-50%);
   font-size: var(--text-sm);
   pointer-events: none;
   /* The glyph is decorative; the <label> carries the accessible name. */
@@ -1221,8 +1232,15 @@
 
 .search-bar__input {
   width: 100%;
-  padding-left: calc(var(--space-3) * 2 + 4px);
+  padding-left: var(--space-3);
+  padding-right: calc(var(--space-3) + 24px);
   min-height: var(--tap-target);
+}
+
+.search-bar__input::-webkit-search-cancel-button,
+.search-bar__input::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .search-bar__clear {
