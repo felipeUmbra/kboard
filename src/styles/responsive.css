@@ -1025,4 +1025,10 @@
     animation: none;
   }
 }
- 
+
+/* Hide DnD keyboard shortcuts help on tablet and mobile viewports (< 1024px) */
+@media (max-width: 1023.98px) {
+  .dnd-help {
+    display: none !important;
+  }
+}

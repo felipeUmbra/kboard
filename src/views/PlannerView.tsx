@@ -18,9 +18,11 @@ import {
 import { todayIso, formatIso, parseIso } from "../models/dateValidation";
 import { format, isSameMonth } from "date-fns";
 import { DndKeyboardHelp } from "../components/DndKeyboardHelp";
+import { useViewport } from "../hooks/useViewport";
 
 export function PlannerView() {
   const ctx = useBoard();
+  const viewport = useViewport();
   const [anchor, setAnchor] = useState<Date>(() => new Date());
 
   const days = useMemo(() => weekDays(anchor), [anchor]);
@@ -83,7 +85,7 @@ export function PlannerView() {
               Hoje
             </button>
           </div>
-          <DndKeyboardHelp id="planner-dnd-keyboard-help" />
+          {viewport.isDesktop && <DndKeyboardHelp id="planner-dnd-keyboard-help" />}
         </header>
         <div className="planner__week" data-testid="planner-week">
           {buckets.map((b) => (

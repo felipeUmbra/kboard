@@ -417,7 +417,7 @@ export function addChecklist(
     items: [],
   };
   return patchCard(b, cardId, {
-    checklists: [...card.checklists, newChecklist],
+    checklists: [...(card.checklists ?? []), newChecklist],
     activity: [
       ...card.activity,
       makeActivity("checklist_added", `Added checklist "${trimmed}"`),
@@ -435,11 +435,12 @@ export function renameChecklist(
 ): Board {
   const card = b.cards[cardId];
   if (!card) return b;
-  const cl = card.checklists.find((c) => c.id === checklistId);
+  const checklists = card.checklists ?? [];
+  const cl = checklists.find((c) => c.id === checklistId);
   if (!cl) return b;
   const trimmed = title.trim() || cl.title;
   if (trimmed === cl.title) return b;
-  const updated = card.checklists.map((c) =>
+  const updated = checklists.map((c) =>
     c.id === checklistId ? { ...c, title: trimmed } : c,
   );
   return patchCard(b, cardId, {
@@ -463,10 +464,11 @@ export function deleteChecklist(
 ): Board {
   const card = b.cards[cardId];
   if (!card) return b;
-  const cl = card.checklists.find((c) => c.id === checklistId);
+  const checklists = card.checklists ?? [];
+  const cl = checklists.find((c) => c.id === checklistId);
   if (!cl) return b;
   return patchCard(b, cardId, {
-    checklists: card.checklists.filter((c) => c.id !== checklistId),
+    checklists: checklists.filter((c) => c.id !== checklistId),
     activity: [
       ...card.activity,
       makeActivity("checklist_deleted", `Deleted checklist "${cl.title}"`),
@@ -484,7 +486,8 @@ export function addChecklistItem(
 ): Board {
   const card = b.cards[cardId];
   if (!card) return b;
-  const cl = card.checklists.find((c) => c.id === checklistId);
+  const checklists = card.checklists ?? [];
+  const cl = checklists.find((c) => c.id === checklistId);
   // Without this guard the item is written into an `updated` list that
   // matches no checklist, so nothing appears on the card but the log gains a
   // misleading "Added item" entry.
@@ -497,7 +500,7 @@ export function addChecklistItem(
     text: trimmed,
     done: false,
   };
-  const updated = card.checklists.map((c) =>
+  const updated = checklists.map((c) =>
     c.id === checklistId ? { ...c, items: [...c.items, newItem] } : c,
   );
   return patchCard(b, cardId, {
@@ -519,11 +522,12 @@ export function toggleChecklistItem(
 ): Board {
   const card = b.cards[cardId];
   if (!card) return b;
-  const cl = card.checklists.find((c) => c.id === checklistId);
+  const checklists = card.checklists ?? [];
+  const cl = checklists.find((c) => c.id === checklistId);
   if (!cl) return b;
   const item = cl.items.find((i) => i.id === itemId);
   if (!item) return b;
-  const updated = card.checklists.map((c) =>
+  const updated = checklists.map((c) =>
     c.id !== checklistId
       ? c
       : {
@@ -558,13 +562,14 @@ export function renameChecklistItem(
 ): Board {
   const card = b.cards[cardId];
   if (!card) return b;
-  const cl = card.checklists.find((c) => c.id === checklistId);
+  const checklists = card.checklists ?? [];
+  const cl = checklists.find((c) => c.id === checklistId);
   if (!cl) return b;
   const item = cl.items.find((i) => i.id === itemId);
   if (!item) return b;
   const trimmed = text.trim() || item.text;
   if (trimmed === item.text) return b;
-  const updated = card.checklists.map((c) =>
+  const updated = checklists.map((c) =>
     c.id !== checklistId
       ? c
       : {
@@ -596,11 +601,12 @@ export function deleteChecklistItem(
 ): Board {
   const card = b.cards[cardId];
   if (!card) return b;
-  const cl = card.checklists.find((c) => c.id === checklistId);
+  const checklists = card.checklists ?? [];
+  const cl = checklists.find((c) => c.id === checklistId);
   if (!cl) return b;
   const item = cl.items.find((i) => i.id === itemId);
   if (!item) return b;
-  const updated = card.checklists.map((c) =>
+  const updated = checklists.map((c) =>
     c.id !== checklistId
       ? c
       : { ...c, items: c.items.filter((i) => i.id !== itemId) },

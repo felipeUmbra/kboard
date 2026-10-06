@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { TopBar } from "./TopBar";
 import { Sidebar } from "./Sidebar";
 import { useViewport } from "../hooks/useViewport";
@@ -17,6 +17,14 @@ export function AppShell({
   // viewports. On mobile the rail starts collapsed (icons only); desktop and
   // tablet start expanded. The topbar hamburger toggles it.
   const [railCollapsed, setRailCollapsed] = useState(viewport.isSmallOrLandscape);
+
+  useEffect(() => {
+    if (viewport.isDesktop) {
+      setRailCollapsed(false);
+    } else {
+      setRailCollapsed(true);
+    }
+  }, [viewport.isDesktop]);
 
   return (
     <div className="app-shell">

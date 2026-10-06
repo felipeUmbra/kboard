@@ -253,10 +253,10 @@ export function Card({
  * (Trello has a similar affordance).
  */
 function ChecklistChip({ card }: { card: CardModel }) {
-  const first = card.checklists.find(
-    (cl) => cl.items.length > 0,
+  const first = card.checklists?.find(
+    (cl) => cl?.items && cl.items.length > 0,
   );
-  if (!first) return null;
+  if (!first || !first.items) return null;
   const done = first.items.filter((i) => i.done).length;
   const total = first.items.length;
   return (

@@ -69,10 +69,10 @@ export const sel = {
   columnOptions: 'button[aria-label="Column options"]',
   columnAddBtn: ".kanban-column__add-btn",
   columnDoneDot: ".kanban-column__done-dot",
-  // Mobile: collapsible column rail. Each strip is a vertical label; the
-  // count "(n)" sits at the bottom. data-active marks the expanded column.
-  mobileColumnTab: ".kanban-rail__strip",
-  mobileColumnRail: ".kanban-rail",
+  // Mobile: horizontal column tabs. Each tab displays column name and count.
+  // data-active marks the expanded column.
+  mobileColumnTab: ".kanban-tab, .kanban-rail__strip",
+  mobileColumnRail: ".kanban-tabs, .kanban-rail",
   mobileColumnRailAdd: 'button[aria-label="Add column"]',
 
   // Card
