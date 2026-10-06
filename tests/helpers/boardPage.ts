@@ -249,10 +249,17 @@ export class BoardPage {
    */
   async collapseSidebar(): Promise<void> {
     if (!(await this.isSmallOrLandscapeView())) return;
-    const closeBtn = this.page.getByRole("button", { name: /close menu/i }).first();
-    if (await closeBtn.count()) {
-      // The expanded drawer has a ✕ "Close menu" button in its header.
-      await closeBtn.click().catch(() => {});
+    const sidebar = this.page.locator(sel.sidebar);
+    if ((await sidebar.count()) && (await sidebar.isVisible())) {
+      const closeBtn = this.page.getByRole("button", { name: /close menu/i }).first();
+      if ((await closeBtn.count()) && (await closeBtn.isVisible())) {
+        await closeBtn.click().catch(() => {});
+      } else {
+        const menuBtn = this.page.locator('button[aria-label="Collapse menu"]').first();
+        if (await menuBtn.count()) {
+          await menuBtn.click().catch(() => {});
+        }
+      }
       await this.page.waitForSelector(sel.sidebar, {
         state: "detached",
         timeout: 2_000,
@@ -315,6 +322,8 @@ export class BoardPage {
 
   // ── Cards ─────────────────────────────────────────────────────────
   async addCard(columnName: string, title: string, type: "task" | "story" | "epic" = "task") {
+    // If the sidebar drawer is open, collapse it so it doesn't intercept pointer events.
+    await this.collapseSidebar();
     // On mobile, only the expanded (active) column is rendered. Expand the
     // target column's rail strip first so its DOM exists.
     if (columnName && columnName.length > 0) {
@@ -349,6 +358,7 @@ export class BoardPage {
   }
 
   async openCard(title: string) {
+    await this.collapseSidebar();
     const cardLocator = this.page.locator(sel.card).filter({ hasText: title }).first();
     await expect(cardLocator).toBeVisible();
     await cardLocator.click();

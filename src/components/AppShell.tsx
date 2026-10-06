@@ -34,7 +34,7 @@ export function AppShell({
         menuLabel={railCollapsed ? "Expand menu" : "Collapse menu"}
       />
       <div className="app-main">
-        {viewport.isSmallOrLandscape && !railCollapsed && (
+        {(viewport.isMobile || (viewport.isLandscape && viewport.height < 650)) && !railCollapsed && (
           <div className="sidebar__backdrop" onClick={() => setRailCollapsed(true)} />
         )}
         <Sidebar

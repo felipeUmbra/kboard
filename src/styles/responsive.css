@@ -614,10 +614,31 @@
 }
 
 /* ============================================================
-   SMALL SCREENS (<1024px) & LANDSCAPE MOBILE/COMPACT
-   Remove collapsed sidebar to maximize space; full drawer on toggle
+   TABLET (768-1023px) — remove collapsed rail, in-flow sidebar on toggle
    ============================================================ */
-@media (max-width: 1023.98px), (orientation: landscape) and (max-height: 650px) {
+@media (min-width: 768px) and (max-width: 1023.98px) {
+  .sidebar[data-collapsed="true"] {
+    display: none;
+  }
+
+  .sidebar[data-collapsed="false"] {
+    width: var(--sidebar-w);
+  }
+
+  .sidebar[data-collapsed="true"] .sidebar__title,
+  .sidebar[data-collapsed="true"] .sidebar__body {
+    display: none;
+  }
+
+  .topbar__menu-btn {
+    display: inline-flex;
+  }
+}
+
+/* ============================================================
+   MOBILE (<768px) & COMPACT LANDSCAPE — full drawer overlay on toggle
+   ============================================================ */
+@media (max-width: 767.98px), (orientation: landscape) and (max-height: 650px) {
   .sidebar[data-collapsed="true"] {
     display: none;
   }
