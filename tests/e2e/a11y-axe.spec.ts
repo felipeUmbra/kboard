@@ -185,6 +185,10 @@ test.describe("axe-core (Sprint 4.1)", () => {
   });
 
   test("card editor modal has no violations", async ({ page }) => {
+    // axe-core scans are CPU-heavy; under parallel load the 30s default
+    // can flake. Give this scan room without loosening the bound for the
+    // fast-feedback Chromium matrix.
+    test.setTimeout(60_000);
     await installFakesOnPage(page);
     const bp = new BoardPage(page);
     await bp.login();
