@@ -25,6 +25,9 @@ test.describe("Responsive + A11y (all viewports)", () => {
 
   test("Mobile: collapsed sidebar is removed and topbar fits the viewport", async ({ page, isMobile }) => {
     test.skip(!isMobile, "Desktop/tablet don't use the mobile rail or compact topbar.");
+    // Mobile emulation + the topbar out-of-bounds probe are CPU-heavy;
+    // under parallel load the 30s default can flake.
+    test.setTimeout(60_000);
     const bp = new BoardPage(page);
     await bp.addCard("To do", "Scroll card");
 
@@ -58,6 +61,9 @@ test.describe("Responsive + A11y (all viewports)", () => {
   });
 
   test("A11y: cards are keyboard-activatable with Enter", async ({ page }) => {
+    // Keyboard activation + editor open/close round-trip is CPU-heavy;
+    // under parallel load the 30s default can flake.
+    test.setTimeout(60_000);
     const bp = new BoardPage(page);
     await bp.addCard("To do", "A11y card");
     const card = page.locator(sel.card).filter({ hasText: "A11y card" }).first();
